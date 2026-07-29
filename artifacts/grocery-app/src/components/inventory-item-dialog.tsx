@@ -30,6 +30,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
+import { useNotifications } from '@/hooks/use-notifications';
 
 const formSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -56,6 +57,7 @@ export function InventoryItemDialog({
 }: InventoryItemDialogProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { notifyOutOfStock } = useNotifications();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const createItem = useCreateInventoryItem();
@@ -86,10 +88,19 @@ export function InventoryItemDialog({
             notes: values.notes || undefined,
           },
         });
-        toast({
-          title: 'Item updated',
-          description: `${values.name} has been updated.`,
-        });
+        if (values.quantity === 0) {
+          notifyOutOfStock(values.name);
+          toast({
+            title: `${values.name} is out of stock`,
+            description: 'Consider adding it to a shopping list.',
+            variant: 'destructive',
+          });
+        } else {
+          toast({
+            title: 'Item updated',
+            description: `${values.name} has been updated.`,
+          });
+        }
       } else {
         await createItem.mutateAsync({
           data: {
@@ -98,10 +109,19 @@ export function InventoryItemDialog({
             notes: values.notes || undefined,
           },
         });
-        toast({
-          title: 'Item added',
-          description: `${values.name} has been added to inventory.`,
-        });
+        if (values.quantity === 0) {
+          notifyOutOfStock(values.name);
+          toast({
+            title: `${values.name} added — and already out of stock`,
+            description: 'Consider adding it to a shopping list right away.',
+            variant: 'destructive',
+          });
+        } else {
+          toast({
+            title: 'Item added',
+            description: `${values.name} has been added to inventory.`,
+          });
+        }
       }
 
       queryClient.invalidateQueries({ queryKey: getListInventoryItemsQueryKey() });
