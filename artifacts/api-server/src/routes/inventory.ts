@@ -17,6 +17,13 @@ import {
 
 const router: IRouter = Router();
 
+/** Drizzle returns Date objects; OpenAPI Zod schemas expect ISO strings. */
+function ser<T extends object>(row: T): T {
+  return Object.fromEntries(
+    Object.entries(row).map(([k, v]) => [k, v instanceof Date ? v.toISOString() : v])
+  ) as T;
+}
+
 router.get("/inventory", async (req, res): Promise<void> => {
   const params = ListInventoryItemsQueryParams.safeParse(req.query);
   if (!params.success) {
@@ -39,7 +46,7 @@ router.get("/inventory", async (req, res): Promise<void> => {
   }
 
   const items = await query.orderBy(inventoryItemsTable.name);
-  res.json(ListInventoryItemsResponse.parse(items));
+  res.json(ListInventoryItemsResponse.parse(items.map(ser)));
 });
 
 router.get("/inventory/stats", async (req, res): Promise<void> => {
@@ -99,7 +106,7 @@ router.post("/inventory", async (req, res): Promise<void> => {
     })
     .returning();
 
-  res.status(201).json(CreateInventoryItemResponse.parse(item));
+  res.status(201).json(CreateInventoryItemResponse.parse(ser(item)));
 });
 
 router.get("/inventory/:id", async (req, res): Promise<void> => {
@@ -120,7 +127,7 @@ router.get("/inventory/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  res.json(GetInventoryItemResponse.parse(item));
+  res.json(GetInventoryItemResponse.parse(ser(item)));
 });
 
 router.patch("/inventory/:id", async (req, res): Promise<void> => {
@@ -157,7 +164,7 @@ router.patch("/inventory/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  res.json(UpdateInventoryItemResponse.parse(item));
+  res.json(UpdateInventoryItemResponse.parse(ser(item)));
 });
 
 router.delete("/inventory/:id", async (req, res): Promise<void> => {

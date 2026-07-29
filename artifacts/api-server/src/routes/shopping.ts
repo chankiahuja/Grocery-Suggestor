@@ -21,6 +21,13 @@ import {
 
 const router: IRouter = Router();
 
+/** Drizzle returns Date objects; OpenAPI Zod schemas expect ISO strings. */
+function ser<T extends object>(row: T): T {
+  return Object.fromEntries(
+    Object.entries(row).map(([k, v]) => [k, v instanceof Date ? v.toISOString() : v])
+  ) as T;
+}
+
 router.get("/shopping-lists", async (_req, res): Promise<void> => {
   const lists = await db.select().from(shoppingListsTable).orderBy(shoppingListsTable.createdAt);
 
@@ -38,7 +45,7 @@ router.get("/shopping-lists", async (_req, res): Promise<void> => {
     })
   );
 
-  res.json(ListShoppingListsResponse.parse(enriched));
+  res.json(ListShoppingListsResponse.parse(enriched.map(ser)));
 });
 
 router.post("/shopping-lists", async (req, res): Promise<void> => {
@@ -50,7 +57,7 @@ router.post("/shopping-lists", async (req, res): Promise<void> => {
 
   const [list] = await db.insert(shoppingListsTable).values(parsed.data).returning();
   res.status(201).json(
-    CreateShoppingListResponse.parse({ ...list, itemCount: 0, purchasedCount: 0 })
+    CreateShoppingListResponse.parse({ ...ser(list), itemCount: 0, purchasedCount: 0 })
   );
 });
 
@@ -77,7 +84,7 @@ router.get("/shopping-lists/:id", async (req, res): Promise<void> => {
     .from(shoppingListItemsTable)
     .where(eq(shoppingListItemsTable.shoppingListId, list.id));
 
-  res.json(GetShoppingListResponse.parse({ ...list, items }));
+  res.json(GetShoppingListResponse.parse({ ...ser(list), items: items.map(ser) }));
 });
 
 router.delete("/shopping-lists/:id", async (req, res): Promise<void> => {
@@ -138,7 +145,7 @@ router.post("/shopping-lists/:id/items", async (req, res): Promise<void> => {
     })
     .returning();
 
-  res.status(201).json(AddShoppingListItemResponse.parse(item));
+  res.status(201).json(AddShoppingListItemResponse.parse(ser(item)));
 });
 
 router.patch("/shopping-lists/:id/items/:itemId", async (req, res): Promise<void> => {
@@ -177,7 +184,7 @@ router.patch("/shopping-lists/:id/items/:itemId", async (req, res): Promise<void
     return;
   }
 
-  res.json(UpdateShoppingListItemResponse.parse(item));
+  res.json(UpdateShoppingListItemResponse.parse(ser(item)));
 });
 
 router.delete("/shopping-lists/:id/items/:itemId", async (req, res): Promise<void> => {
