@@ -3,20 +3,25 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Grocery Suggester API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: inventory
+    description: Household inventory management
+  - name: suggestions
+    description: Grocery purchase suggestions
+  - name: shopping-lists
+    description: Shopping list management
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +29,313 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /inventory:
+    get:
+      operationId: listInventoryItems
+      tags: [inventory]
+      summary: List all inventory items
+      parameters:
+        - name: category
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: lowStock
+          in: query
+          required: false
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: List of inventory items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InventoryItem"
+    post:
+      operationId: createInventoryItem
+      tags: [inventory]
+      summary: Add a new inventory item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventoryItemInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryItem"
+
+  /inventory/stats:
+    get:
+      operationId: getInventoryStats
+      tags: [inventory]
+      summary: Get inventory dashboard statistics
+      responses:
+        "200":
+          description: Inventory stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryStats"
+
+  /inventory/{id}:
+    get:
+      operationId: getInventoryItem
+      tags: [inventory]
+      summary: Get a single inventory item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Inventory item
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryItem"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateInventoryItem
+      tags: [inventory]
+      summary: Update an inventory item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventoryItemUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryItem"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteInventoryItem
+      tags: [inventory]
+      summary: Delete an inventory item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /suggestions:
+    get:
+      operationId: getGrocerySuggestions
+      tags: [suggestions]
+      summary: Get grocery purchase suggestions based on inventory
+      responses:
+        "200":
+          description: List of grocery suggestions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GrocerySuggestion"
+
+  /shopping-lists:
+    get:
+      operationId: listShoppingLists
+      tags: [shopping-lists]
+      summary: List all shopping lists
+      responses:
+        "200":
+          description: Shopping lists
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ShoppingList"
+    post:
+      operationId: createShoppingList
+      tags: [shopping-lists]
+      summary: Create a new shopping list
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShoppingListInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShoppingList"
+
+  /shopping-lists/{id}:
+    get:
+      operationId: getShoppingList
+      tags: [shopping-lists]
+      summary: Get shopping list with items
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Shopping list with items
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShoppingListWithItems"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteShoppingList
+      tags: [shopping-lists]
+      summary: Delete a shopping list
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "204":
+          description: Deleted
+
+  /shopping-lists/{id}/items:
+    post:
+      operationId: addShoppingListItem
+      tags: [shopping-lists]
+      summary: Add item to shopping list
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShoppingListItemInput"
+      responses:
+        "201":
+          description: Item added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShoppingListItem"
+
+  /shopping-lists/{id}/items/{itemId}:
+    patch:
+      operationId: updateShoppingListItem
+      tags: [shopping-lists]
+      summary: Update a shopping list item (e.g., mark as purchased)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShoppingListItemUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShoppingListItem"
+    delete:
+      operationId: deleteShoppingListItem
+      tags: [shopping-lists]
+      summary: Remove item from shopping list
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "204":
+          description: Deleted
+
+  /shopping-lists/{id}/purchase:
+    post:
+      operationId: purchaseShoppingList
+      tags: [shopping-lists]
+      summary: Mark purchased items and restock inventory
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Purchase applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PurchaseResult"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +346,291 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    InventoryItem:
+      type: object
+      properties:
+        id:
+          type: number
+        name:
+          type: string
+        category:
+          type: string
+        quantity:
+          type: number
+        unit:
+          type: string
+        minThreshold:
+          type: number
+        expiresAt:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - name
+        - category
+        - quantity
+        - unit
+        - minThreshold
+        - expiresAt
+        - notes
+        - createdAt
+        - updatedAt
+
+    InventoryItemInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        category:
+          type: string
+          minLength: 1
+        quantity:
+          type: number
+          minimum: 0
+        unit:
+          type: string
+          minLength: 1
+        minThreshold:
+          type: number
+          minimum: 0
+        expiresAt:
+          type: string
+        notes:
+          type: string
+      required:
+        - name
+        - category
+        - quantity
+        - unit
+        - minThreshold
+
+    InventoryItemUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        category:
+          type: string
+        quantity:
+          type: number
+          minimum: 0
+        unit:
+          type: string
+        minThreshold:
+          type: number
+          minimum: 0
+        expiresAt:
+          type: string
+        notes:
+          type: string
+
+    InventoryStats:
+      type: object
+      properties:
+        totalItems:
+          type: number
+        lowStockCount:
+          type: number
+        outOfStockCount:
+          type: number
+        expiringCount:
+          type: number
+        categoryBreakdown:
+          type: array
+          items:
+            $ref: "#/components/schemas/CategoryCount"
+      required:
+        - totalItems
+        - lowStockCount
+        - outOfStockCount
+        - expiringCount
+        - categoryBreakdown
+
+    CategoryCount:
+      type: object
+      properties:
+        category:
+          type: string
+        count:
+          type: number
+      required:
+        - category
+        - count
+
+    GrocerySuggestion:
+      type: object
+      properties:
+        inventoryItemId:
+          type: ["number", "null"]
+        name:
+          type: string
+        category:
+          type: string
+        currentQuantity:
+          type: number
+        minThreshold:
+          type: number
+        unit:
+          type: string
+        reason:
+          type: string
+        urgency:
+          type: string
+          enum: [critical, low, expiring_soon]
+      required:
+        - inventoryItemId
+        - name
+        - category
+        - currentQuantity
+        - minThreshold
+        - unit
+        - reason
+        - urgency
+
+    ShoppingList:
+      type: object
+      properties:
+        id:
+          type: number
+        name:
+          type: string
+        itemCount:
+          type: number
+        purchasedCount:
+          type: number
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - name
+        - itemCount
+        - purchasedCount
+        - createdAt
+        - updatedAt
+
+    ShoppingListInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+      required:
+        - name
+
+    ShoppingListWithItems:
+      type: object
+      properties:
+        id:
+          type: number
+        name:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ShoppingListItem"
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - name
+        - items
+        - createdAt
+        - updatedAt
+
+    ShoppingListItem:
+      type: object
+      properties:
+        id:
+          type: number
+        shoppingListId:
+          type: number
+        inventoryItemId:
+          type: ["number", "null"]
+        name:
+          type: string
+        category:
+          type: string
+        quantity:
+          type: number
+        unit:
+          type: string
+        purchased:
+          type: boolean
+        notes:
+          type: ["string", "null"]
+      required:
+        - id
+        - shoppingListId
+        - inventoryItemId
+        - name
+        - category
+        - quantity
+        - unit
+        - purchased
+        - notes
+
+    ShoppingListItemInput:
+      type: object
+      properties:
+        inventoryItemId:
+          type: number
+        name:
+          type: string
+          minLength: 1
+        category:
+          type: string
+          minLength: 1
+        quantity:
+          type: number
+          minimum: 0
+        unit:
+          type: string
+          minLength: 1
+        notes:
+          type: string
+      required:
+        - name
+        - category
+        - quantity
+        - unit
+
+    ShoppingListItemUpdate:
+      type: object
+      properties:
+        purchased:
+          type: boolean
+        quantity:
+          type: number
+          minimum: 0
+        notes:
+          type: string
+
+    PurchaseResult:
+      type: object
+      properties:
+        purchasedCount:
+          type: number
+        updatedInventoryItems:
+          type: number
+      required:
+        - purchasedCount
+        - updatedInventoryItems
