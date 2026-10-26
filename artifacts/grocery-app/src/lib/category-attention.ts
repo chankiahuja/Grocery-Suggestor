@@ -8,14 +8,25 @@ export type CategoryAttention = {
   expiringSoon: number;
 };
 
-export function getCategoryAttention(
-  items: InventoryItem[],
+export function isExpiringSoon(
+  expiresAt: string | null | undefined,
   now = new Date()
-): CategoryAttention[] {
+): boolean {
+  const expirationDate = expiresAt?.slice(0, 10);
+  if (!expirationDate) return false;
+
   const today = now.toISOString().slice(0, 10);
   const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
     .toISOString()
     .slice(0, 10);
+
+  return expirationDate >= today && expirationDate <= sevenDaysFromNow;
+}
+
+export function getCategoryAttention(
+  items: InventoryItem[],
+  now = new Date()
+): CategoryAttention[] {
   const grouped = new Map<string, CategoryAttention>();
 
   for (const item of items) {
@@ -33,12 +44,7 @@ export function getCategoryAttention(
 
     const isOutOfStock = item.quantity === 0;
     const isLowStock = !isOutOfStock && item.quantity <= item.minThreshold;
-    const expirationDate = item.expiresAt?.slice(0, 10);
-    const isExpiringSoon = Boolean(
-      expirationDate &&
-        expirationDate >= today &&
-        expirationDate <= sevenDaysFromNow
-    );
+    const expiringSoon = isExpiringSoon(item.expiresAt, now);
 
     if (isOutOfStock) {
       category.outOfStock += 1;
@@ -46,8 +52,8 @@ export function getCategoryAttention(
       category.lowStock += 1;
     }
 
-    if (isExpiringSoon) category.expiringSoon += 1;
-    if (isOutOfStock || isLowStock || isExpiringSoon) {
+    if (expiringSoon) category.expiringSoon += 1;
+    if (isOutOfStock || isLowStock || expiringSoon) {
       category.attentionItems += 1;
     }
   }

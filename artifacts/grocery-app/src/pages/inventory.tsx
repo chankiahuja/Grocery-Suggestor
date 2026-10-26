@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useSearch } from 'wouter';
-import { Search, Plus, Package, Edit, Trash2, Filter } from 'lucide-react';
+import { Search, Plus, Package, Edit, Trash2, Filter, Clock } from 'lucide-react';
 import {
   useListInventoryItems,
   useDeleteInventoryItem,
@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { isExpiringSoon } from '@/lib/category-attention';
 
 export default function Inventory() {
   const searchParams = useSearch();
@@ -36,6 +37,7 @@ export default function Inventory() {
     new URLSearchParams(window.location.search).get('category')
   );
   const [lowStockFilter, setLowStockFilter] = useState(false);
+  const [expiringSoonFilter, setExpiringSoonFilter] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | undefined>();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -64,7 +66,9 @@ export default function Inventory() {
     const matchesCategory = selectedCategory
       ? item.category === selectedCategory
       : true;
-    return matchesSearch && matchesCategory;
+    const matchesExpiration =
+      !expiringSoonFilter || isExpiringSoon(item.expiresAt);
+    return matchesSearch && matchesCategory && matchesExpiration;
   });
 
   const handleEdit = (item: InventoryItem) => {
@@ -145,6 +149,16 @@ export default function Inventory() {
                 >
                   <Filter className="h-4 w-4 mr-2" />
                   Low Stock
+                </Button>
+                <Button
+                  variant={expiringSoonFilter ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setExpiringSoonFilter(!expiringSoonFilter)}
+                  data-testid="filter-expiring-soon"
+                  aria-pressed={expiringSoonFilter}
+                >
+                  <Clock className="h-4 w-4 mr-2" />
+                  Expiring Soon
                 </Button>
                 {categories.map((cat) => (
                   <Button
