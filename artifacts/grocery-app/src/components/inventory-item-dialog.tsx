@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -75,6 +75,20 @@ export function InventoryItemDialog({
       notes: item?.notes || '',
     },
   });
+
+  useEffect(() => {
+    if (!open) return;
+
+    form.reset({
+      name: item?.name || '',
+      category: item?.category || '',
+      quantity: item?.quantity || 0,
+      unit: item?.unit || '',
+      minThreshold: item?.minThreshold || 0,
+      expiresAt: item?.expiresAt || '',
+      notes: item?.notes || '',
+    });
+  }, [form, item, open]);
 
   const onSubmit = async (values: FormValues) => {
     setIsSubmitting(true);

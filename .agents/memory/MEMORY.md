@@ -1,1 +1,2 @@
 - [pnpm workspace manifest edits](pnpm-workspace-manifest-edits.md) — package installs can normalize workspace YAML and create unrelated manifest diffs.
+- [JSDOM UI tests](jsdom-ui-tests.md) — initialize browser globals before importing UI modules; use Wouter's memory location in Node tests.
