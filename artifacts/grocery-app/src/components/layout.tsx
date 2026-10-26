@@ -19,20 +19,21 @@ export function Layout({ children }: LayoutProps) {
   return (
     <div className="min-h-[100dvh] flex bg-background">
       {/* Sidebar */}
-      <aside className="w-64 border-r border-sidebar-border bg-sidebar flex flex-col">
-        <div className="p-6 border-b border-sidebar-border flex items-start justify-between gap-2">
-          <div>
+      <aside className="w-14 shrink-0 border-r border-sidebar-border bg-sidebar flex flex-col sm:w-16 md:w-64">
+        <div className="flex flex-col items-center gap-3 border-b border-sidebar-border p-2 md:flex-row md:items-start md:justify-between md:gap-2 md:p-6">
+          <div className="min-w-0">
             <h1 className="text-2xl font-bold text-sidebar-foreground tracking-tight">
-              PantryPal
+              <span className="md:hidden">P</span>
+              <span className="hidden md:inline">PantryPal</span>
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="mt-1 hidden text-sm text-muted-foreground md:block">
               Smart household inventory
             </p>
           </div>
           <NotificationCenter />
         </div>
 
-        <nav className="flex-1 p-4 space-y-1">
+        <nav className="flex-1 space-y-1 p-2 md:p-4">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = location === item.path;
@@ -41,8 +42,9 @@ export function Layout({ children }: LayoutProps) {
               <Link
                 key={item.path}
                 href={item.path}
+                aria-label={item.label}
                 className={cn(
-                  'flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all',
+                  'flex items-center justify-center gap-3 rounded-lg px-2 py-2.5 text-sm font-medium transition-all md:justify-start md:px-4',
                   isActive
                     ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-sm'
                     : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
@@ -50,7 +52,7 @@ export function Layout({ children }: LayoutProps) {
                 data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
               >
                 <Icon className="h-5 w-5" />
-                {item.label}
+                <span className="hidden md:inline">{item.label}</span>
               </Link>
             );
           })}
@@ -60,8 +62,8 @@ export function Layout({ children }: LayoutProps) {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto">
-        <div className="max-w-7xl mx-auto p-8">{children}</div>
+      <main className="min-w-0 flex-1 overflow-auto">
+        <div className="mx-auto max-w-7xl p-4 sm:p-6 md:p-8">{children}</div>
       </main>
     </div>
   );

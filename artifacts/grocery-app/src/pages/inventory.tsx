@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearch } from 'wouter';
 import { Search, Plus, Package, Edit, Trash2, Filter } from 'lucide-react';
 import {
   useListInventoryItems,
@@ -29,8 +30,11 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
 export default function Inventory() {
+  const searchParams = useSearch();
   const [search, setSearch] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(() =>
+    new URLSearchParams(window.location.search).get('category')
+  );
   const [lowStockFilter, setLowStockFilter] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | undefined>();
@@ -39,6 +43,10 @@ export default function Inventory() {
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  useEffect(() => {
+    setSelectedCategory(new URLSearchParams(searchParams).get('category'));
+  }, [searchParams]);
 
   const { data: items, isLoading } = useListInventoryItems(
     lowStockFilter ? { lowStock: true } : undefined

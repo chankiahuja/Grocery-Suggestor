@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { Bell, AlertCircle, AlertTriangle, Clock, CheckCheck, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useGetGrocerySuggestions } from '@workspace/api-client-react';
+import {
+  getGetGrocerySuggestionsQueryKey,
+  useGetGrocerySuggestions,
+} from '@workspace/api-client-react';
 import type { GrocerySuggestion } from '@workspace/api-client-react';
 
 const STORAGE_KEY = 'pantrypal-seen-notifications';
@@ -57,7 +60,10 @@ export function NotificationCenter() {
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   const { data: suggestions = [] } = useGetGrocerySuggestions({
-    query: { refetchInterval: 30_000 },
+    query: {
+      queryKey: getGetGrocerySuggestionsQueryKey(),
+      refetchInterval: 30_000,
+    },
   });
 
   // Count unread
