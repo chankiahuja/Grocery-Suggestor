@@ -1,0 +1,1 @@
+- [pnpm workspace manifest edits](pnpm-workspace-manifest-edits.md) — package installs can normalize workspace YAML and create unrelated manifest diffs.
