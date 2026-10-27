@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import React from 'react';
 import { JSDOM } from 'jsdom';
-import type { InventoryItem, ShoppingListWithItems } from '@workspace/api-client-react';
+import {
+  getListInventoryItemsQueryKey,
+  type InventoryItem,
+  type ShoppingListWithItems,
+} from '@workspace/api-client-react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Route, Router, Switch } from 'wouter';
 import { memoryLocation } from 'wouter/memory-location';
@@ -65,8 +69,38 @@ const [
 const originalFetch = globalThis.fetch;
 const timestamp = '2026-10-26T12:00:00.000Z';
 
+function dashboardItem(
+  id: number,
+  name: string,
+  category: string,
+  quantity: number,
+  minThreshold: number,
+  expiresInDays: number | null = null
+): InventoryItem {
+  const expiresAt =
+    expiresInDays === null
+      ? null
+      : new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000)
+          .toISOString()
+          .slice(0, 10);
+
+  return {
+    id,
+    name,
+    category,
+    quantity,
+    unit: 'each',
+    minThreshold,
+    expiresAt,
+    notes: null,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+}
+
 class GroceryApiMock {
   items: InventoryItem[] = [];
+  inventoryGetMode: 'normal' | 'pending' | 'error' = 'normal';
   shoppingList: ShoppingListWithItems = {
     id: 1,
     name: 'Weekly shop',
@@ -99,6 +133,22 @@ class GroceryApiMock {
     const method = (init?.method ?? 'GET').toUpperCase();
 
     if (url.pathname === '/api/inventory' && method === 'GET') {
+      if (this.inventoryGetMode === 'error') {
+        return this.json({ error: 'Inventory unavailable' }, 500);
+      }
+      if (this.inventoryGetMode === 'pending') {
+        return new Promise<Response>((_, reject) => {
+          const signal = init?.signal;
+          const abort = () =>
+            reject(new DOMException('Request aborted', 'AbortError'));
+          if (signal?.aborted) {
+            abort();
+          } else {
+            signal?.addEventListener('abort', abort, { once: true });
+          }
+        });
+      }
+
       let items = [...this.items];
       if (url.searchParams.get('lowStock') === 'true') {
         items = items.filter(
@@ -339,6 +389,117 @@ describe('dashboard inventory attention refresh', () => {
     assert.ok((await screen.findByTestId('category-attention-pantry')).textContent?.includes('1Out'));
     assert.ok(screen.getByTestId('category-attention-produce').textContent?.includes('1Low'));
     assert.ok(screen.getByTestId('category-attention-dairy').textContent?.includes('1Expiring'));
+  });
+
+  it('renders exact attention totals and Out, Low, and Expiring counts per category', async () => {
+    const api = new GroceryApiMock();
+    api.items = [
+      dashboardItem(1, 'Carrots', 'Produce', 0, 2, 1),
+      dashboardItem(2, 'Onions', 'Produce', 1, 2, 2),
+      dashboardItem(3, 'Pears', 'Produce', 5, 2, 3),
+      dashboardItem(4, 'Milk', 'Dairy', 1, 2, 2),
+      dashboardItem(5, 'Yogurt', 'Dairy', 4, 1),
+      dashboardItem(6, 'Bread', 'Bakery', 5, 1, 5),
+      dashboardItem(7, 'Beans', 'Canned Goods', 8, 2),
+    ];
+    globalThis.fetch = api.fetch;
+    const { queryClient } = renderApp();
+
+    const expected = [
+      { category: 'produce', attention: 3, out: 1, low: 1, expiring: 3 },
+      { category: 'dairy', attention: 1, out: 0, low: 1, expiring: 1 },
+      { category: 'bakery', attention: 1, out: 0, low: 0, expiring: 1 },
+    ];
+
+    for (const counts of expected) {
+      const categoryId = `category-attention-${counts.category}`;
+      await screen.findByTestId(categoryId);
+      assert.equal(
+        screen.getByTestId(`${categoryId}-total`).textContent,
+        String(counts.attention)
+      );
+      assert.equal(
+        screen.getByTestId(`${categoryId}-out-count`).textContent,
+        String(counts.out)
+      );
+      assert.equal(
+        screen.getByTestId(`${categoryId}-low-count`).textContent,
+        String(counts.low)
+      );
+      assert.equal(
+        screen.getByTestId(`${categoryId}-expiring-count`).textContent,
+        String(counts.expiring)
+      );
+    }
+
+    assert.equal(screen.queryByTestId('category-attention-canned-goods'), null);
+    assert.equal(screen.queryByText('Your pantry is in good shape.'), null);
+    queryClient.clear();
+  });
+
+  it('shows the good-shape message and no cards for healthy-only categories', async () => {
+    const api = new GroceryApiMock();
+    api.items = [
+      dashboardItem(1, 'Rice', 'Pantry', 5, 1),
+      dashboardItem(2, 'Cereal', 'Breakfast', 4, 1, 10),
+    ];
+    globalThis.fetch = api.fetch;
+    const { queryClient } = renderApp();
+
+    await screen.findByText('Your pantry is in good shape.');
+    assert.equal(screen.queryByTestId('category-attention-pantry'), null);
+    assert.equal(screen.queryByTestId('category-attention-breakfast'), null);
+
+    queryClient.clear();
+  });
+
+  it('hides cached category cards while inventory is being refreshed', async () => {
+    const api = new GroceryApiMock();
+    api.items = [dashboardItem(1, 'Apples', 'Produce', 0, 2)];
+    globalThis.fetch = api.fetch;
+    const { queryClient } = renderApp();
+
+    const categoryId = 'category-attention-produce';
+    await screen.findByTestId(categoryId);
+
+    api.inventoryGetMode = 'pending';
+    const refresh = queryClient.refetchQueries({
+      queryKey: getListInventoryItemsQueryKey(),
+      type: 'active',
+    });
+    await screen.findByTestId('pantry-attention-loading');
+    assert.equal(screen.queryByTestId(categoryId), null);
+
+    await queryClient.cancelQueries({
+      queryKey: getListInventoryItemsQueryKey(),
+    });
+    await refresh;
+    queryClient.clear();
+  });
+
+  it('hides cached category cards when inventory refresh fails', async () => {
+    const api = new GroceryApiMock();
+    api.items = [dashboardItem(1, 'Apples', 'Produce', 0, 2)];
+    globalThis.fetch = api.fetch;
+    const { queryClient } = renderApp();
+
+    const categoryId = 'category-attention-produce';
+    await screen.findByTestId(categoryId);
+    api.inventoryGetMode = 'error';
+
+    await queryClient.refetchQueries({
+      queryKey: getListInventoryItemsQueryKey(),
+      type: 'active',
+    });
+
+    assert.ok(queryClient.getQueryData(getListInventoryItemsQueryKey()));
+    await screen.findByRole('alert');
+    assert.equal(screen.queryByTestId(categoryId), null);
+    assert.equal(
+      screen.getByText('Pantry attention could not be loaded.').textContent,
+      'Pantry attention could not be loaded.'
+    );
+    queryClient.clear();
   });
 
   it('refreshes category counts after create, edit, shopping-list restock, and delete flows', async () => {

@@ -103,8 +103,11 @@ export default function Dashboard() {
             </p>
           </CardHeader>
           <CardContent>
-            {inventoryLoading ? (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {inventoryLoading || inventoryFetching ? (
+              <div
+                className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3"
+                data-testid="pantry-attention-loading"
+              >
                 {Array.from({ length: 3 }).map((_, i) => (
                   <Skeleton key={i} className="h-32 w-full" />
                 ))}
@@ -136,6 +139,9 @@ export default function Dashboard() {
             ) : categoryAttention.length > 0 ? (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {categoryAttention.map((category) => {
+                  const categoryTestId = `category-attention-${category.category
+                    .toLowerCase()
+                    .replace(/[^a-z0-9]+/g, '-')}`;
                   const metrics = [
                     {
                       label: 'Out',
@@ -160,9 +166,7 @@ export default function Dashboard() {
                       href={`/inventory?category=${encodeURIComponent(category.category)}`}
                       aria-label={`View ${category.category}: ${category.attentionItems} items need attention`}
                       className="group rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-accent/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      data-testid={`category-attention-${category.category
-                        .toLowerCase()
-                        .replace(/[^a-z0-9]+/g, '-')}`}
+                      data-testid={categoryTestId}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
@@ -171,7 +175,9 @@ export default function Dashboard() {
                           </h3>
                           <p className="mt-1 text-sm text-muted-foreground">
                             <span className="font-mono font-semibold text-foreground">
-                              {category.attentionItems}
+                              <span data-testid={`${categoryTestId}-total`}>
+                                {category.attentionItems}
+                              </span>
                             </span>{' '}
                             {category.attentionItems === 1
                               ? 'item needs'
@@ -192,7 +198,11 @@ export default function Dashboard() {
                             )}
                           >
                             <span className="font-mono font-bold">
-                              {metric.count}
+                              <span
+                                data-testid={`${categoryTestId}-${metric.label.toLowerCase()}-count`}
+                              >
+                                {metric.count}
+                              </span>
                             </span>
                             {metric.label}
                           </span>
