@@ -127,13 +127,22 @@ class GroceryApiMock {
     }
 
     if (url.pathname === '/api/inventory/stats' && method === 'GET') {
+      const today = new Date().toISOString().slice(0, 10);
+      const sevenDaysFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .slice(0, 10);
       return this.json({
         totalItems: this.items.length,
         lowStockCount: this.items.filter(
           (item) => item.quantity > 0 && item.quantity <= item.minThreshold
         ).length,
         outOfStockCount: this.items.filter((item) => item.quantity === 0).length,
-        expiringCount: 0,
+        expiringCount: this.items.filter(
+          (item) =>
+            item.expiresAt != null &&
+            item.expiresAt >= today &&
+            item.expiresAt <= sevenDaysFromNow
+        ).length,
         categoryBreakdown: [],
       });
     }
@@ -264,6 +273,74 @@ afterEach(() => {
 });
 
 describe('dashboard inventory attention refresh', () => {
+  it('shows every dashboard pantry count from the inventory stats response', async () => {
+    const api = new GroceryApiMock();
+    const expiringDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+    api.items = [
+      {
+        id: 1,
+        name: 'Out of stock item',
+        category: 'Pantry',
+        quantity: 0,
+        unit: 'bags',
+        minThreshold: 1,
+        expiresAt: null,
+        notes: null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+      {
+        id: 2,
+        name: 'Low stock item',
+        category: 'Produce',
+        quantity: 1,
+        unit: 'units',
+        minThreshold: 2,
+        expiresAt: null,
+        notes: null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+      {
+        id: 3,
+        name: 'Expiring item',
+        category: 'Dairy',
+        quantity: 8,
+        unit: 'cartons',
+        minThreshold: 2,
+        expiresAt: expiringDate,
+        notes: null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+      {
+        id: 4,
+        name: 'Healthy item',
+        category: 'Bakery',
+        quantity: 5,
+        unit: 'loaves',
+        minThreshold: 2,
+        expiresAt: null,
+        notes: null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+    ];
+    globalThis.fetch = api.fetch;
+    renderApp();
+
+    assert.equal((await screen.findByTestId('stat-total-items')).textContent?.trim(), '4');
+    assert.equal(screen.getByTestId('stat-low-stock').textContent?.trim(), '1');
+    assert.equal(screen.getByTestId('stat-out-of-stock').textContent?.trim(), '1');
+    assert.equal(screen.getByTestId('stat-expiring').textContent?.trim(), '1');
+
+    assert.ok((await screen.findByTestId('category-attention-pantry')).textContent?.includes('1Out'));
+    assert.ok(screen.getByTestId('category-attention-produce').textContent?.includes('1Low'));
+    assert.ok(screen.getByTestId('category-attention-dairy').textContent?.includes('1Expiring'));
+  });
+
   it('refreshes category counts after create, edit, shopping-list restock, and delete flows', async () => {
     const api = new GroceryApiMock();
     globalThis.fetch = api.fetch;
