@@ -670,6 +670,77 @@ export function useGetGrocerySuggestions<TData = Awaited<ReturnType<typeof getGr
 
 
 
+export const getGenerateShoppingListFromSuggestionsUrl = () => {
+
+
+
+
+  return `/api/suggestions/generate-list`
+}
+
+/**
+ * @summary Create a shopping list from current low-stock suggestions
+ */
+export const generateShoppingListFromSuggestions = async ( options?: Parameters<typeof customFetch>[1]): Promise<ShoppingListWithItems> => {
+
+  return customFetch<ShoppingListWithItems>(getGenerateShoppingListFromSuggestionsUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getGenerateShoppingListFromSuggestionsMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateShoppingListFromSuggestions>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof generateShoppingListFromSuggestions>>, TError,void, TContext> => {
+
+const mutationKey = ['generateShoppingListFromSuggestions'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof generateShoppingListFromSuggestions>>, void> = () => {
+
+
+          return  generateShoppingListFromSuggestions(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GenerateShoppingListFromSuggestionsMutationResult = NonNullable<Awaited<ReturnType<typeof generateShoppingListFromSuggestions>>>
+
+    export type GenerateShoppingListFromSuggestionsMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Create a shopping list from current low-stock suggestions
+ */
+export const useGenerateShoppingListFromSuggestions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateShoppingListFromSuggestions>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof generateShoppingListFromSuggestions>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getGenerateShoppingListFromSuggestionsMutationOptions(options));
+    }
+
 export const getListShoppingListsUrl = () => {
 
 

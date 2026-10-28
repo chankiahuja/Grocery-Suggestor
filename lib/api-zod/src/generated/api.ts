@@ -176,6 +176,28 @@ export const GetGrocerySuggestionsResponse = zod.array(GetGrocerySuggestionsResp
 
 
 /**
+ * @summary Create a shopping list from current low-stock suggestions
+ */
+export const GenerateShoppingListFromSuggestionsResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "shoppingListId": zod.number(),
+  "inventoryItemId": zod.number().nullable(),
+  "name": zod.string(),
+  "category": zod.string(),
+  "quantity": zod.number(),
+  "unit": zod.string(),
+  "purchased": zod.boolean(),
+  "notes": zod.string().nullable()
+})),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
  * @summary List all shopping lists
  */
 export const ListShoppingListsResponseItem = zod.object({

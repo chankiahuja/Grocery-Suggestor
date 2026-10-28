@@ -8,12 +8,17 @@ import {
   ArrowRight,
   CheckCircle2,
   RefreshCw,
+  ShoppingCart,
 } from 'lucide-react';
 import {
   useGetInventoryStats,
   useGetGrocerySuggestions,
   useListInventoryItems,
+  useGenerateShoppingListFromSuggestions,
+  getListShoppingListsQueryKey,
 } from '@workspace/api-client-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useLocation } from 'wouter';
 import { Layout } from '@/components/layout';
 import { StatCard } from '@/components/stat-card';
 import { UrgencyBadge } from '@/components/urgency-badge';
@@ -22,10 +27,15 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { getCategoryAttention } from '@/lib/category-attention';
+import { useToast } from '@/hooks/use-toast';
 
 export default function Dashboard() {
+  const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const { data: stats, isLoading: statsLoading } = useGetInventoryStats();
   const { data: suggestions, isLoading: suggestionsLoading } = useGetGrocerySuggestions();
+  const generateList = useGenerateShoppingListFromSuggestions();
   const {
     data: inventoryItems,
     isLoading: inventoryLoading,
@@ -38,6 +48,30 @@ export default function Dashboard() {
     () => getCategoryAttention(inventoryItems ?? []),
     [inventoryItems]
   );
+  const hasStockSuggestions = suggestions?.some(
+    (suggestion) =>
+      suggestion.urgency === 'critical' || suggestion.urgency === 'low'
+  ) ?? false;
+
+  const handleGenerateShoppingList = async () => {
+    try {
+      const list = await generateList.mutateAsync();
+      await queryClient.invalidateQueries({
+        queryKey: getListShoppingListsQueryKey(),
+      });
+      toast({
+        title: 'Shopping list generated',
+        description: `${list.items.length} item${list.items.length === 1 ? '' : 's'} added from low-stock suggestions.`,
+      });
+      setLocation(`/shopping-lists/${list.id}`);
+    } catch {
+      toast({
+        title: 'Could not generate a shopping list',
+        description: 'Refresh your suggestions and try again.',
+        variant: 'destructive',
+      });
+    }
+  };
 
   return (
     <Layout>
@@ -228,8 +262,20 @@ export default function Dashboard() {
 
         {/* Grocery Suggestions */}
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between gap-4">
             <CardTitle>Grocery Suggestions</CardTitle>
+            <Button
+              onClick={handleGenerateShoppingList}
+              disabled={
+                suggestionsLoading ||
+                !hasStockSuggestions ||
+                generateList.isPending
+              }
+              data-testid="button-generate-shopping-list"
+            >
+              <ShoppingCart className="h-4 w-4" />
+              {generateList.isPending ? 'Generating...' : 'Generate shopping list'}
+            </Button>
           </CardHeader>
           <CardContent>
             {suggestionsLoading ? (

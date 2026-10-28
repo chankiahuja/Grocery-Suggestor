@@ -173,6 +173,24 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/GrocerySuggestion"
+  /suggestions/generate-list:
+    post:
+      operationId: generateShoppingListFromSuggestions
+      tags: [suggestions]
+      summary: Create a shopping list from current low-stock suggestions
+      responses:
+        "201":
+          description: Shopping list generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShoppingListWithItems"
+        "400":
+          description: No low-stock suggestions are available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /shopping-lists:
     get:

@@ -120,6 +120,7 @@ class GroceryApiMock {
     createdAt: timestamp,
     updatedAt: timestamp,
   };
+  generatedShoppingList: ShoppingListWithItems | null = null;
   private nextInventoryId = 1;
 
   readonly fetch = async (
@@ -212,11 +213,69 @@ class GroceryApiMock {
     }
 
     if (url.pathname === '/api/suggestions' && method === 'GET') {
-      return this.json([]);
+      return this.json(
+        this.items.flatMap((item) => {
+          if (item.quantity === 0) {
+            return [{
+              inventoryItemId: item.id,
+              name: item.name,
+              category: item.category,
+              currentQuantity: item.quantity,
+              minThreshold: item.minThreshold,
+              unit: item.unit,
+              reason: 'Out of stock',
+              urgency: 'critical',
+            }];
+          }
+          if (item.quantity <= item.minThreshold) {
+            return [{
+              inventoryItemId: item.id,
+              name: item.name,
+              category: item.category,
+              currentQuantity: item.quantity,
+              minThreshold: item.minThreshold,
+              unit: item.unit,
+              reason: `${item.quantity} ${item.unit} left`,
+              urgency: 'low',
+            }];
+          }
+          return [];
+        })
+      );
+    }
+
+    if (
+      url.pathname === '/api/suggestions/generate-list' &&
+      method === 'POST'
+    ) {
+      const suggestedItems = this.items.filter(
+        (item) => item.quantity === 0 || item.quantity <= item.minThreshold
+      );
+      if (suggestedItems.length === 0) {
+        return this.json({ error: 'No low-stock suggestions are available.' }, 400);
+      }
+      this.generatedShoppingList = {
+        id: 2,
+        name: 'Low-stock shopping list',
+        items: suggestedItems.map((item, index) => ({
+          id: index + 2,
+          shoppingListId: 2,
+          inventoryItemId: item.id,
+          name: item.name,
+          category: item.category,
+          quantity: Math.max(item.minThreshold - item.quantity, 1),
+          unit: item.unit,
+          purchased: false,
+          notes: item.quantity === 0 ? 'Out of stock' : `${item.quantity} ${item.unit} left`,
+        })),
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+      return this.json(this.generatedShoppingList, 201);
     }
 
     if (url.pathname === '/api/shopping-lists' && method === 'GET') {
-      return this.json([
+      const lists = [
         {
           id: this.shoppingList.id,
           name: this.shoppingList.name,
@@ -226,22 +285,63 @@ class GroceryApiMock {
           createdAt: timestamp,
           updatedAt: timestamp,
         },
-      ]);
+      ];
+      if (this.generatedShoppingList) {
+        lists.push({
+          id: this.generatedShoppingList.id,
+          name: this.generatedShoppingList.name,
+          itemCount: this.generatedShoppingList.items.length,
+          purchasedCount: this.generatedShoppingList.items.filter((item) => item.purchased)
+            .length,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        });
+      }
+      return this.json(lists);
     }
 
-    if (
-      url.pathname === `/api/shopping-lists/${this.shoppingList.id}` &&
-      method === 'GET'
-    ) {
-      return this.json(this.shoppingList);
+    const requestedShoppingListId = Number(
+      url.pathname.match(/^\/api\/shopping-lists\/(\d+)$/)?.[1]
+    );
+    if (method === 'GET' && requestedShoppingListId) {
+      const list =
+        requestedShoppingListId === this.shoppingList.id
+          ? this.shoppingList
+          : requestedShoppingListId === this.generatedShoppingList?.id
+            ? this.generatedShoppingList
+            : null;
+      if (list) return this.json(list);
     }
 
-    if (
-      url.pathname === `/api/shopping-lists/${this.shoppingList.id}/purchase` &&
-      method === 'POST'
-    ) {
+    const itemUpdateMatch = url.pathname.match(
+      /^\/api\/shopping-lists\/(\d+)\/items\/(\d+)$/
+    );
+    if (itemUpdateMatch && method === 'PATCH') {
+      const list =
+        Number(itemUpdateMatch[1]) === this.generatedShoppingList?.id
+          ? this.generatedShoppingList
+          : null;
+      const item = list?.items.find(
+        (candidate) => candidate.id === Number(itemUpdateMatch[2])
+      );
+      if (!list || !item) return this.json({ error: 'Item not found' }, 404);
+      Object.assign(item, this.readBody(init));
+      return this.json(item);
+    }
+
+    const purchaseMatch = url.pathname.match(
+      /^\/api\/shopping-lists\/(\d+)\/purchase$/
+    );
+    if (purchaseMatch && method === 'POST') {
+      const list =
+        Number(purchaseMatch[1]) === this.shoppingList.id
+          ? this.shoppingList
+          : Number(purchaseMatch[1]) === this.generatedShoppingList?.id
+            ? this.generatedShoppingList
+            : null;
+      if (!list) return this.json({ error: 'List not found' }, 404);
       let updatedInventoryItems = 0;
-      const purchasedItems = this.shoppingList.items.filter(
+      const purchasedItems = list.items.filter(
         (item) => item.purchased && item.inventoryItemId !== null
       );
       for (const shoppingItem of purchasedItems) {
@@ -449,6 +549,35 @@ describe('dashboard inventory attention refresh', () => {
     await screen.findByText('Your pantry is in good shape.');
     assert.equal(screen.queryByTestId('category-attention-pantry'), null);
     assert.equal(screen.queryByTestId('category-attention-breakfast'), null);
+
+    queryClient.clear();
+  });
+
+  it('generates a linked shopping list from low-stock suggestions and restocks it', async () => {
+    const api = new GroceryApiMock();
+    api.items = [
+      dashboardItem(1, 'Rice', 'Pantry', 0, 2),
+      dashboardItem(2, 'Apples', 'Produce', 1, 3),
+      dashboardItem(3, 'Milk', 'Dairy', 5, 2, 2),
+    ];
+    globalThis.fetch = api.fetch;
+    const { queryClient } = renderApp();
+
+    const generateButton = await screen.findByTestId(
+      'button-generate-shopping-list'
+    );
+    await waitFor(() => assert.equal((generateButton as HTMLButtonElement).disabled, false));
+    fireEvent.click(generateButton);
+
+    await screen.findByRole('heading', { name: 'Low-stock shopping list' });
+    assert.ok(screen.getByTestId('shopping-item-2').textContent?.includes('Rice'));
+    assert.ok(screen.getByTestId('shopping-item-3').textContent?.includes('Apples'));
+    assert.equal(screen.queryByText('Milk'), null);
+
+    fireEvent.click(screen.getByTestId('checkbox-purchased-2'));
+    fireEvent.click(screen.getByTestId('button-complete-purchase'));
+    await waitFor(() => assert.equal(api.items[0]?.quantity, 2));
+    assert.equal(api.items[1]?.quantity, 1);
 
     queryClient.clear();
   });
