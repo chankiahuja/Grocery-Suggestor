@@ -2,9 +2,13 @@ import { Link, useLocation } from "wouter";
 import { Home, Package, ShoppingCart, Leaf } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NotificationCenter } from "@/components/notification-center";
+import { useLogoutPreview } from "@/lib/preview-access";
+import { useQueryClient } from "@tanstack/react-query";
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
+  const logout = useLogoutPreview();
+  const queryClient = useQueryClient();
   const navItems = [
     { path: "/dashboard", label: "Dashboard", icon: Home },
     { path: "/inventory", label: "Inventory", icon: Package },
@@ -20,7 +24,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
     <div className="pantry-shell min-h-[100dvh] bg-background">
       <header className="pantry-header">
         <div className="pantry-header-inner">
-          <Link href="/dashboard" aria-label="Pantry Pal home" className="pantry-brand">
+          <Link
+            href="/dashboard"
+            aria-label="Pantry Pal home"
+            className="pantry-brand"
+          >
             <img
               src={`${base}brand/pantry-pal-logo.svg`}
               alt="Pantry Pal"
@@ -51,9 +59,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
             })}
           </nav>
           <div className="pantry-header-actions">
-            <Link href="/login" className="pantry-sign-in">
-              Sign in
-            </Link>
+            <button
+              type="button"
+              className="pantry-sign-in"
+              onClick={() => {
+                logout();
+                queryClient.clear();
+                navigate("/login", { replace: true });
+              }}
+            >
+              Logout
+            </button>
             <span className="pantry-household">
               <Leaf className="h-4 w-4" /> My household
             </span>

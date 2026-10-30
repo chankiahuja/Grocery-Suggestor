@@ -1,9 +1,16 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 import { Redirect, useLocation } from "wouter";
 
 // Preview navigation only; this does not authenticate or protect API requests.
-const PreviewAccess = createContext(() => {});
-export const useCompletePreview = () => useContext(PreviewAccess);
+const PreviewAccess = createContext({ complete: () => {}, logout: () => {} });
+export const useCompletePreview = () => useContext(PreviewAccess).complete;
+export const useLogoutPreview = () => useContext(PreviewAccess).logout;
 
 export function LoginGate({ children }: { children: ReactNode }) {
   const [location, navigate] = useLocation();
@@ -19,7 +26,12 @@ export function LoginGate({ children }: { children: ReactNode }) {
     return <Redirect to="/login" replace />;
   }
   return (
-    <PreviewAccess.Provider value={() => setCompleted(true)}>
+    <PreviewAccess.Provider
+      value={{
+        complete: () => setCompleted(true),
+        logout: () => setCompleted(false),
+      }}
+    >
       {children}
     </PreviewAccess.Provider>
   );
