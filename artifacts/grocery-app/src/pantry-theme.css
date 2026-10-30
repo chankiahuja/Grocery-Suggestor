@@ -1,21 +1,22 @@
 /* Adapted from the supplied Pantry Pal design. Assets are owned by this app. */
 :root {
-  --background: 48 33% 97%;
-  --foreground: 102 10% 20%;
+  --background: 103 24% 94%;
+  --foreground: 150 24% 20%;
   --card: 48 100% 99%;
-  --card-foreground: 102 10% 20%;
-  --card-border: 65 20% 88%;
-  --border: 65 20% 88%;
+  --card-foreground: 150 24% 20%;
+  --card-border: 110 19% 88%;
+  --border: 110 19% 88%;
   --popover: 48 100% 99%;
-  --popover-foreground: 102 10% 20%;
-  --primary: 88 20% 40%;
-  --ring: 88 20% 40%;
-  --secondary: 75 29% 90%;
-  --secondary-foreground: 89 20% 29%;
+  --popover-foreground: 150 24% 20%;
+  --primary: 146 27% 28%;
+  --primary-foreground: 50 100% 99%;
+  --ring: 146 27% 28%;
+  --secondary: 100 25% 91%;
+  --secondary-foreground: 146 27% 28%;
   --muted: 60 25% 94%;
-  --muted-foreground: 91 10% 42%;
-  --accent: 75 29% 90%;
-  --accent-foreground: 89 20% 29%;
+  --muted-foreground: 130 11% 38%;
+  --accent: 100 25% 91%;
+  --accent-foreground: 146 27% 28%;
   --input: 65 20% 83%;
   --sidebar: 48 100% 99%;
   --sidebar-foreground: 102 10% 20%;
@@ -24,12 +25,28 @@
   --app-font-sans: "Helvetica Neue", Arial, sans-serif;
   --app-font-mono: "Helvetica Neue", Arial, sans-serif;
   --radius: 0.85rem;
+  --pantry-paper: #eff4ed;
+  --pantry-surface: #fffef9;
+  --pantry-ink: #263e32;
+  --pantry-muted: #586c5d;
+  --pantry-green: #355c46;
+  --pantry-green-hover: #294d39;
+  --pantry-line: #dce6da;
 }
 body {
   letter-spacing: -0.15px;
+  background: var(--pantry-paper);
+  background-image:
+    radial-gradient(ellipse at 5% 0%, #e1edda90, transparent 46%),
+    radial-gradient(ellipse at 100% 60%, #f7eddd80, transparent 52%);
+  background-attachment: fixed;
+  color: var(--pantry-ink);
+}
+.pantry-shell {
+  background: transparent;
 }
 .pantry-header {
-  background: #fcfcf8;
+  background: var(--pantry-surface);
   border-bottom: 1px solid hsl(var(--border));
 }
 .pantry-header-inner {
@@ -60,15 +77,15 @@ body {
   align-items: center;
   gap: 9px;
   padding: 20px 13px;
-  color: #747c69;
+  color: var(--pantry-muted);
   font-size: 13px;
   white-space: nowrap;
 }
 .pantry-nav-link:hover {
-  color: #3e5032;
+  color: var(--pantry-green);
 }
 .pantry-nav-link.is-active {
-  color: #3e5032;
+  color: var(--pantry-green);
   font-weight: 600;
 }
 .pantry-nav-link.is-active::after {
@@ -89,7 +106,7 @@ body {
   display: flex;
   gap: 8px;
   align-items: center;
-  color: #69765b;
+  color: var(--pantry-muted);
   font-size: 12px;
   white-space: nowrap;
 }
@@ -104,10 +121,10 @@ body {
   align-items: center;
   min-height: 55px;
   font-size: 11px;
-  color: #7c846f;
+  color: var(--pantry-muted);
 }
 .pantry-breadcrumb span:last-child {
-  color: #4e5b44;
+  color: var(--pantry-muted);
 }
 .pantry-content {
   padding: 20px 0 30px;
@@ -121,7 +138,7 @@ body {
   font-weight: 500;
 }
 .pantry-content [data-testid^="shopping-list-"] {
-  background: #fffefa;
+  background: var(--pantry-surface);
   border-radius: 14px;
   box-shadow: 0 4px 15px #424c2803;
 }
@@ -154,7 +171,7 @@ body {
   gap: 20px;
   border-top: 1px solid hsl(var(--border));
   padding: 22px 0 30px;
-  color: #7c846f;
+  color: var(--pantry-muted);
   font-size: 11px;
 }
 .pantry-footer > span:first-child {
@@ -166,7 +183,9 @@ body {
   position: relative;
   min-height: 320px;
   overflow: hidden;
-  border-radius: 16px;
+  border-radius: 22px;
+  border: 1px solid var(--pantry-line);
+  box-shadow: 0 10px 25px #47623a09;
   background: #edeadf;
   isolation: isolate;
 }
@@ -186,9 +205,9 @@ body {
   inset: 0;
   background: linear-gradient(
     90deg,
-    #efede4 0%,
-    #efede4ed 28%,
-    #efede45c 56%,
+    #e8efde 0%,
+    #e8efdeed 28%,
+    #e8efde5c 56%,
     transparent 76%
   );
   z-index: -1;
@@ -201,28 +220,28 @@ body {
   font-size: 10px;
   letter-spacing: 2px;
   text-transform: uppercase;
-  color: #69765b;
+  color: var(--pantry-muted);
 }
 .pantry-hero h3 {
   font-size: clamp(32px, 4vw, 48px);
   line-height: 1.07;
   letter-spacing: -1.8px;
   font-weight: 400;
-  color: #424b38;
+  color: var(--pantry-ink);
   margin: 19px 0 16px;
 }
 .pantry-hero p {
   max-width: 290px;
   font-size: 13px;
   line-height: 1.7;
-  color: #626d55;
+  color: var(--pantry-muted);
 }
 .pantry-hero a {
   display: inline-flex;
   align-items: center;
   gap: 10px;
   font-size: 12px;
-  color: #46573c;
+  color: var(--pantry-green);
   border-bottom: 1px solid #9da98c;
   padding-bottom: 6px;
   margin-top: 20px;
@@ -237,7 +256,7 @@ body {
   padding: 17px 20px;
 }
 .pantry-stat-value {
-  color: #687855;
+  color: var(--pantry-green);
   font-size: 36px;
   font-weight: 300;
   line-height: 1.1;
@@ -325,7 +344,7 @@ body {
     max-width: 315px;
   }
   .pantry-hero::before {
-    background: linear-gradient(90deg, #efede4fa, #efede4e0 45%, #efede455);
+    background: linear-gradient(90deg, #e8efdefa, #e8efdee0 45%, #e8efde55);
   }
   .pantry-hero img {
     object-position: 63% center;
