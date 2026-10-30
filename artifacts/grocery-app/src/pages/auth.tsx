@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { ArrowUpRight, Leaf } from "lucide-react";
+import { useCompletePreview } from "@/lib/preview-access";
 import {
   DEMO_OTP,
   OTP_LIFETIME_MS,
@@ -10,6 +11,7 @@ import {
 } from "@/lib/demo-auth";
 
 export default function Auth() {
+  const completePreview = useCompletePreview();
   const [location] = useLocation();
   const signup = location === "/signup";
   const [step, setStep] = useState<"mobile" | "otp" | "success">("mobile");
@@ -207,6 +209,7 @@ export default function Auth() {
                 setOtp("");
                 setMobile("");
                 setStep("success");
+                completePreview();
               }}
             >
               <div className="auth-number-summary">
@@ -297,7 +300,7 @@ export default function Auth() {
                 The demo code was accepted. This preview has not verified your
                 phone or created an account.
               </p>
-              <Link href="/">
+              <Link href="/dashboard">
                 Step into your home <ArrowUpRight size={16} />
               </Link>
               <button
@@ -312,7 +315,7 @@ export default function Auth() {
         </div>
         <footer className="auth-form-footer">
           <span>© Pantry Pal · A little more in order.</span>
-          <Link href="/">Explore the demo ↗</Link>
+          <Link href="/login">Sign in to explore ↗</Link>
         </footer>
       </section>
     </main>

@@ -7,21 +7,23 @@ import Inventory from "@/pages/inventory";
 import ShoppingLists from "@/pages/shopping-lists";
 import ShoppingListDetail from "@/pages/shopping-list-detail";
 import Auth from "@/pages/auth";
-import { Route, Switch, Router as WouterRouter } from "wouter";
+import { Route, Switch, Redirect, Router as WouterRouter } from "wouter";
+import { LoginGate } from "@/lib/preview-access";
 
 const queryClient = new QueryClient();
 
-function Router() {
+export function AppRoutes() {
   return (
-    <Switch>
+    <LoginGate><Switch>
       <Route path="/login" component={Auth} />
       <Route path="/signup" component={Auth} />
-      <Route path="/" component={Dashboard} />
+      <Route path="/"><Redirect to="/login" replace /></Route>
+      <Route path="/dashboard" component={Dashboard} />
       <Route path="/inventory" component={Inventory} />
       <Route path="/shopping-lists" component={ShoppingLists} />
       <Route path="/shopping-lists/:id" component={ShoppingListDetail} />
       <Route component={NotFound} />
-    </Switch>
+    </Switch></LoginGate>
   );
 }
 
@@ -30,7 +32,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <Router />
+          <AppRoutes />
         </WouterRouter>
         <Toaster />
       </TooltipProvider>
