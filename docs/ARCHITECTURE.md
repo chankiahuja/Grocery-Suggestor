@@ -5,13 +5,17 @@ The `/login` and `/signup` routes are frontend-only mobile/OTP design previews w
 An optional `dev:mock` frontend mode loads a browser-side REST adapter before React starts. It seeds relative-date pantry examples, persists demo edits in localStorage, and supports the existing inventory/suggestions/shopping flows. It does not connect to Spring, PostgreSQL or SSE. Normal development uses the architecture below.
 
 ```text
-React / TypeScript :5173
-  /api proxy -> Spring Boot :8080 -> JDBC -> PostgreSQL :5432
+Browser -> Spring Boot embedded server :8080
+             |-- React static assets + client routes
+             |-- /api -> JDBC -> H2 file (local default)
+                               PostgreSQL :5432 (postgres profile)
                     |
             committed PantryChanged events
                     |
              SSE -> React Query refresh
 ```
+
+The frontend production build is included in the Spring classpath and executable JAR by Maven resources. `pnpm start` builds it before launching Spring; the Docker multi-stage build does both. Explicit client routes forward to `index.html`, while API endpoints and missing asset requests retain their normal HTTP behavior. Optional Vite development on :5173 proxies `/api` to Spring for hot reload.
 
 [OpenAPI](../lib/api-spec/openapi.yaml) describes the existing REST contract. Keep generated React hooks compatible. The additive SSE endpoint uses `pantry-event` events with `{ "type": "inventory_changed" | "purchase_completed" | "alerts_changed" | "heartbeat" }`; `ready` confirms connection.
 

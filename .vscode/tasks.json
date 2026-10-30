@@ -2,6 +2,13 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "Application: Spring Boot 8080",
+      "type": "shell",
+      "command": "npx pnpm@10.26.1 start",
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
       "label": "Frontend: demo",
       "type": "shell",
       "command": "npx pnpm@10.26.1 dev:mock",

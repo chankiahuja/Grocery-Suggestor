@@ -6,7 +6,8 @@ For frontend-only exploration, use `npx pnpm@10.26.1 dev:mock` and open http://l
 
 - Java JDK 17+ (Java 21 in Docker); no global Maven required with the wrapper.
 - Node.js 24 and pnpm 10.26.1 (`npx pnpm@10.26.1 ...` works without a global install).
-- Docker with Compose for PostgreSQL and optional API containers.
+- Embedded file-backed H2 is the default local database; no external database is needed.
+- Docker with Compose is optional for the PostgreSQL configuration.
 
 ## Variables
 
@@ -14,29 +15,32 @@ Copy [`.env.example`](../.env.example) to `.env` to override Compose credentials
 
 | Variable | Default | Used by |
 |---|---|---|
-| DB_URL | jdbc:postgresql://localhost:5432/pantrypal | Native Spring |
-| DB_USER | pantrypal | Spring / Compose |
-| DB_PASSWORD | pantrypal | Spring / Compose |
+| SPRING_PROFILES_ACTIVE | local (default profile) | Spring; use postgres for PostgreSQL |
+| PANTRYPAL_DATA_DIR | ./data | Local H2 files, relative to Java working directory |
+| DB_URL | jdbc:postgresql://localhost:5432/pantrypal | PostgreSQL profile |
+| DB_USER | pantrypal | PostgreSQL / Compose |
+| DB_PASSWORD | pantrypal | PostgreSQL / Compose |
 | API_PORT | 8080 | Native Spring |
 | EXPIRY_CHECK_MS | 60000 | Native Spring scheduler |
 | PORT | 5173 | Vite |
 | BASE_PATH | / | Vite |
 | API_TARGET | http://localhost:8080 | Vite proxy |
 
-Vite reads shell variables in its configuration. Set overrides in the shell that starts Vite. `/api` requests, including SSE, are proxied to Spring; direct cross-origin browser access is not needed.
+The default full-stack application uses Spring Boot's embedded server on http://localhost:8080 for React assets and `/api`, including SSE. Maven includes `artifacts/grocery-app/dist/public` as classpath static resources; build React before running Maven directly. Docker Compose builds both frontend and backend from the repository root. Use `docker build -f backend/Dockerfile .` for a standalone image build.
 
-Windows native example, using separate terminals:
+Vite is optional for hot reload on port 5173. It reads shell variables in its configuration and proxies `/api` requests, including SSE, to Spring.
 
-```powershell
-docker compose up -d db
-cd backend
-.\mvnw.cmd spring-boot:run
-```
+Windows native example (Node.js 24 and JDK 17+ required), from the repository root:
 
 ```powershell
+$env:JAVA_HOME = 'C:/Program Files/Java/jdk-17'
 npx pnpm@10.26.1 install
-npx pnpm@10.26.1 dev
+npx pnpm@10.26.1 start
 ```
+
+Open http://localhost:8080. Use your installed JDK path for `JAVA_HOME`. The start command rebuilds React before starting Java and uses the default `local` profile, with H2 at `backend/data/pantrypal.mv.db`. Data survives restarts. Do not open the same database from multiple application processes. Set an absolute `PANTRYPAL_DATA_DIR` to keep the location consistent across launch methods. The H2 console is not enabled. No browser-side mock is enabled in this mode.
+
+For PostgreSQL, set `$env:SPRING_PROFILES_ACTIVE = 'postgres'` and configure `DB_URL`, `DB_USER`, and `DB_PASSWORD` before starting. Existing `DB_*` variables do not override the local H2 profile. Compose explicitly selects PostgreSQL. Tests continue to use an isolated in-memory H2 database. H2 compatibility mode does not establish PostgreSQL compatibility.
 
 ## Troubleshooting
 
