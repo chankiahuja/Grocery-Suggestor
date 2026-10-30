@@ -23,6 +23,8 @@ The `local` Spring profile is the default. Set `PANTRYPAL_DATA_DIR` to an absolu
 
 ### Frontend demo (no backend or database)
 
+To add the same sample pantry and Weekend groceries list to the running Spring Boot app on port 8080, run `npx pnpm@10.26.1 seed:demo` from the repository root. This explicit local command reuses the browser demo dataset, adds missing examples through the API, and preserves existing quantities and purchase progress when repeated. It does not import browser localStorage. H2 retains these records across restarts; samples are not automatically recreated when you delete them. Expiry dates for newly added examples are relative to the day you run the command.
+
 ```sh
 npx pnpm@10.26.1 install
 npx pnpm@10.26.1 dev:mock
