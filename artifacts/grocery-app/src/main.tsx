@@ -4,6 +4,7 @@ import App from "./App";
 
 import "./index.css";
 import "./pantry-theme.css";
+import "./auth.css";
 
 async function start() {
   if (import.meta.env.MODE === "mock") {
