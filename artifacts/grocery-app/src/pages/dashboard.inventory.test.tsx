@@ -59,7 +59,7 @@ Object.defineProperties(globalThis, {
 
 dom.window.HTMLElement.prototype.scrollIntoView = () => {};
 
-const { cleanup, fireEvent, render, screen, waitFor } =
+const { act, cleanup, fireEvent, render, screen, waitFor } =
   await import("@testing-library/react");
 const [
   { default: Dashboard },
@@ -514,6 +514,50 @@ describe("login landing routes", () => {
   });
 });
 
+describe("logout", () => {
+  it("clears preview access and blocks navigation back to app screens", async () => {
+    globalThis.fetch = new MockPantryApi().fetch;
+    const location = memoryLocation({ path: "/login" });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Router hook={location.hook}>
+          <AppRoutes />
+        </Router>
+      </QueryClientProvider>,
+    );
+    await screen.findByRole("heading", { name: "Welcome home." });
+    assert.equal(screen.queryByRole("button", { name: "Logout" }), null);
+    fireEvent.change(screen.getByLabelText("Mobile number"), {
+      target: { value: "9876543210" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Get verification code" }),
+    );
+    fireEvent.change(await screen.findByLabelText("Verification code"), {
+      target: { value: "123456" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Verify & continue" }));
+    await screen.findByRole("heading", { name: "Dashboard" });
+    assert.equal(screen.queryByRole("link", { name: "Sign in" }), null);
+    assert.ok(screen.getByRole("button", { name: "Logout" }));
+    await openInventory();
+    fireEvent.click(screen.getByRole("button", { name: "Logout" }));
+    await screen.findByRole("heading", { name: "Welcome home." });
+    assert.equal(queryClient.getQueryCache().getAll().length, 0);
+    for (const path of ["/dashboard", "/inventory", "/shopping-lists"]) {
+      await act(async () => {
+        location.navigate(path);
+      });
+      await screen.findByRole("heading", { name: "Welcome home." });
+      assert.equal(screen.queryByRole("button", { name: "Logout" }), null);
+    }
+    queryClient.clear();
+  });
+});
+
 describe("mobile sign-in and sign-up preview", () => {
   it("validates mobile and OTP, allows changing the number, and opens the dashboard directly", async () => {
     globalThis.fetch = async () => {
@@ -576,7 +620,7 @@ describe("mobile sign-in and sign-up preview", () => {
       null,
     );
     assert.equal(screen.queryByLabelText("Verification code"), null);
-    fireEvent.click(screen.getByRole("link", { name: "Sign in" }));
+    fireEvent.click(screen.getByRole("button", { name: "Logout" }));
     assert.equal(
       (screen.getByLabelText("Mobile number") as HTMLInputElement).value,
       "",
