@@ -5,6 +5,7 @@
   "private": true,
   "packageManager": "pnpm@10.26.1",
   "scripts": {
+    "seed:demo": "pnpm --filter @workspace/grocery-app exec tsx src/mocks/seed-local.ts",
     "start": "pnpm build && node scripts/start-spring.mjs",
     "dev:mock": "pnpm --filter @workspace/grocery-app dev:mock",
     "preinstall": "node scripts/check-package-manager.mjs",
