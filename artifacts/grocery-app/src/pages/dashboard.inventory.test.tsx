@@ -630,8 +630,11 @@ describe("mobile sign-in and sign-up preview", () => {
 
   it("switches to signup and enables resend after the cooldown", async () => {
     const { queryClient } = renderApp("/login");
-    fireEvent.click(screen.getByRole("link", { name: "Sign up" }));
-    await screen.findByRole("heading", { name: "Make yourself at home." });
+    fireEvent.click(screen.getByRole("link", { name: "Create account" }));
+    await screen.findByRole("heading", { name: "A little more together." });
+    fireEvent.change(screen.getByLabelText("Your name"), {
+      target: { value: "Riya Preview" },
+    });
     fireEvent.change(screen.getByLabelText("Mobile number"), {
       target: { value: "9876543210" },
     });
@@ -664,6 +667,53 @@ describe("mobile sign-in and sign-up preview", () => {
   });
 });
 
+describe("create account name", () => {
+  it("requires a nonblank name only for signup and clears it when switching pages", async () => {
+    globalThis.fetch = async () => {
+      throw new Error("Account preview must not transmit names");
+    };
+    const { queryClient } = renderApp("/signup");
+    await screen.findByLabelText("Your name");
+    fireEvent.change(screen.getByLabelText("Mobile number"), {
+      target: { value: "9876543210" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Get verification code" }),
+    );
+    await screen.findByText("Enter your name.");
+    assert.equal(document.activeElement, screen.getByLabelText("Your name"));
+    assert.equal(screen.queryByLabelText("Verification code"), null);
+    fireEvent.change(screen.getByLabelText("Your name"), {
+      target: { value: "   " },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Get verification code" }),
+    );
+    await screen.findByText("Enter your name.");
+    fireEvent.change(screen.getByLabelText("Your name"), {
+      target: { value: "Riya Preview" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Get verification code" }),
+    );
+    await screen.findByLabelText("Verification code");
+    assert.equal(screen.queryByText("Riya Preview"), null);
+    fireEvent.click(screen.getByRole("button", { name: "Change number" }));
+    assert.equal(
+      (screen.getByLabelText("Your name") as HTMLInputElement).value,
+      "Riya Preview",
+    );
+    fireEvent.click(screen.getByRole("link", { name: "Sign in" }));
+    assert.equal(screen.queryByLabelText("Your name"), null);
+    fireEvent.click(screen.getByRole("link", { name: "Create account" }));
+    assert.equal(
+      (screen.getByLabelText("Your name") as HTMLInputElement).value,
+      "",
+    );
+    queryClient.clear();
+  });
+});
+
 describe("email OTP preview", () => {
   for (const signup of [false, true]) {
     it(`validates email, preserves it on change, expires/resends OTP, and opens dashboard for ${signup ? "signup" : "login"}`, async () => {
@@ -685,8 +735,12 @@ describe("email OTP preview", () => {
         </QueryClientProvider>,
       );
       await screen.findByRole("heading", { name: "Welcome home." });
-      if (signup)
-        fireEvent.click(screen.getByRole("link", { name: "Sign up" }));
+      if (signup) {
+        fireEvent.click(screen.getByRole("link", { name: "Create account" }));
+        fireEvent.change(screen.getByLabelText("Your name"), {
+          target: { value: "Riya Preview" },
+        });
+      }
       fireEvent.click(screen.getByRole("button", { name: "Email address" }));
       const emailInput = screen.getByLabelText(
         "Email address",
@@ -776,6 +830,18 @@ describe("email OTP preview", () => {
           null,
         );
         assert.equal(screen.queryByText("you@example.com"), null);
+        assert.equal(screen.queryByText("Riya Preview"), null);
+        assert.equal(screen.queryByLabelText("Your name"), null);
+        if (signup) {
+          await openInventory();
+          assert.equal(screen.queryByText("Riya Preview"), null);
+          fireEvent.click(screen.getByRole("button", { name: "Logout" }));
+          fireEvent.click(screen.getByRole("link", { name: "Create account" }));
+          assert.equal(
+            (screen.getByLabelText("Your name") as HTMLInputElement).value,
+            "",
+          );
+        }
       } finally {
         Date.now = realNow;
         queryClient.clear();

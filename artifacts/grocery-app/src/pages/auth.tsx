@@ -19,6 +19,8 @@ export default function Auth() {
   const [method, setMethod] = useState<"mobile" | "email">("mobile");
   const isEmail = method === "email";
   const [identifier, setIdentifier] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [nameError, setNameError] = useState("");
   const [otp, setOtp] = useState("");
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
@@ -26,6 +28,7 @@ export default function Auth() {
   const [resendAt, setResendAt] = useState(0);
   const [now, setNow] = useState(Date.now);
   const identifierInput = useRef<HTMLInputElement>(null);
+  const nameInput = useRef<HTMLInputElement>(null);
   const otpInput = useRef<HTMLInputElement>(null);
   const base = import.meta.env?.BASE_URL ?? "/";
   const remaining = Math.max(0, Math.ceil((resendAt - now) / 1000));
@@ -48,6 +51,8 @@ export default function Auth() {
   useEffect(() => {
     reset();
     setIdentifier("");
+    setFullName("");
+    setNameError("");
   }, [location]);
   useEffect(() => {
     if (step !== "otp") return;
@@ -55,7 +60,10 @@ export default function Auth() {
     return () => window.clearInterval(timer);
   }, [step]);
   useEffect(() => {
-    if (step === "mobile") identifierInput.current?.focus();
+    if (step === "mobile") {
+      if (signup && !fullName) nameInput.current?.focus();
+      else identifierInput.current?.focus();
+    }
     if (step === "otp") otpInput.current?.focus();
   }, [step, location, method]);
 
@@ -127,30 +135,38 @@ export default function Auth() {
             {step === "otp"
               ? "A little check. Then home."
               : signup
-                ? "Make yourself at home."
+                ? "A little more together."
                 : "Welcome home."}
           </h2>
           <p className="auth-subtitle">
             {step === "otp"
               ? `Confirm your ${isEmail ? "email address" : "mobile number"} to continue.`
-              : "Your email or mobile. No password to remember."}
+              : signup
+                ? "Create your account. Make room for simpler days."
+                : "Your email or mobile. No password to remember."}
           </p>
           {step === "mobile" && (
             <>
-              <nav className="auth-tabs" aria-label="Account options">
+              <nav className="auth-account-tabs" aria-label="Account options">
                 <Link href="/login" aria-current={!signup ? "page" : undefined}>
                   Sign in
                 </Link>
                 <Link href="/signup" aria-current={signup ? "page" : undefined}>
-                  Sign up
+                  Create account
                 </Link>
               </nav>
               <form
                 noValidate
                 onSubmit={(event) => {
                   event.preventDefault();
+                  const missingName = signup && !fullName.trim();
+                  setNameError(missingName ? "Enter your name." : "");
                   const message = identifierError(identifier);
                   setError(message);
+                  if (missingName) {
+                    nameInput.current?.focus();
+                    return;
+                  }
                   if (message) {
                     identifierInput.current?.focus();
                     return;
@@ -160,6 +176,42 @@ export default function Auth() {
                   setStep("otp");
                 }}
               >
+                {signup && (
+                  <div className="auth-field">
+                    <label htmlFor="auth-name">Your name</label>
+                    <div className="auth-input-wrap">
+                      <input
+                        ref={nameInput}
+                        id="auth-name"
+                        name="fullName"
+                        type="text"
+                        autoComplete="name"
+                        placeholder="What should we call you?"
+                        maxLength={100}
+                        required
+                        value={fullName}
+                        aria-invalid={!!nameError}
+                        aria-describedby="auth-name-error"
+                        onBlur={() =>
+                          setNameError(
+                            fullName.trim() ? "" : "Enter your name.",
+                          )
+                        }
+                        onChange={(event) => {
+                          setFullName(event.target.value);
+                          setNameError("");
+                        }}
+                      />
+                    </div>
+                    <p
+                      id="auth-name-error"
+                      className="auth-error"
+                      aria-live="polite"
+                    >
+                      {nameError}
+                    </p>
+                  </div>
+                )}
                 <div
                   className="auth-tabs auth-methods"
                   role="group"
@@ -221,7 +273,9 @@ export default function Auth() {
                   Get verification code <ArrowUpRight size={18} />
                 </button>
                 <p className="auth-new-account">
-                  One step for sign-in and sign-up. No password needed.
+                  {signup
+                    ? "Verify your email or mobile to create your account."
+                    : "Sign in with a one-time code. No password needed."}
                 </p>
               </form>
             </>
@@ -240,6 +294,8 @@ export default function Auth() {
                 setExpiresAt(0);
                 setOtp("");
                 setIdentifier("");
+                setFullName("");
+                setNameError("");
                 completePreview();
                 navigate("/dashboard", { replace: true });
               }}

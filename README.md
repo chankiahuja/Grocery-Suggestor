@@ -2,7 +2,7 @@
 
 Household inventory, rule-based grocery suggestions, shopping lists, and event-driven in-app notifications.
 
-The React theme adapts the supplied Pantry Pal design. Its logo, hero image and favicon are copied into the app's public assets; the app does not load anything from the original reference folder, which can be deleted independently.
+The React theme adapts the supplied Pantry Pal design. Its logo, hero image and favicon live in the React app's public assets.
 
 The active backend is Java/Spring Boot in [backend](backend). The React/TypeScript app remains in [artifacts/grocery-app](artifacts/grocery-app). See [environment setup](docs/ENVIRONMENT.md) and [architecture](docs/ARCHITECTURE.md).
 
@@ -34,7 +34,7 @@ Open http://localhost:5173. Demo mode includes sample pantry items, stock and ex
 
 ### Sign-in/sign-up design preview
 
-Open `/login` or `/signup`, or use **Sign in** in the header. Both support **Mobile number** or **Email address**: enter a 10-digit example number or a valid-format email, then use demo code **123456**. Successful verification opens the dashboard directly, without a confirmation screen. Codes expire after five minutes; resend has a 30-second cooldown. Email addresses, phone numbers and codes stay in component memory and are cleared on success or when leaving the page. No SMS or email is sent, account created, or authenticated session established. Every fresh page load opens `/login`, including direct links to dashboard, inventory, signup, or unknown page URLs. Completing the OTP preview unlocks navigation to `/dashboard` in memory until the page reloads. This is a frontend navigation gate, not API authentication. All page styles and assets are in the React app; the `PantryPal-Email-Mobile-OTP` reference folder is not required and can be deleted.
+Every fresh load opens `/login`; use **Create account** to switch to signup. Signup requires a name, held only in the form and cleared on success or when leaving the page. The name is not stored, sent to an API, or shown on Dashboard or other app screens. The sage/ivory theme is maintained within the React app. Both forms support **Mobile number** or **Email address**: enter a 10-digit example number or a valid-format email, then use demo code **123456**. Successful verification opens the dashboard directly, without a confirmation screen. Codes expire after five minutes; resend has a 30-second cooldown. Email addresses, phone numbers and codes stay in component memory and are cleared on success or when leaving the page. No SMS or email is sent, account created, or authenticated session established. Every fresh page load opens `/login`, including direct links to dashboard, inventory, signup, or unknown page URLs. Completing the OTP preview unlocks navigation to `/dashboard` in memory until the page reloads. This is a frontend navigation gate, not API authentication. All page styles and assets are maintained in the React app.
 
 ### Optional PostgreSQL setup with Docker
 
