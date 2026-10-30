@@ -145,6 +145,22 @@
   color: #46573c;
   font-weight: 600;
 }
+.auth-methods button {
+  width: 50%;
+  border: 0;
+  border-radius: 6px;
+  padding: 10px;
+  background: transparent;
+  color: #636b59;
+  font-size: 12px;
+  cursor: pointer;
+}
+.auth-methods button[aria-pressed="true"] {
+  background: #fffefa;
+  box-shadow: 0 1px 4px #283a2510;
+  color: #46573c;
+  font-weight: 600;
+}
 .auth-field {
   margin-bottom: 18px;
 }

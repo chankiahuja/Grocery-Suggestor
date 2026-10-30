@@ -7,24 +7,26 @@ import {
   OTP_LIFETIME_MS,
   RESEND_COOLDOWN_MS,
   mobileError,
+  emailError,
   otpError,
 } from "@/lib/demo-auth";
 
 export default function Auth() {
   const completePreview = useCompletePreview();
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
   const signup = location === "/signup";
-  const [step, setStep] = useState<"mobile" | "otp" | "success">("mobile");
-  const [mobile, setMobile] = useState("");
+  const [step, setStep] = useState<"mobile" | "otp">("mobile");
+  const [method, setMethod] = useState<"mobile" | "email">("mobile");
+  const isEmail = method === "email";
+  const [identifier, setIdentifier] = useState("");
   const [otp, setOtp] = useState("");
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
   const [expiresAt, setExpiresAt] = useState(0);
   const [resendAt, setResendAt] = useState(0);
   const [now, setNow] = useState(Date.now);
-  const mobileInput = useRef<HTMLInputElement>(null);
+  const identifierInput = useRef<HTMLInputElement>(null);
   const otpInput = useRef<HTMLInputElement>(null);
-  const successPanel = useRef<HTMLDivElement>(null);
   const base = import.meta.env?.BASE_URL ?? "/";
   const remaining = Math.max(0, Math.ceil((resendAt - now) / 1000));
 
@@ -34,10 +36,18 @@ export default function Auth() {
     setError("");
     setStatus("");
     setExpiresAt(0);
+    setResendAt(0);
+  }
+  function identifierError(value: string) {
+    const message = isEmail ? emailError(value) : mobileError(value);
+    if (!message && isEmail && identifierInput.current?.validity.typeMismatch) {
+      return "Enter a valid email address, such as you@example.com.";
+    }
+    return message;
   }
   useEffect(() => {
     reset();
-    setMobile("");
+    setIdentifier("");
   }, [location]);
   useEffect(() => {
     if (step !== "otp") return;
@@ -45,10 +55,9 @@ export default function Auth() {
     return () => window.clearInterval(timer);
   }, [step]);
   useEffect(() => {
-    if (step === "mobile") mobileInput.current?.focus();
+    if (step === "mobile") identifierInput.current?.focus();
     if (step === "otp") otpInput.current?.focus();
-    if (step === "success") successPanel.current?.focus();
-  }, [step, location]);
+  }, [step, location, method]);
 
   function issueDemoCode() {
     const timestamp = Date.now();
@@ -117,18 +126,14 @@ export default function Auth() {
           <h2 id="auth-heading">
             {step === "otp"
               ? "A little check. Then home."
-              : step === "success"
-                ? "Make room for the everyday."
-                : signup
-                  ? "Make yourself at home."
-                  : "Welcome home."}
+              : signup
+                ? "Make yourself at home."
+                : "Welcome home."}
           </h2>
           <p className="auth-subtitle">
             {step === "otp"
-              ? "Confirm your mobile number to continue."
-              : step === "success"
-                ? "Your household essentials, a little more together."
-                : "One mobile number. A little less to remember."}
+              ? `Confirm your ${isEmail ? "email address" : "mobile number"} to continue.`
+              : "Your email or mobile. No password to remember."}
           </p>
           {step === "mobile" && (
             <>
@@ -144,42 +149,69 @@ export default function Auth() {
                 noValidate
                 onSubmit={(event) => {
                   event.preventDefault();
-                  const message = mobileError(mobile);
+                  const message = identifierError(identifier);
                   setError(message);
                   if (message) {
-                    mobileInput.current?.focus();
+                    identifierInput.current?.focus();
                     return;
                   }
-                  setMobile(mobile.trim());
+                  setIdentifier(identifier.trim());
                   issueDemoCode();
                   setStep("otp");
                 }}
               >
+                <div
+                  className="auth-tabs auth-methods"
+                  role="group"
+                  aria-label="Choose mobile number or email"
+                >
+                  {(["mobile", "email"] as const).map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      aria-pressed={method === option}
+                      onClick={() => {
+                        if (option === method) return;
+                        reset();
+                        setIdentifier("");
+                        setMethod(option);
+                      }}
+                    >
+                      {option === "email" ? "Email address" : "Mobile number"}
+                    </button>
+                  ))}
+                </div>
                 <div className="auth-field">
-                  <label htmlFor="auth-mobile">Mobile number</label>
-                  <div className="auth-input-wrap auth-has-prefix">
-                    <span className="auth-prefix">+91</span>
+                  <label htmlFor="auth-mobile">
+                    {isEmail ? "Email address" : "Mobile number"}
+                  </label>
+                  <div
+                    className={`auth-input-wrap${isEmail ? "" : " auth-has-prefix"}`}
+                  >
+                    {!isEmail && <span className="auth-prefix">+91</span>}
                     <input
-                      ref={mobileInput}
+                      ref={identifierInput}
                       id="auth-mobile"
-                      name="mobile"
-                      type="tel"
-                      inputMode="numeric"
-                      autoComplete="tel-national"
-                      placeholder="9876543210"
+                      name={method}
+                      type={isEmail ? "email" : "tel"}
+                      inputMode={isEmail ? "email" : "numeric"}
+                      autoComplete={isEmail ? "email" : "tel-national"}
+                      placeholder={isEmail ? "you@example.com" : "9876543210"}
                       required
-                      value={mobile}
+                      value={identifier}
                       aria-invalid={!!error}
                       aria-describedby="auth-mobile-hint auth-error"
-                      onBlur={() => setError(mobileError(mobile))}
+                      onBlur={() => setError(identifierError(identifier))}
                       onChange={(event) => {
-                        setMobile(event.target.value);
+                        setIdentifier(event.target.value);
                         setError("");
                       }}
                     />
                   </div>
                   <p className="auth-hint" id="auth-mobile-hint">
-                    India · Enter your 10-digit mobile number.
+                    {isEmail
+                      ? "We'll use a one-time code to confirm your email."
+                      : "India · Enter your 10-digit mobile number."}
                   </p>
                   <p className="auth-error" id="auth-error" aria-live="polite">
                     {error}
@@ -207,21 +239,23 @@ export default function Auth() {
                 }
                 setExpiresAt(0);
                 setOtp("");
-                setMobile("");
-                setStep("success");
+                setIdentifier("");
                 completePreview();
+                navigate("/dashboard", { replace: true });
               }}
             >
               <div className="auth-number-summary">
                 <span>
-                  +91 {mobile.slice(0, 5)} {mobile.slice(5)}
+                  {isEmail
+                    ? identifier
+                    : `+91 ${identifier.slice(0, 5)} ${identifier.slice(5)}`}
                 </span>
                 <button
                   className="auth-text-button"
                   type="button"
                   onClick={reset}
                 >
-                  Change number
+                  {isEmail ? "Change email" : "Change number"}
                 </button>
               </div>
               <div className="auth-field">
@@ -267,7 +301,7 @@ export default function Auth() {
                     if (Date.now() < resendAt) return;
                     issueDemoCode();
                     setStatus(
-                      `A fresh demo code is ready: ${DEMO_OTP}. No SMS was sent.`,
+                      `A fresh demo code is ready: ${DEMO_OTP}. No ${isEmail ? "email" : "SMS"} was sent.`,
                     );
                     otpInput.current?.focus();
                   }}
@@ -280,38 +314,14 @@ export default function Auth() {
               </p>
             </form>
           )}
-          {step !== "success" ? (
-            <aside className="auth-demo-notice">
-              <strong>Interactive preview</strong>
-              <p>
-                No SMS is sent. Use demo code <b>{DEMO_OTP}</b> on the next
-                screen. Real phone verification is not connected.
-              </p>
-            </aside>
-          ) : (
-            <div
-              ref={successPanel}
-              className="auth-success"
-              tabIndex={-1}
-              role="status"
-            >
-              <strong>You’re ready to explore.</strong>
-              <p>
-                The demo code was accepted. This preview has not verified your
-                phone or created an account.
-              </p>
-              <Link href="/dashboard">
-                Step into your home <ArrowUpRight size={16} />
-              </Link>
-              <button
-                className="auth-text-button"
-                type="button"
-                onClick={reset}
-              >
-                Start again
-              </button>
-            </div>
-          )}
+          <aside className="auth-demo-notice">
+            <strong>Interactive preview</strong>
+            <p>
+              No SMS or email is sent. Use demo code <b>{DEMO_OTP}</b> on the
+              next screen. Real verification is not connected; no account or
+              authenticated session is created.
+            </p>
+          </aside>
         </div>
         <footer className="auth-form-footer">
           <span>© Pantry Pal · A little more in order.</span>
