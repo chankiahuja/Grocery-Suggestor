@@ -10,6 +10,11 @@ out-tsc
 
 # dependencies
 node_modules
+target/
+.env
+.env.*
+!.env.example
+!.env.*.example
 
 # IDEs and editors
 /.idea
@@ -35,6 +40,8 @@ node_modules
 npm-debug.log
 yarn-error.log
 testem.log
+*.log
+*.hprof
 /typings
 
 # System Files

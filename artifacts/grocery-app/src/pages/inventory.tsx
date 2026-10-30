@@ -1,21 +1,29 @@
-import { useEffect, useState } from 'react';
-import { useSearch } from 'wouter';
-import { Search, Plus, Package, Edit, Trash2, Filter, Clock } from 'lucide-react';
+import { useEffect, useState } from "react";
+import { useSearch } from "wouter";
+import {
+  Search,
+  Plus,
+  Package,
+  Edit,
+  Trash2,
+  Filter,
+  Clock,
+} from "lucide-react";
 import {
   useListInventoryItems,
   useDeleteInventoryItem,
   getListInventoryItemsQueryKey,
   getGetInventoryStatsQueryKey,
   getGetGrocerySuggestionsQueryKey,
-} from '@workspace/api-client-react';
-import type { InventoryItem } from '@workspace/api-client-react';
-import { useQueryClient } from '@tanstack/react-query';
-import { Layout } from '@/components/layout';
-import { InventoryItemDialog } from '@/components/inventory-item-dialog';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
+} from "@workspace/api-client-react";
+import type { InventoryItem } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Layout } from "@/components/layout";
+import { InventoryItemDialog } from "@/components/inventory-item-dialog";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,16 +33,16 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { useToast } from '@/hooks/use-toast';
-import { cn } from '@/lib/utils';
-import { isExpiringSoon } from '@/lib/category-attention';
+} from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
+import { isExpiringSoon } from "@/lib/category-attention";
 
 export default function Inventory() {
   const searchParams = useSearch();
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(() =>
-    new URLSearchParams(window.location.search).get('category')
+    new URLSearchParams(window.location.search).get("category"),
   );
   const [lowStockFilter, setLowStockFilter] = useState(false);
   const [expiringSoonFilter, setExpiringSoonFilter] = useState(false);
@@ -47,11 +55,11 @@ export default function Inventory() {
   const { toast } = useToast();
 
   useEffect(() => {
-    setSelectedCategory(new URLSearchParams(searchParams).get('category'));
+    setSelectedCategory(new URLSearchParams(searchParams).get("category"));
   }, [searchParams]);
 
   const { data: items, isLoading } = useListInventoryItems(
-    lowStockFilter ? { lowStock: true } : undefined
+    lowStockFilter ? { lowStock: true } : undefined,
   );
   const deleteItem = useDeleteInventoryItem();
 
@@ -92,17 +100,23 @@ export default function Inventory() {
     try {
       await deleteItem.mutateAsync({ id: itemToDelete.id });
       toast({
-        title: 'Item deleted',
+        title: "Item deleted",
         description: `${itemToDelete.name} has been removed.`,
       });
-      queryClient.invalidateQueries({ queryKey: getListInventoryItemsQueryKey() });
-      queryClient.invalidateQueries({ queryKey: getGetInventoryStatsQueryKey() });
-      queryClient.invalidateQueries({ queryKey: getGetGrocerySuggestionsQueryKey() });
+      queryClient.invalidateQueries({
+        queryKey: getListInventoryItemsQueryKey(),
+      });
+      queryClient.invalidateQueries({
+        queryKey: getGetInventoryStatsQueryKey(),
+      });
+      queryClient.invalidateQueries({
+        queryKey: getGetGrocerySuggestionsQueryKey(),
+      });
     } catch (error) {
       toast({
-        title: 'Error',
-        description: 'Failed to delete item.',
-        variant: 'destructive',
+        title: "Error",
+        description: "Failed to delete item.",
+        variant: "destructive",
       });
     } finally {
       setDeleteDialogOpen(false);
@@ -142,7 +156,7 @@ export default function Inventory() {
               </div>
               <div className="flex gap-2 flex-wrap">
                 <Button
-                  variant={lowStockFilter ? 'default' : 'outline'}
+                  variant={lowStockFilter ? "default" : "outline"}
                   size="sm"
                   onClick={() => setLowStockFilter(!lowStockFilter)}
                   data-testid="filter-low-stock"
@@ -151,7 +165,7 @@ export default function Inventory() {
                   Low Stock
                 </Button>
                 <Button
-                  variant={expiringSoonFilter ? 'default' : 'outline'}
+                  variant={expiringSoonFilter ? "default" : "outline"}
                   size="sm"
                   onClick={() => setExpiringSoonFilter(!expiringSoonFilter)}
                   data-testid="filter-expiring-soon"
@@ -163,7 +177,7 @@ export default function Inventory() {
                 {categories.map((cat) => (
                   <Button
                     key={cat}
-                    variant={selectedCategory === cat ? 'default' : 'outline'}
+                    variant={selectedCategory === cat ? "default" : "outline"}
                     size="sm"
                     onClick={() =>
                       setSelectedCategory(selectedCategory === cat ? null : cat)
@@ -181,9 +195,7 @@ export default function Inventory() {
         {/* Items List */}
         <Card>
           <CardHeader>
-            <CardTitle>
-              {filteredItems?.length || 0} Items
-            </CardTitle>
+            <CardTitle>{filteredItems?.length || 0} Items</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -193,7 +205,7 @@ export default function Inventory() {
                 ))}
               </div>
             ) : filteredItems && filteredItems.length > 0 ? (
-              <div className="space-y-3">
+              <div className="pantry-inventory-grid">
                 {filteredItems.map((item, idx) => {
                   const isLowStock = item.quantity <= item.minThreshold;
                   const isOutOfStock = item.quantity === 0;
@@ -202,19 +214,19 @@ export default function Inventory() {
                     <div
                       key={item.id}
                       className={cn(
-                        'p-4 rounded-lg border transition-all hover:shadow-md animate-slide-up',
+                        "p-4 rounded-lg border transition-all hover:shadow-md animate-slide-up",
                         isOutOfStock
-                          ? 'border-red-200 bg-red-50/50'
+                          ? "border-red-200 bg-red-50/50"
                           : isLowStock
-                            ? 'border-amber-200 bg-amber-50/50'
-                            : 'border-border bg-card'
+                            ? "border-amber-200 bg-amber-50/50"
+                            : "border-border bg-card",
                       )}
                       style={{ animationDelay: `${idx * 30}ms` }}
                       data-testid={`inventory-item-${item.id}`}
                     >
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-3 mb-2">
+                          <div className="flex flex-wrap items-center gap-3 mb-2">
                             <h4 className="font-semibold text-lg">
                               {item.name}
                             </h4>
@@ -232,14 +244,17 @@ export default function Inventory() {
                               </span>
                             )}
                           </div>
-                          <div className="flex items-center gap-4 text-sm text-muted-foreground mb-2">
+                          <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground mb-2">
                             <span className="font-mono font-semibold text-foreground">
                               {item.quantity} {item.unit}
                             </span>
-                            <span>Min: {item.minThreshold} {item.unit}</span>
+                            <span>
+                              Min: {item.minThreshold} {item.unit}
+                            </span>
                             {item.expiresAt && (
                               <span>
-                                Expires: {new Date(item.expiresAt).toLocaleDateString()}
+                                Expires:{" "}
+                                {new Date(item.expiresAt).toLocaleDateString()}
                               </span>
                             )}
                           </div>
@@ -254,6 +269,7 @@ export default function Inventory() {
                             variant="outline"
                             size="sm"
                             onClick={() => handleEdit(item)}
+                            aria-label={`Edit ${item.name}`}
                             data-testid={`button-edit-${item.id}`}
                           >
                             <Edit className="h-4 w-4" />
@@ -262,6 +278,7 @@ export default function Inventory() {
                             variant="outline"
                             size="sm"
                             onClick={() => handleDeleteClick(item)}
+                            aria-label={`Delete ${item.name}`}
                             data-testid={`button-delete-${item.id}`}
                           >
                             <Trash2 className="h-4 w-4" />
@@ -299,8 +316,13 @@ export default function Inventory() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteConfirm} data-testid="button-confirm-delete">
+            <AlertDialogCancel data-testid="button-cancel-delete">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConfirm}
+              data-testid="button-confirm-delete"
+            >
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>

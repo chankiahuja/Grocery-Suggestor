@@ -17,6 +17,19 @@ tags:
   - name: shopping-lists
     description: Shopping list management
 paths:
+  /notifications/stream:
+    get:
+      operationId: streamPantryNotifications
+      tags: [notifications]
+      summary: Server-sent cache invalidation signals after inventory changes and purchases
+      description: Connect with EventSource. Event pantry-event contains a JSON type (inventory_changed, purchase_completed, alerts_changed, or heartbeat). Recover current alert state from GET /suggestions.
+      responses:
+        "200":
+          description: Event stream; ready confirms connection
+          content:
+            text/event-stream:
+              schema:
+                type: string
   /healthz:
     get:
       operationId: healthCheck

@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { useParams, useLocation } from 'wouter';
-import { Plus, ShoppingBag, ArrowLeft, Trash2 } from 'lucide-react';
+import { useState } from "react";
+import { useParams, useLocation } from "wouter";
+import { Plus, ShoppingBag, ArrowLeft, Trash2 } from "lucide-react";
 import {
   useGetShoppingList,
   useUpdateShoppingListItem,
@@ -10,16 +10,16 @@ import {
   getListShoppingListsQueryKey,
   getListInventoryItemsQueryKey,
   getGetInventoryStatsQueryKey,
-} from '@workspace/api-client-react';
-import type { ShoppingListItem } from '@workspace/api-client-react';
-import { useQueryClient } from '@tanstack/react-query';
-import { Layout } from '@/components/layout';
-import { AddShoppingItemDialog } from '@/components/add-shopping-item-dialog';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Progress } from '@/components/ui/progress';
+} from "@workspace/api-client-react";
+import type { ShoppingListItem } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Layout } from "@/components/layout";
+import { AddShoppingItemDialog } from "@/components/add-shopping-item-dialog";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Progress } from "@/components/ui/progress";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,9 +29,9 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { useToast } from '@/hooks/use-toast';
-import { cn } from '@/lib/utils';
+} from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 
 export default function ShoppingListDetail() {
   const params = useParams();
@@ -40,7 +40,9 @@ export default function ShoppingListDetail() {
 
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [itemToDelete, setItemToDelete] = useState<ShoppingListItem | null>(null);
+  const [itemToDelete, setItemToDelete] = useState<ShoppingListItem | null>(
+    null,
+  );
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -72,9 +74,9 @@ export default function ShoppingListDetail() {
       });
     } catch (error) {
       toast({
-        title: 'Error',
-        description: 'Failed to update item.',
-        variant: 'destructive',
+        title: "Error",
+        description: "Failed to update item.",
+        variant: "destructive",
       });
     }
   };
@@ -93,7 +95,7 @@ export default function ShoppingListDetail() {
         itemId: itemToDelete.id,
       });
       toast({
-        title: 'Item removed',
+        title: "Item removed",
         description: `${itemToDelete.name} has been removed from the list.`,
       });
       queryClient.invalidateQueries({
@@ -104,9 +106,9 @@ export default function ShoppingListDetail() {
       });
     } catch (error) {
       toast({
-        title: 'Error',
-        description: 'Failed to delete item.',
-        variant: 'destructive',
+        title: "Error",
+        description: "Failed to delete item.",
+        variant: "destructive",
       });
     } finally {
       setDeleteDialogOpen(false);
@@ -118,7 +120,7 @@ export default function ShoppingListDetail() {
     try {
       const result = await purchaseList.mutateAsync({ id: listId });
       toast({
-        title: 'Purchase complete',
+        title: "Purchase complete",
         description: `Restocked ${result.updatedInventoryItems} items in inventory.`,
       });
       queryClient.invalidateQueries({
@@ -133,12 +135,12 @@ export default function ShoppingListDetail() {
       queryClient.invalidateQueries({
         queryKey: getGetInventoryStatsQueryKey(),
       });
-      setLocation('/shopping-lists');
+      setLocation("/shopping-lists");
     } catch (error) {
       toast({
-        title: 'Error',
-        description: 'Failed to complete purchase.',
-        variant: 'destructive',
+        title: "Error",
+        description: "Failed to complete purchase.",
+        variant: "destructive",
       });
     }
   };
@@ -177,22 +179,26 @@ export default function ShoppingListDetail() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setLocation('/shopping-lists')}
+            onClick={() => setLocation("/shopping-lists")}
             className="mb-4"
             data-testid="button-back"
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Lists
           </Button>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <h2 className="text-3xl font-bold tracking-tight">{list.name}</h2>
               <p className="text-muted-foreground mt-1">
-                {list.items.filter((i) => i.purchased).length} / {list.items.length} items purchased
+                {list.items.filter((i) => i.purchased).length} /{" "}
+                {list.items.length} items purchased
               </p>
             </div>
-            <div className="flex gap-3">
-              <Button onClick={() => setAddDialogOpen(true)} data-testid="button-add-item">
+            <div className="flex flex-wrap gap-3">
+              <Button
+                onClick={() => setAddDialogOpen(true)}
+                data-testid="button-add-item"
+              >
                 <Plus className="h-4 w-4 mr-2" />
                 Add Item
               </Button>
@@ -203,7 +209,9 @@ export default function ShoppingListDetail() {
                   data-testid="button-complete-purchase"
                 >
                   <ShoppingBag className="h-4 w-4 mr-2" />
-                  {purchaseList.isPending ? 'Processing...' : 'Complete Purchase'}
+                  {purchaseList.isPending
+                    ? "Processing..."
+                    : "Complete Purchase"}
                 </Button>
               )}
             </div>
@@ -235,10 +243,10 @@ export default function ShoppingListDetail() {
                   <div
                     key={item.id}
                     className={cn(
-                      'p-4 rounded-lg border transition-all hover:shadow-sm animate-slide-up',
+                      "p-4 rounded-lg border transition-all hover:shadow-sm animate-slide-up",
                       item.purchased
-                        ? 'bg-muted/50 border-border opacity-75'
-                        : 'bg-card border-border'
+                        ? "bg-muted/50 border-border opacity-75"
+                        : "bg-card border-border",
                     )}
                     style={{ animationDelay: `${idx * 30}ms` }}
                     data-testid={`shopping-item-${item.id}`}
@@ -254,8 +262,9 @@ export default function ShoppingListDetail() {
                         <div className="flex items-center gap-3 mb-2">
                           <h4
                             className={cn(
-                              'font-semibold text-lg',
-                              item.purchased && 'line-through text-muted-foreground'
+                              "font-semibold text-lg",
+                              item.purchased &&
+                                "line-through text-muted-foreground",
                             )}
                           >
                             {item.name}
@@ -309,12 +318,18 @@ export default function ShoppingListDetail() {
           <AlertDialogHeader>
             <AlertDialogTitle>Remove Item</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to remove {itemToDelete?.name} from this list?
+              Are you sure you want to remove {itemToDelete?.name} from this
+              list?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteConfirm} data-testid="button-confirm-delete">
+            <AlertDialogCancel data-testid="button-cancel-delete">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConfirm}
+              data-testid="button-confirm-delete"
+            >
               Remove
             </AlertDialogAction>
           </AlertDialogFooter>
