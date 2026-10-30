@@ -1,0 +1,42 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Frontend: demo",
+      "type": "shell",
+      "command": "npx pnpm@10.26.1 dev:mock",
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Frontend: dev",
+      "type": "shell",
+      "command": "npx pnpm@10.26.1 dev",
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Frontend: check",
+      "type": "shell",
+      "command": "npx pnpm@10.26.1 build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Backend: test",
+      "type": "shell",
+      "command": "sh ./mvnw test",
+      "windows": { "command": ".\\mvnw.cmd test" },
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Backend: dev",
+      "type": "shell",
+      "command": "sh ./mvnw spring-boot:run",
+      "windows": { "command": ".\\mvnw.cmd spring-boot:run" },
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "isBackground": true,
+      "problemMatcher": []
+    }
+  ]
+}

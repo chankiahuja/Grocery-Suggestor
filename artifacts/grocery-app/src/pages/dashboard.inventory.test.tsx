@@ -1,18 +1,19 @@
-import assert from 'node:assert/strict';
-import { afterEach, describe, it } from 'node:test';
-import React from 'react';
-import { JSDOM } from 'jsdom';
+import assert from "node:assert/strict";
+import { afterEach, describe, it } from "node:test";
+import React from "react";
+import { MockPantryApi } from "../mocks/pantry-api";
+import { JSDOM } from "jsdom";
 import {
   getListInventoryItemsQueryKey,
   type InventoryItem,
   type ShoppingListWithItems,
-} from '@workspace/api-client-react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Route, Router, Switch } from 'wouter';
-import { memoryLocation } from 'wouter/memory-location';
+} from "@workspace/api-client-react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Route, Router, Switch } from "wouter";
+import { memoryLocation } from "wouter/memory-location";
 
-const dom = new JSDOM('<!doctype html><html><body></body></html>', {
-  url: 'http://localhost/',
+const dom = new JSDOM("<!doctype html><html><body></body></html>", {
+  url: "http://localhost/",
 });
 
 Object.defineProperties(globalThis, {
@@ -32,8 +33,14 @@ Object.defineProperties(globalThis, {
   },
   HTMLElement: { configurable: true, value: dom.window.HTMLElement },
   HTMLInputElement: { configurable: true, value: dom.window.HTMLInputElement },
-  HTMLButtonElement: { configurable: true, value: dom.window.HTMLButtonElement },
-  HTMLSelectElement: { configurable: true, value: dom.window.HTMLSelectElement },
+  HTMLButtonElement: {
+    configurable: true,
+    value: dom.window.HTMLButtonElement,
+  },
+  HTMLSelectElement: {
+    configurable: true,
+    value: dom.window.HTMLSelectElement,
+  },
   HTMLTextAreaElement: {
     configurable: true,
     value: dom.window.HTMLTextAreaElement,
@@ -52,22 +59,21 @@ Object.defineProperties(globalThis, {
 
 dom.window.HTMLElement.prototype.scrollIntoView = () => {};
 
-const { cleanup, fireEvent, render, screen, waitFor } = await import(
-  '@testing-library/react'
-);
+const { cleanup, fireEvent, render, screen, waitFor } =
+  await import("@testing-library/react");
 const [
   { default: Dashboard },
   { default: Inventory },
   { default: ShoppingLists },
   { default: ShoppingListDetail },
 ] = await Promise.all([
-  import('./dashboard'),
-  import('./inventory'),
-  import('./shopping-lists'),
-  import('./shopping-list-detail'),
+  import("./dashboard"),
+  import("./inventory"),
+  import("./shopping-lists"),
+  import("./shopping-list-detail"),
 ]);
 const originalFetch = globalThis.fetch;
-const timestamp = '2026-10-26T12:00:00.000Z';
+const timestamp = "2026-10-26T12:00:00.000Z";
 
 function dashboardItem(
   id: number,
@@ -75,7 +81,7 @@ function dashboardItem(
   category: string,
   quantity: number,
   minThreshold: number,
-  expiresInDays: number | null = null
+  expiresInDays: number | null = null,
 ): InventoryItem {
   const expiresAt =
     expiresInDays === null
@@ -89,7 +95,7 @@ function dashboardItem(
     name,
     category,
     quantity,
-    unit: 'each',
+    unit: "each",
     minThreshold,
     expiresAt,
     notes: null,
@@ -100,19 +106,19 @@ function dashboardItem(
 
 class GroceryApiMock {
   items: InventoryItem[] = [];
-  inventoryGetMode: 'normal' | 'pending' | 'error' = 'normal';
+  inventoryGetMode: "normal" | "pending" | "error" = "normal";
   shoppingList: ShoppingListWithItems = {
     id: 1,
-    name: 'Weekly shop',
+    name: "Weekly shop",
     items: [
       {
         id: 1,
         shoppingListId: 1,
         inventoryItemId: 1,
-        name: 'Rice',
-        category: 'Pantry',
+        name: "Rice",
+        category: "Pantry",
         quantity: 5,
-        unit: 'bags',
+        unit: "bags",
         purchased: true,
         notes: null,
       },
@@ -125,41 +131,41 @@ class GroceryApiMock {
 
   readonly fetch = async (
     input: RequestInfo | URL,
-    init?: RequestInit
+    init?: RequestInit,
   ): Promise<Response> => {
     const url = new URL(
-      typeof input === 'string' ? input : input.toString(),
-      'http://localhost'
+      typeof input === "string" ? input : input.toString(),
+      "http://localhost",
     );
-    const method = (init?.method ?? 'GET').toUpperCase();
+    const method = (init?.method ?? "GET").toUpperCase();
 
-    if (url.pathname === '/api/inventory' && method === 'GET') {
-      if (this.inventoryGetMode === 'error') {
-        return this.json({ error: 'Inventory unavailable' }, 500);
+    if (url.pathname === "/api/inventory" && method === "GET") {
+      if (this.inventoryGetMode === "error") {
+        return this.json({ error: "Inventory unavailable" }, 500);
       }
-      if (this.inventoryGetMode === 'pending') {
+      if (this.inventoryGetMode === "pending") {
         return new Promise<Response>((_, reject) => {
           const signal = init?.signal;
           const abort = () =>
-            reject(new DOMException('Request aborted', 'AbortError'));
+            reject(new DOMException("Request aborted", "AbortError"));
           if (signal?.aborted) {
             abort();
           } else {
-            signal?.addEventListener('abort', abort, { once: true });
+            signal?.addEventListener("abort", abort, { once: true });
           }
         });
       }
 
       let items = [...this.items];
-      if (url.searchParams.get('lowStock') === 'true') {
+      if (url.searchParams.get("lowStock") === "true") {
         items = items.filter(
-          (item) => item.quantity > 0 && item.quantity <= item.minThreshold
+          (item) => item.quantity > 0 && item.quantity <= item.minThreshold,
         );
       }
       return this.json(items);
     }
 
-    if (url.pathname === '/api/inventory' && method === 'POST') {
+    if (url.pathname === "/api/inventory" && method === "POST") {
       const input = this.readBody(init);
       const item: InventoryItem = {
         id: this.nextInventoryId++,
@@ -177,7 +183,7 @@ class GroceryApiMock {
       return this.json(item, 201);
     }
 
-    if (url.pathname === '/api/inventory/stats' && method === 'GET') {
+    if (url.pathname === "/api/inventory/stats" && method === "GET") {
       const today = new Date().toISOString().slice(0, 10);
       const sevenDaysFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
         .toISOString()
@@ -185,78 +191,86 @@ class GroceryApiMock {
       return this.json({
         totalItems: this.items.length,
         lowStockCount: this.items.filter(
-          (item) => item.quantity > 0 && item.quantity <= item.minThreshold
+          (item) => item.quantity > 0 && item.quantity <= item.minThreshold,
         ).length,
-        outOfStockCount: this.items.filter((item) => item.quantity === 0).length,
+        outOfStockCount: this.items.filter((item) => item.quantity === 0)
+          .length,
         expiringCount: this.items.filter(
           (item) =>
             item.expiresAt != null &&
             item.expiresAt >= today &&
-            item.expiresAt <= sevenDaysFromNow
+            item.expiresAt <= sevenDaysFromNow,
         ).length,
         categoryBreakdown: [],
       });
     }
 
     const inventoryItemMatch = url.pathname.match(/^\/api\/inventory\/(\d+)$/);
-    if (inventoryItemMatch && method === 'PATCH') {
+    if (inventoryItemMatch && method === "PATCH") {
       const id = Number(inventoryItemMatch[1]);
       const item = this.items.find((candidate) => candidate.id === id);
-      if (!item) return this.json({ error: 'Item not found' }, 404);
+      if (!item) return this.json({ error: "Item not found" }, 404);
       Object.assign(item, this.readBody(init), { updatedAt: timestamp });
       return this.json(item);
     }
-    if (inventoryItemMatch && method === 'DELETE') {
+    if (inventoryItemMatch && method === "DELETE") {
       const id = Number(inventoryItemMatch[1]);
       this.items = this.items.filter((item) => item.id !== id);
       return new Response(null, { status: 204 });
     }
 
-    if (url.pathname === '/api/suggestions' && method === 'GET') {
+    if (url.pathname === "/api/suggestions" && method === "GET") {
       return this.json(
         this.items.flatMap((item) => {
           if (item.quantity === 0) {
-            return [{
-              inventoryItemId: item.id,
-              name: item.name,
-              category: item.category,
-              currentQuantity: item.quantity,
-              minThreshold: item.minThreshold,
-              unit: item.unit,
-              reason: 'Out of stock',
-              urgency: 'critical',
-            }];
+            return [
+              {
+                inventoryItemId: item.id,
+                name: item.name,
+                category: item.category,
+                currentQuantity: item.quantity,
+                minThreshold: item.minThreshold,
+                unit: item.unit,
+                reason: "Out of stock",
+                urgency: "critical",
+              },
+            ];
           }
           if (item.quantity <= item.minThreshold) {
-            return [{
-              inventoryItemId: item.id,
-              name: item.name,
-              category: item.category,
-              currentQuantity: item.quantity,
-              minThreshold: item.minThreshold,
-              unit: item.unit,
-              reason: `${item.quantity} ${item.unit} left`,
-              urgency: 'low',
-            }];
+            return [
+              {
+                inventoryItemId: item.id,
+                name: item.name,
+                category: item.category,
+                currentQuantity: item.quantity,
+                minThreshold: item.minThreshold,
+                unit: item.unit,
+                reason: `${item.quantity} ${item.unit} left`,
+                urgency: "low",
+              },
+            ];
           }
           return [];
-        })
+        }),
       );
     }
 
     if (
-      url.pathname === '/api/suggestions/generate-list' &&
-      method === 'POST'
+      url.pathname === "/api/suggestions/generate-list" &&
+      method === "POST"
     ) {
       const suggestedItems = this.items.filter(
-        (item) => item.quantity === 0 || item.quantity <= item.minThreshold
+        (item) => item.quantity === 0 || item.quantity <= item.minThreshold,
       );
       if (suggestedItems.length === 0) {
-        return this.json({ error: 'No low-stock suggestions are available.' }, 400);
+        return this.json(
+          { error: "No low-stock suggestions are available." },
+          400,
+        );
       }
       this.generatedShoppingList = {
         id: 2,
-        name: 'Low-stock shopping list',
+        name: "Low-stock shopping list",
         items: suggestedItems.map((item, index) => ({
           id: index + 2,
           shoppingListId: 2,
@@ -266,7 +280,10 @@ class GroceryApiMock {
           quantity: Math.max(item.minThreshold - item.quantity, 1),
           unit: item.unit,
           purchased: false,
-          notes: item.quantity === 0 ? 'Out of stock' : `${item.quantity} ${item.unit} left`,
+          notes:
+            item.quantity === 0
+              ? "Out of stock"
+              : `${item.quantity} ${item.unit} left`,
         })),
         createdAt: timestamp,
         updatedAt: timestamp,
@@ -274,14 +291,15 @@ class GroceryApiMock {
       return this.json(this.generatedShoppingList, 201);
     }
 
-    if (url.pathname === '/api/shopping-lists' && method === 'GET') {
+    if (url.pathname === "/api/shopping-lists" && method === "GET") {
       const lists = [
         {
           id: this.shoppingList.id,
           name: this.shoppingList.name,
           itemCount: this.shoppingList.items.length,
-          purchasedCount: this.shoppingList.items.filter((item) => item.purchased)
-            .length,
+          purchasedCount: this.shoppingList.items.filter(
+            (item) => item.purchased,
+          ).length,
           createdAt: timestamp,
           updatedAt: timestamp,
         },
@@ -291,8 +309,9 @@ class GroceryApiMock {
           id: this.generatedShoppingList.id,
           name: this.generatedShoppingList.name,
           itemCount: this.generatedShoppingList.items.length,
-          purchasedCount: this.generatedShoppingList.items.filter((item) => item.purchased)
-            .length,
+          purchasedCount: this.generatedShoppingList.items.filter(
+            (item) => item.purchased,
+          ).length,
           createdAt: timestamp,
           updatedAt: timestamp,
         });
@@ -301,9 +320,9 @@ class GroceryApiMock {
     }
 
     const requestedShoppingListId = Number(
-      url.pathname.match(/^\/api\/shopping-lists\/(\d+)$/)?.[1]
+      url.pathname.match(/^\/api\/shopping-lists\/(\d+)$/)?.[1],
     );
-    if (method === 'GET' && requestedShoppingListId) {
+    if (method === "GET" && requestedShoppingListId) {
       const list =
         requestedShoppingListId === this.shoppingList.id
           ? this.shoppingList
@@ -314,39 +333,39 @@ class GroceryApiMock {
     }
 
     const itemUpdateMatch = url.pathname.match(
-      /^\/api\/shopping-lists\/(\d+)\/items\/(\d+)$/
+      /^\/api\/shopping-lists\/(\d+)\/items\/(\d+)$/,
     );
-    if (itemUpdateMatch && method === 'PATCH') {
+    if (itemUpdateMatch && method === "PATCH") {
       const list =
         Number(itemUpdateMatch[1]) === this.generatedShoppingList?.id
           ? this.generatedShoppingList
           : null;
       const item = list?.items.find(
-        (candidate) => candidate.id === Number(itemUpdateMatch[2])
+        (candidate) => candidate.id === Number(itemUpdateMatch[2]),
       );
-      if (!list || !item) return this.json({ error: 'Item not found' }, 404);
+      if (!list || !item) return this.json({ error: "Item not found" }, 404);
       Object.assign(item, this.readBody(init));
       return this.json(item);
     }
 
     const purchaseMatch = url.pathname.match(
-      /^\/api\/shopping-lists\/(\d+)\/purchase$/
+      /^\/api\/shopping-lists\/(\d+)\/purchase$/,
     );
-    if (purchaseMatch && method === 'POST') {
+    if (purchaseMatch && method === "POST") {
       const list =
         Number(purchaseMatch[1]) === this.shoppingList.id
           ? this.shoppingList
           : Number(purchaseMatch[1]) === this.generatedShoppingList?.id
             ? this.generatedShoppingList
             : null;
-      if (!list) return this.json({ error: 'List not found' }, 404);
+      if (!list) return this.json({ error: "List not found" }, 404);
       let updatedInventoryItems = 0;
       const purchasedItems = list.items.filter(
-        (item) => item.purchased && item.inventoryItemId !== null
+        (item) => item.purchased && item.inventoryItemId !== null,
       );
       for (const shoppingItem of purchasedItems) {
         const inventoryItem = this.items.find(
-          (item) => item.id === shoppingItem.inventoryItemId
+          (item) => item.id === shoppingItem.inventoryItemId,
         );
         if (!inventoryItem) continue;
         inventoryItem.quantity += shoppingItem.quantity;
@@ -360,24 +379,24 @@ class GroceryApiMock {
 
     return this.json(
       { error: `Unhandled mock request: ${method} ${url.pathname}` },
-      404
+      404,
     );
   };
 
   private readBody(init?: RequestInit): Record<string, unknown> {
-    return JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
+    return JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
   }
 
   private json(value: unknown, status = 200): Response {
     return new Response(JSON.stringify(value), {
       status,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { "Content-Type": "application/json" },
     });
   }
 }
 
 function renderApp() {
-  const location = memoryLocation({ path: '/' });
+  const location = memoryLocation({ path: "/" });
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false, staleTime: 0 },
@@ -397,7 +416,7 @@ function renderApp() {
             <Route path="/shopping-lists/:id" component={ShoppingListDetail} />
           </Switch>
         </Router>
-      </QueryClientProvider>
+      </QueryClientProvider>,
     ),
   };
 }
@@ -407,23 +426,125 @@ function changeInput(testId: string, value: string) {
 }
 
 async function openInventory() {
-  fireEvent.click(screen.getByRole('link', { name: 'Inventory' }));
-  await screen.findByRole('heading', { name: 'Inventory' });
+  fireEvent.click(screen.getByRole("link", { name: "Inventory" }));
+  await screen.findByRole("heading", { name: "Inventory" });
 }
 
 async function openDashboard() {
-  fireEvent.click(screen.getByRole('link', { name: 'Dashboard' }));
-  await screen.findByRole('heading', { name: 'Dashboard' });
+  fireEvent.click(screen.getByRole("link", { name: "Dashboard" }));
+  await screen.findByRole("heading", { name: "Dashboard" });
 }
 
 afterEach(() => {
   cleanup();
   globalThis.fetch = originalFetch;
-  window.history.replaceState({}, '', '/');
+  window.history.replaceState({}, "", "/");
 });
 
-describe('dashboard inventory attention refresh', () => {
-  it('shows every dashboard pantry count from the inventory stats response', async () => {
+describe("shopping list selection and deletion", () => {
+  async function setup() {
+    const api = new MockPantryApi();
+    api.state.lists.push({
+      ...api.state.lists[0],
+      id: 30,
+      name: "Party supplies",
+      items: [],
+    });
+    globalThis.fetch = api.fetch;
+    const app = renderApp();
+    fireEvent.click(screen.getByRole("link", { name: "Shopping Lists" }));
+    await screen.findByRole("checkbox", { name: "Select Weekend groceries" });
+    return { api, ...app };
+  }
+
+  it("selects lists without navigating, cancels, then deletes all while preserving inventory", async () => {
+    const { api, queryClient } = await setup();
+    const inventory = structuredClone(api.state.inventory);
+    assert.equal(
+      screen.queryByRole("button", { name: /Delete selected/ }),
+      null,
+    );
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Select Weekend groceries" }),
+    );
+    assert.ok(screen.getByRole("heading", { name: "Shopping Lists" }));
+    assert.equal(
+      screen
+        .getByRole("checkbox", { name: "Select all shopping lists" })
+        .getAttribute("aria-checked"),
+      "mixed",
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Delete selected (1)" }),
+    );
+    await screen.findByRole("alertdialog");
+    fireEvent.click(screen.getByTestId("button-cancel-delete"));
+    assert.equal(api.state.lists.length, 2);
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Select all shopping lists" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Delete selected (2)" }),
+    );
+    await screen.findByRole("heading", { name: "Delete 2 Shopping Lists?" });
+    fireEvent.click(screen.getByTestId("button-confirm-delete"));
+    await screen.findByText("No shopping lists yet.");
+    assert.equal(api.state.lists.length, 0);
+    assert.deepEqual(api.state.inventory, inventory);
+    assert.equal(
+      screen.queryByRole("button", { name: /Delete selected/ }),
+      null,
+    );
+    queryClient.clear();
+  });
+
+  it("keeps failed lists selected and allows retry; individual deletion still works", async () => {
+    const { api, queryClient } = await setup();
+    globalThis.fetch = async (input, init) => {
+      if (
+        String(input) === "/api/shopping-lists/30" &&
+        init?.method === "DELETE"
+      ) {
+        return new Response('{"error":"Try again"}', {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return api.fetch(input, init);
+    };
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Select all shopping lists" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Delete selected (2)" }),
+    );
+    fireEvent.click(await screen.findByTestId("button-confirm-delete"));
+    await waitFor(() =>
+      assert.ok(!screen.queryByTestId("dialog-delete-list-confirm")),
+    );
+    await screen.findByRole("button", { name: "Delete selected (1)" });
+    assert.deepEqual(
+      api.state.lists.map((list) => list.id),
+      [30],
+    );
+    assert.equal(
+      screen
+        .getByRole("checkbox", { name: "Select Party supplies" })
+        .getAttribute("aria-checked"),
+      "true",
+    );
+    globalThis.fetch = api.fetch;
+    fireEvent.click(
+      screen.getByRole("button", { name: "Delete Party supplies" }),
+    );
+    fireEvent.click(await screen.findByTestId("button-confirm-delete"));
+    await screen.findByText("No shopping lists yet.");
+    queryClient.clear();
+  });
+});
+
+describe("dashboard inventory attention refresh", () => {
+  it("shows every dashboard pantry count from the inventory stats response", async () => {
     const api = new GroceryApiMock();
     const expiringDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)
       .toISOString()
@@ -431,10 +552,10 @@ describe('dashboard inventory attention refresh', () => {
     api.items = [
       {
         id: 1,
-        name: 'Out of stock item',
-        category: 'Pantry',
+        name: "Out of stock item",
+        category: "Pantry",
         quantity: 0,
-        unit: 'bags',
+        unit: "bags",
         minThreshold: 1,
         expiresAt: null,
         notes: null,
@@ -443,10 +564,10 @@ describe('dashboard inventory attention refresh', () => {
       },
       {
         id: 2,
-        name: 'Low stock item',
-        category: 'Produce',
+        name: "Low stock item",
+        category: "Produce",
         quantity: 1,
-        unit: 'units',
+        unit: "units",
         minThreshold: 2,
         expiresAt: null,
         notes: null,
@@ -455,10 +576,10 @@ describe('dashboard inventory attention refresh', () => {
       },
       {
         id: 3,
-        name: 'Expiring item',
-        category: 'Dairy',
+        name: "Expiring item",
+        category: "Dairy",
         quantity: 8,
-        unit: 'cartons',
+        unit: "cartons",
         minThreshold: 2,
         expiresAt: expiringDate,
         notes: null,
@@ -467,10 +588,10 @@ describe('dashboard inventory attention refresh', () => {
       },
       {
         id: 4,
-        name: 'Healthy item',
-        category: 'Bakery',
+        name: "Healthy item",
+        category: "Bakery",
         quantity: 5,
-        unit: 'loaves',
+        unit: "loaves",
         minThreshold: 2,
         expiresAt: null,
         notes: null,
@@ -481,34 +602,52 @@ describe('dashboard inventory attention refresh', () => {
     globalThis.fetch = api.fetch;
     renderApp();
 
-    assert.equal((await screen.findByTestId('stat-total-items')).textContent?.trim(), '4');
-    assert.equal(screen.getByTestId('stat-low-stock').textContent?.trim(), '1');
-    assert.equal(screen.getByTestId('stat-out-of-stock').textContent?.trim(), '1');
-    assert.equal(screen.getByTestId('stat-expiring').textContent?.trim(), '1');
+    assert.equal(
+      (await screen.findByTestId("stat-total-items")).textContent?.trim(),
+      "4",
+    );
+    assert.equal(screen.getByTestId("stat-low-stock").textContent?.trim(), "1");
+    assert.equal(
+      screen.getByTestId("stat-out-of-stock").textContent?.trim(),
+      "1",
+    );
+    assert.equal(screen.getByTestId("stat-expiring").textContent?.trim(), "1");
 
-    assert.ok((await screen.findByTestId('category-attention-pantry')).textContent?.includes('1Out'));
-    assert.ok(screen.getByTestId('category-attention-produce').textContent?.includes('1Low'));
-    assert.ok(screen.getByTestId('category-attention-dairy').textContent?.includes('1Expiring'));
+    assert.ok(
+      (
+        await screen.findByTestId("category-attention-pantry")
+      ).textContent?.includes("1Out"),
+    );
+    assert.ok(
+      screen
+        .getByTestId("category-attention-produce")
+        .textContent?.includes("1Low"),
+    );
+    assert.ok(
+      screen
+        .getByTestId("category-attention-dairy")
+        .textContent?.includes("1Expiring"),
+    );
   });
 
-  it('renders exact attention totals and Out, Low, and Expiring counts per category', async () => {
+  it("renders exact attention totals and Out, Low, and Expiring counts per category", async () => {
     const api = new GroceryApiMock();
     api.items = [
-      dashboardItem(1, 'Carrots', 'Produce', 0, 2, 1),
-      dashboardItem(2, 'Onions', 'Produce', 1, 2, 2),
-      dashboardItem(3, 'Pears', 'Produce', 5, 2, 3),
-      dashboardItem(4, 'Milk', 'Dairy', 1, 2, 2),
-      dashboardItem(5, 'Yogurt', 'Dairy', 4, 1),
-      dashboardItem(6, 'Bread', 'Bakery', 5, 1, 5),
-      dashboardItem(7, 'Beans', 'Canned Goods', 8, 2),
+      dashboardItem(1, "Carrots", "Produce", 0, 2, 1),
+      dashboardItem(2, "Onions", "Produce", 1, 2, 2),
+      dashboardItem(3, "Pears", "Produce", 5, 2, 3),
+      dashboardItem(4, "Milk", "Dairy", 1, 2, 2),
+      dashboardItem(5, "Yogurt", "Dairy", 4, 1),
+      dashboardItem(6, "Bread", "Bakery", 5, 1, 5),
+      dashboardItem(7, "Beans", "Canned Goods", 8, 2),
     ];
     globalThis.fetch = api.fetch;
     const { queryClient } = renderApp();
 
     const expected = [
-      { category: 'produce', attention: 3, out: 1, low: 1, expiring: 3 },
-      { category: 'dairy', attention: 1, out: 0, low: 1, expiring: 1 },
-      { category: 'bakery', attention: 1, out: 0, low: 0, expiring: 1 },
+      { category: "produce", attention: 3, out: 1, low: 1, expiring: 3 },
+      { category: "dairy", attention: 1, out: 0, low: 1, expiring: 1 },
+      { category: "bakery", attention: 1, out: 0, low: 0, expiring: 1 },
     ];
 
     for (const counts of expected) {
@@ -516,87 +655,93 @@ describe('dashboard inventory attention refresh', () => {
       await screen.findByTestId(categoryId);
       assert.equal(
         screen.getByTestId(`${categoryId}-total`).textContent,
-        String(counts.attention)
+        String(counts.attention),
       );
       assert.equal(
         screen.getByTestId(`${categoryId}-out-count`).textContent,
-        String(counts.out)
+        String(counts.out),
       );
       assert.equal(
         screen.getByTestId(`${categoryId}-low-count`).textContent,
-        String(counts.low)
+        String(counts.low),
       );
       assert.equal(
         screen.getByTestId(`${categoryId}-expiring-count`).textContent,
-        String(counts.expiring)
+        String(counts.expiring),
       );
     }
 
-    assert.equal(screen.queryByTestId('category-attention-canned-goods'), null);
-    assert.equal(screen.queryByText('Your pantry is in good shape.'), null);
+    assert.equal(screen.queryByTestId("category-attention-canned-goods"), null);
+    assert.equal(screen.queryByText("Your pantry is in good shape."), null);
     queryClient.clear();
   });
 
-  it('shows the good-shape message and no cards for healthy-only categories', async () => {
+  it("shows the good-shape message and no cards for healthy-only categories", async () => {
     const api = new GroceryApiMock();
     api.items = [
-      dashboardItem(1, 'Rice', 'Pantry', 5, 1),
-      dashboardItem(2, 'Cereal', 'Breakfast', 4, 1, 10),
+      dashboardItem(1, "Rice", "Pantry", 5, 1),
+      dashboardItem(2, "Cereal", "Breakfast", 4, 1, 10),
     ];
     globalThis.fetch = api.fetch;
     const { queryClient } = renderApp();
 
-    await screen.findByText('Your pantry is in good shape.');
-    assert.equal(screen.queryByTestId('category-attention-pantry'), null);
-    assert.equal(screen.queryByTestId('category-attention-breakfast'), null);
+    await screen.findByText("Your pantry is in good shape.");
+    assert.equal(screen.queryByTestId("category-attention-pantry"), null);
+    assert.equal(screen.queryByTestId("category-attention-breakfast"), null);
 
     queryClient.clear();
   });
 
-  it('generates a linked shopping list from low-stock suggestions and restocks it', async () => {
+  it("generates a linked shopping list from low-stock suggestions and restocks it", async () => {
     const api = new GroceryApiMock();
     api.items = [
-      dashboardItem(1, 'Rice', 'Pantry', 0, 2),
-      dashboardItem(2, 'Apples', 'Produce', 1, 3),
-      dashboardItem(3, 'Milk', 'Dairy', 5, 2, 2),
+      dashboardItem(1, "Rice", "Pantry", 0, 2),
+      dashboardItem(2, "Apples", "Produce", 1, 3),
+      dashboardItem(3, "Milk", "Dairy", 5, 2, 2),
     ];
     globalThis.fetch = api.fetch;
     const { queryClient } = renderApp();
 
     const generateButton = await screen.findByTestId(
-      'button-generate-shopping-list'
+      "button-generate-shopping-list",
     );
-    await waitFor(() => assert.equal((generateButton as HTMLButtonElement).disabled, false));
+    await waitFor(() =>
+      assert.equal((generateButton as HTMLButtonElement).disabled, false),
+    );
     fireEvent.click(generateButton);
 
-    await screen.findByRole('heading', { name: 'Low-stock shopping list' });
-    assert.ok(screen.getByTestId('shopping-item-2').textContent?.includes('Rice'));
-    assert.ok(screen.getByTestId('shopping-item-3').textContent?.includes('Apples'));
-    assert.equal(screen.queryByText('Milk'), null);
+    await screen.findByRole("heading", { name: "Low-stock shopping list" });
+    assert.ok(
+      screen.getByTestId("shopping-item-2").textContent?.includes("Rice"),
+    );
+    assert.ok(
+      screen.getByTestId("shopping-item-3").textContent?.includes("Apples"),
+    );
+    assert.equal(screen.queryByText("Milk"), null);
 
-    fireEvent.click(screen.getByTestId('checkbox-purchased-2'));
-    fireEvent.click(screen.getByTestId('button-complete-purchase'));
+    fireEvent.click(screen.getByTestId("checkbox-purchased-2"));
+    fireEvent.click(screen.getByTestId("button-complete-purchase"));
     await waitFor(() => assert.equal(api.items[0]?.quantity, 2));
     assert.equal(api.items[1]?.quantity, 1);
 
     queryClient.clear();
   });
 
-  it('hides cached category cards while inventory is being refreshed', async () => {
+  it("hides cached category cards while inventory is being refreshed", async () => {
     const api = new GroceryApiMock();
-    api.items = [dashboardItem(1, 'Apples', 'Produce', 0, 2)];
+    api.items = [dashboardItem(1, "Apples", "Produce", 0, 2)];
     globalThis.fetch = api.fetch;
     const { queryClient } = renderApp();
 
-    const categoryId = 'category-attention-produce';
+    const categoryId = "category-attention-produce";
     await screen.findByTestId(categoryId);
 
-    api.inventoryGetMode = 'pending';
+    api.inventoryGetMode = "pending";
     const refresh = queryClient.refetchQueries({
       queryKey: getListInventoryItemsQueryKey(),
-      type: 'active',
+      type: "active",
     });
-    await screen.findByTestId('pantry-attention-loading');
+    await screen.findByTestId("pantry-attention-loading");
     assert.equal(screen.queryByTestId(categoryId), null);
 
     await queryClient.cancelQueries({
@@ -606,112 +751,121 @@ describe('dashboard inventory attention refresh', () => {
     queryClient.clear();
   });
 
-  it('hides cached category cards when inventory refresh fails', async () => {
+  it("hides cached category cards when inventory refresh fails", async () => {
     const api = new GroceryApiMock();
-    api.items = [dashboardItem(1, 'Apples', 'Produce', 0, 2)];
+    api.items = [dashboardItem(1, "Apples", "Produce", 0, 2)];
     globalThis.fetch = api.fetch;
     const { queryClient } = renderApp();
 
-    const categoryId = 'category-attention-produce';
+    const categoryId = "category-attention-produce";
     await screen.findByTestId(categoryId);
-    api.inventoryGetMode = 'error';
+    api.inventoryGetMode = "error";
 
     await queryClient.refetchQueries({
       queryKey: getListInventoryItemsQueryKey(),
-      type: 'active',
+      type: "active",
     });
 
     assert.ok(queryClient.getQueryData(getListInventoryItemsQueryKey()));
-    await screen.findByRole('alert');
+    await screen.findByRole("alert");
     assert.equal(screen.queryByTestId(categoryId), null);
     assert.equal(
-      screen.getByText('Pantry attention could not be loaded.').textContent,
-      'Pantry attention could not be loaded.'
+      screen.getByText("Pantry attention could not be loaded.").textContent,
+      "Pantry attention could not be loaded.",
     );
     queryClient.clear();
   });
 
-  it('refreshes category counts after create, edit, shopping-list restock, and delete flows', async () => {
+  it("refreshes category counts after create, edit, shopping-list restock, and delete flows", async () => {
     const api = new GroceryApiMock();
     globalThis.fetch = api.fetch;
     const { queryClient } = renderApp();
 
-    await screen.findByText('Your pantry is in good shape.');
+    await screen.findByText("Your pantry is in good shape.");
 
     await openInventory();
-    fireEvent.click(screen.getByTestId('button-add-item'));
-    await screen.findByTestId('input-item-name');
-    changeInput('input-item-name', 'Rice');
-    changeInput('input-item-category', 'Grains');
-    changeInput('input-item-quantity', '1');
-    changeInput('input-item-unit', 'bags');
-    changeInput('input-item-threshold', '2');
-    fireEvent.click(screen.getByTestId('button-save-item'));
+    fireEvent.click(screen.getByTestId("button-add-item"));
+    await screen.findByTestId("input-item-name");
+    changeInput("input-item-name", "Rice");
+    changeInput("input-item-category", "Grains");
+    changeInput("input-item-quantity", "1");
+    changeInput("input-item-unit", "bags");
+    changeInput("input-item-threshold", "2");
+    fireEvent.click(screen.getByTestId("button-save-item"));
 
     await waitFor(() => assert.equal(api.items.length, 1));
     await openDashboard();
     const grainsAttention = await screen.findByTestId(
-      'category-attention-grains'
+      "category-attention-grains",
     );
-    assert.ok(grainsAttention.textContent?.includes('1Low'));
-    assert.equal(screen.getByTestId('stat-total-items').textContent?.includes('1'), true);
+    assert.ok(grainsAttention.textContent?.includes("1Low"));
+    assert.equal(
+      screen.getByTestId("stat-total-items").textContent?.includes("1"),
+      true,
+    );
 
     await openInventory();
-    fireEvent.click(screen.getByTestId('button-edit-1'));
-    await screen.findByTestId('dialog-inventory-item');
+    fireEvent.click(screen.getByTestId("button-edit-1"));
+    await screen.findByTestId("dialog-inventory-item");
     assert.equal(
-      (screen.getByTestId('input-item-name') as HTMLInputElement).value,
-      'Rice'
+      (screen.getByTestId("input-item-name") as HTMLInputElement).value,
+      "Rice",
     );
-    changeInput('input-item-category', 'Pantry');
-    changeInput('input-item-quantity', '0');
-    fireEvent.click(screen.getByTestId('button-save-item'));
+    changeInput("input-item-category", "Pantry");
+    changeInput("input-item-quantity", "0");
+    fireEvent.click(screen.getByTestId("button-save-item"));
     await waitFor(() => {
-      assert.equal(api.items[0]?.category, 'Pantry');
+      assert.equal(api.items[0]?.category, "Pantry");
       assert.equal(api.items[0]?.quantity, 0);
     });
 
     await openDashboard();
-    assert.equal(screen.queryByTestId('category-attention-grains'), null);
-    const pantryOut = await screen.findByTestId('category-attention-pantry');
-    assert.ok(pantryOut.textContent?.includes('1Out'));
-    assert.equal(screen.getByTestId('stat-out-of-stock').textContent?.includes('1'), true);
+    assert.equal(screen.queryByTestId("category-attention-grains"), null);
+    const pantryOut = await screen.findByTestId("category-attention-pantry");
+    assert.ok(pantryOut.textContent?.includes("1Out"));
+    assert.equal(
+      screen.getByTestId("stat-out-of-stock").textContent?.includes("1"),
+      true,
+    );
 
     await openInventory();
-    fireEvent.click(screen.getByTestId('button-edit-1'));
-    await screen.findByTestId('dialog-inventory-item');
-    changeInput('input-item-quantity', '4');
-    fireEvent.click(screen.getByTestId('button-save-item'));
+    fireEvent.click(screen.getByTestId("button-edit-1"));
+    await screen.findByTestId("dialog-inventory-item");
+    changeInput("input-item-quantity", "4");
+    fireEvent.click(screen.getByTestId("button-save-item"));
     await waitFor(() => assert.equal(api.items[0]?.quantity, 4));
     await openDashboard();
-    await screen.findByText('Your pantry is in good shape.');
-    assert.equal(screen.queryByTestId('category-attention-pantry'), null);
+    await screen.findByText("Your pantry is in good shape.");
+    assert.equal(screen.queryByTestId("category-attention-pantry"), null);
 
     await openInventory();
-    fireEvent.click(screen.getByTestId('button-edit-1'));
-    await screen.findByTestId('dialog-inventory-item');
-    changeInput('input-item-quantity', '0');
-    fireEvent.click(screen.getByTestId('button-save-item'));
+    fireEvent.click(screen.getByTestId("button-edit-1"));
+    await screen.findByTestId("dialog-inventory-item");
+    changeInput("input-item-quantity", "0");
+    fireEvent.click(screen.getByTestId("button-save-item"));
     await waitFor(() => assert.equal(api.items[0]?.quantity, 0));
 
-    fireEvent.click(screen.getByRole('link', { name: 'Shopping Lists' }));
-    await screen.findByRole('heading', { name: 'Shopping Lists' });
-    fireEvent.click(await screen.findByRole('link', { name: /Weekly shop/ }));
-    await screen.findByRole('heading', { name: 'Weekly shop' });
-    fireEvent.click(screen.getByTestId('button-complete-purchase'));
+    fireEvent.click(screen.getByRole("link", { name: "Shopping Lists" }));
+    await screen.findByRole("heading", { name: "Shopping Lists" });
+    fireEvent.click(await screen.findByRole("link", { name: /Weekly shop/ }));
+    await screen.findByRole("heading", { name: "Weekly shop" });
+    fireEvent.click(screen.getByTestId("button-complete-purchase"));
     await waitFor(() => assert.equal(api.items[0]?.quantity, 5));
 
     await openDashboard();
-    await screen.findByText('Your pantry is in good shape.');
-    assert.equal(screen.queryByTestId('category-attention-pantry'), null);
+    await screen.findByText("Your pantry is in good shape.");
+    assert.equal(screen.queryByTestId("category-attention-pantry"), null);
 
     await openInventory();
-    fireEvent.click(screen.getByTestId('button-delete-1'));
-    fireEvent.click(await screen.findByTestId('button-confirm-delete'));
+    fireEvent.click(screen.getByTestId("button-delete-1"));
+    fireEvent.click(await screen.findByTestId("button-confirm-delete"));
     await waitFor(() => assert.equal(api.items.length, 0));
     await openDashboard();
-    await screen.findByText('Your pantry is in good shape.');
-    assert.equal(screen.getByTestId('stat-total-items').textContent?.includes('0'), true);
+    await screen.findByText("Your pantry is in good shape.");
+    assert.equal(
+      screen.getByTestId("stat-total-items").textContent?.includes("0"),
+      true,
+    );
 
     queryClient.clear();
   });

@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { Link } from 'wouter';
+import { useMemo } from "react";
+import { Link } from "wouter";
 import {
   Package,
   AlertCircle,
@@ -9,32 +9,33 @@ import {
   CheckCircle2,
   RefreshCw,
   ShoppingCart,
-} from 'lucide-react';
+} from "lucide-react";
 import {
   useGetInventoryStats,
   useGetGrocerySuggestions,
   useListInventoryItems,
   useGenerateShoppingListFromSuggestions,
   getListShoppingListsQueryKey,
-} from '@workspace/api-client-react';
-import { useQueryClient } from '@tanstack/react-query';
-import { useLocation } from 'wouter';
-import { Layout } from '@/components/layout';
-import { StatCard } from '@/components/stat-card';
-import { UrgencyBadge } from '@/components/urgency-badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
-import { getCategoryAttention } from '@/lib/category-attention';
-import { useToast } from '@/hooks/use-toast';
+} from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "wouter";
+import { Layout } from "@/components/layout";
+import { StatCard } from "@/components/stat-card";
+import { UrgencyBadge } from "@/components/urgency-badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { getCategoryAttention } from "@/lib/category-attention";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { data: stats, isLoading: statsLoading } = useGetInventoryStats();
-  const { data: suggestions, isLoading: suggestionsLoading } = useGetGrocerySuggestions();
+  const { data: suggestions, isLoading: suggestionsLoading } =
+    useGetGrocerySuggestions();
   const generateList = useGenerateShoppingListFromSuggestions();
   const {
     data: inventoryItems,
@@ -46,12 +47,13 @@ export default function Dashboard() {
 
   const categoryAttention = useMemo(
     () => getCategoryAttention(inventoryItems ?? []),
-    [inventoryItems]
+    [inventoryItems],
   );
-  const hasStockSuggestions = suggestions?.some(
-    (suggestion) =>
-      suggestion.urgency === 'critical' || suggestion.urgency === 'low'
-  ) ?? false;
+  const hasStockSuggestions =
+    suggestions?.some(
+      (suggestion) =>
+        suggestion.urgency === "critical" || suggestion.urgency === "low",
+    ) ?? false;
 
   const handleGenerateShoppingList = async () => {
     try {
@@ -60,15 +62,15 @@ export default function Dashboard() {
         queryKey: getListShoppingListsQueryKey(),
       });
       toast({
-        title: 'Shopping list generated',
-        description: `${list.items.length} item${list.items.length === 1 ? '' : 's'} added from low-stock suggestions.`,
+        title: "Shopping list generated",
+        description: `${list.items.length} item${list.items.length === 1 ? "" : "s"} added from low-stock suggestions.`,
       });
       setLocation(`/shopping-lists/${list.id}`);
     } catch {
       toast({
-        title: 'Could not generate a shopping list',
-        description: 'Refresh your suggestions and try again.',
-        variant: 'destructive',
+        title: "Could not generate a shopping list",
+        description: "Refresh your suggestions and try again.",
+        variant: "destructive",
       });
     }
   };
@@ -78,13 +80,33 @@ export default function Dashboard() {
       <div className="space-y-8">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-          <p className="text-muted-foreground mt-1">
-            Your pantry at a glance
-          </p>
+          <p className="text-muted-foreground mt-1">Your pantry at a glance</p>
         </div>
 
+        <section className="pantry-hero" aria-label="A little more in order">
+          <img
+            src={`${import.meta.env?.BASE_URL ?? "/"}brand/household.png`}
+            alt=""
+            fetchPriority="high"
+          />
+          <div className="pantry-hero-copy">
+            <span className="pantry-eyebrow">A little more in order</span>
+            <h3>
+              A calmer kitchen.
+              <br />A little less waste.
+            </h3>
+            <p>
+              Know what you have, remember what you need, and make room for the
+              everyday.
+            </p>
+            <Link href="/inventory">
+              Take a look in your pantry <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+        </section>
+
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="pantry-stats grid grid-cols-2 lg:grid-cols-4">
           {statsLoading ? (
             <>
               {Array.from({ length: 4 }).map((_, i) => (
@@ -156,7 +178,9 @@ export default function Dashboard() {
                   <p className="font-medium text-foreground">
                     Pantry attention could not be loaded.
                   </p>
-                  <p className="text-sm">Check your connection and try again.</p>
+                  <p className="text-sm">
+                    Check your connection and try again.
+                  </p>
                 </div>
                 <Button
                   variant="outline"
@@ -165,7 +189,10 @@ export default function Dashboard() {
                   disabled={inventoryFetching}
                 >
                   <RefreshCw
-                    className={cn('h-4 w-4', inventoryFetching && 'animate-spin')}
+                    className={cn(
+                      "h-4 w-4",
+                      inventoryFetching && "animate-spin",
+                    )}
                   />
                   Try again
                 </Button>
@@ -175,22 +202,22 @@ export default function Dashboard() {
                 {categoryAttention.map((category) => {
                   const categoryTestId = `category-attention-${category.category
                     .toLowerCase()
-                    .replace(/[^a-z0-9]+/g, '-')}`;
+                    .replace(/[^a-z0-9]+/g, "-")}`;
                   const metrics = [
                     {
-                      label: 'Out',
+                      label: "Out",
                       count: category.outOfStock,
-                      tone: 'urgency-critical',
+                      tone: "urgency-critical",
                     },
                     {
-                      label: 'Low',
+                      label: "Low",
                       count: category.lowStock,
-                      tone: 'urgency-low',
+                      tone: "urgency-low",
                     },
                     {
-                      label: 'Expiring',
+                      label: "Expiring",
                       count: category.expiringSoon,
-                      tone: 'urgency-expiring',
+                      tone: "urgency-expiring",
                     },
                   ];
 
@@ -212,10 +239,10 @@ export default function Dashboard() {
                               <span data-testid={`${categoryTestId}-total`}>
                                 {category.attentionItems}
                               </span>
-                            </span>{' '}
+                            </span>{" "}
                             {category.attentionItems === 1
-                              ? 'item needs'
-                              : 'items need'}{' '}
+                              ? "item needs"
+                              : "items need"}{" "}
                             attention
                           </p>
                         </div>
@@ -226,9 +253,9 @@ export default function Dashboard() {
                           <span
                             key={metric.label}
                             className={cn(
-                              'inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium',
+                              "inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium",
                               metric.tone,
-                              metric.count === 0 && 'opacity-60'
+                              metric.count === 0 && "opacity-60",
                             )}
                           >
                             <span className="font-mono font-bold">
@@ -262,7 +289,7 @@ export default function Dashboard() {
 
         {/* Grocery Suggestions */}
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-4">
+          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-4">
             <CardTitle>Grocery Suggestions</CardTitle>
             <Button
               onClick={handleGenerateShoppingList}
@@ -274,7 +301,9 @@ export default function Dashboard() {
               data-testid="button-generate-shopping-list"
             >
               <ShoppingCart className="h-4 w-4" />
-              {generateList.isPending ? 'Generating...' : 'Generate shopping list'}
+              {generateList.isPending
+                ? "Generating..."
+                : "Generate shopping list"}
             </Button>
           </CardHeader>
           <CardContent>
@@ -296,7 +325,9 @@ export default function Dashboard() {
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-3 mb-2">
-                          <h4 className="font-semibold text-lg">{suggestion.name}</h4>
+                          <h4 className="font-semibold text-lg">
+                            {suggestion.name}
+                          </h4>
                           <UrgencyBadge urgency={suggestion.urgency} />
                         </div>
                         <p className="text-sm text-muted-foreground mb-2">
@@ -304,7 +335,8 @@ export default function Dashboard() {
                         </p>
                         <div className="flex items-center gap-4 text-xs text-muted-foreground">
                           <span className="font-mono">
-                            Current: {suggestion.currentQuantity} {suggestion.unit}
+                            Current: {suggestion.currentQuantity}{" "}
+                            {suggestion.unit}
                           </span>
                           <span className="font-mono">
                             Min: {suggestion.minThreshold} {suggestion.unit}

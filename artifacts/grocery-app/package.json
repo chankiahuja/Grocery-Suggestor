@@ -4,11 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev:mock": "vite --config vite.config.ts --host 0.0.0.0 --mode mock",
     "dev": "vite --config vite.config.ts --host 0.0.0.0",
     "build": "vite build --config vite.config.ts",
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx --test src/lib/category-attention.test.ts src/pages/dashboard.inventory.test.tsx"
+    "test": "tsx --test src/lib/category-attention.test.ts src/pages/dashboard.inventory.test.tsx src/mocks/pantry-api.test.ts"
   },
   "devDependencies": {
     "@hookform/resolvers": "^3.10.0",

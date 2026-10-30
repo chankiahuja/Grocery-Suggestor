@@ -1,0 +1,1 @@
+Follow [AGENTS.md](../AGENTS.md). Runtime: Spring Boot in backend, PostgreSQL via Flyway, and React/TypeScript in artifacts/grocery-app. Setup and checks are documented in docs/ENVIRONMENT.md and README.md. Historical Express/Drizzle packages are inactive.

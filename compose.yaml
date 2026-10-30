@@ -1,0 +1,28 @@
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: pantrypal
+      POSTGRES_USER: ${DB_USER:-pantrypal}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-pantrypal}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pantry-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d pantrypal"]
+      interval: 3s
+      retries: 20
+  api:
+    build: ./backend
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/pantrypal
+      DB_USER: ${DB_USER:-pantrypal}
+      DB_PASSWORD: ${DB_PASSWORD:-pantrypal}
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+volumes:
+  pantry-data:

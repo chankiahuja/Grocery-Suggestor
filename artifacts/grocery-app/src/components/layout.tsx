@@ -1,69 +1,94 @@
-import { Link, useLocation } from 'wouter';
-import { Home, Package, ShoppingCart } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { NotificationCenter } from '@/components/notification-center';
+import { Link, useLocation } from "wouter";
+import { Home, Package, ShoppingCart, Leaf } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { NotificationCenter } from "@/components/notification-center";
 
-interface LayoutProps {
-  children: React.ReactNode;
-}
-
-export function Layout({ children }: LayoutProps) {
+export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
-
   const navItems = [
-    { path: '/', label: 'Dashboard', icon: Home },
-    { path: '/inventory', label: 'Inventory', icon: Package },
-    { path: '/shopping-lists', label: 'Shopping Lists', icon: ShoppingCart },
+    { path: "/", label: "Dashboard", icon: Home },
+    { path: "/inventory", label: "Inventory", icon: Package },
+    { path: "/shopping-lists", label: "Shopping Lists", icon: ShoppingCart },
   ];
-
+  const section = location.startsWith("/shopping-lists")
+    ? "Shopping Lists"
+    : location === "/inventory"
+      ? "Home inventory"
+      : "Overview";
+  const base = import.meta.env?.BASE_URL ?? "/";
   return (
-    <div className="min-h-[100dvh] flex bg-background">
-      {/* Sidebar */}
-      <aside className="w-14 shrink-0 border-r border-sidebar-border bg-sidebar flex flex-col sm:w-16 md:w-64">
-        <div className="flex flex-col items-center gap-3 border-b border-sidebar-border p-2 md:flex-row md:items-start md:justify-between md:gap-2 md:p-6">
-          <div className="min-w-0">
-            <h1 className="text-2xl font-bold text-sidebar-foreground tracking-tight">
-              <span className="md:hidden">P</span>
-              <span className="hidden md:inline">PantryPal</span>
-            </h1>
-            <p className="mt-1 hidden text-sm text-muted-foreground md:block">
-              Smart household inventory
-            </p>
+    <div className="pantry-shell min-h-[100dvh] bg-background">
+      <header className="pantry-header">
+        <div className="pantry-header-inner">
+          <Link href="/" aria-label="Pantry Pal home" className="pantry-brand">
+            <img
+              src={`${base}brand/pantry-pal-logo.svg`}
+              alt="Pantry Pal"
+              width="220"
+              height="62"
+            />
+          </Link>
+          <nav aria-label="Main navigation" className="pantry-navigation">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              const active =
+                item.path === "/"
+                  ? location === "/"
+                  : location.startsWith(item.path);
+              return (
+                <Link
+                  key={item.path}
+                  href={item.path}
+                  aria-label={item.label}
+                  aria-current={active ? "page" : undefined}
+                  className={cn("pantry-nav-link", active && "is-active")}
+                  data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
+                >
+                  <Icon className="h-4 w-4" />
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
+          </nav>
+          <div className="pantry-header-actions">
+            <span className="pantry-household">
+              <Leaf className="h-4 w-4" /> My household
+            </span>
+            <NotificationCenter />
           </div>
-          <NotificationCenter />
         </div>
-
-        <nav className="flex-1 space-y-1 p-2 md:p-4">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = location === item.path;
-
-            return (
-              <Link
-                key={item.path}
-                href={item.path}
-                aria-label={item.label}
-                className={cn(
-                  'flex items-center justify-center gap-3 rounded-lg px-2 py-2.5 text-sm font-medium transition-all md:justify-start md:px-4',
-                  isActive
-                    ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-sm'
-                    : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
-                )}
-                data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
-              >
-                <Icon className="h-5 w-5" />
-                <span className="hidden md:inline">{item.label}</span>
-              </Link>
-            );
-          })}
-        </nav>
-
-
-      </aside>
-
-      {/* Main content */}
-      <main className="min-w-0 flex-1 overflow-auto">
-        <div className="mx-auto max-w-7xl p-4 sm:p-6 md:p-8">{children}</div>
+      </header>
+      <main className="pantry-main">
+        <div className="pantry-breadcrumb">
+          <span>My household</span>
+          <span aria-hidden="true">/</span>
+          <span>{section}</span>
+        </div>
+        {import.meta.env?.MODE === "mock" && (
+          <div className="pantry-demo">
+            <span>
+              <span className="pantry-status-dot" /> Demo mode · Sample data
+              saved in this browser
+            </span>
+            <button
+              className="underline underline-offset-4"
+              onClick={() => {
+                localStorage.removeItem("pantrypal-demo-v1");
+                localStorage.removeItem("pantrypal-seen-notifications");
+                window.location.reload();
+              }}
+            >
+              Reset demo data
+            </button>
+          </div>
+        )}
+        <div className="pantry-content">{children}</div>
+        <footer className="pantry-footer">
+          <span>
+            <Leaf className="h-3 w-3" /> A little more in order.
+          </span>
+          <span>Thoughtful shopping. Less waste.</span>
+        </footer>
       </main>
     </div>
   );
