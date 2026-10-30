@@ -1,5 +1,7 @@
 # Architecture
 
+The `/login` and `/signup` routes are frontend-only mobile/OTP design previews with scoped styling. They share a React component and in-memory form state, use no authentication API, and never store phone numbers or establish a session. Existing app routes remain accessible. Real OTP verification and accounts are a separate integration.
+
 An optional `dev:mock` frontend mode loads a browser-side REST adapter before React starts. It seeds relative-date pantry examples, persists demo edits in localStorage, and supports the existing inventory/suggestions/shopping flows. It does not connect to Spring, PostgreSQL or SSE. Normal development uses the architecture below.
 
 ```text

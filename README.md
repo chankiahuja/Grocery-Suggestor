@@ -17,7 +17,11 @@ npx pnpm@10.26.1 dev:mock
 
 Open http://localhost:5173. Demo mode includes sample pantry items, stock and expiry alerts, and a shopping list. Add/edit/delete items, generate lists, and complete purchases. Changes stay in this browser; **Reset demo data** restores the samples. Sample expiry dates are relative to the day the demo is first seeded. This is local sample data, not an import of the former Replit database.
 
-### Full stack
+### Sign-in/sign-up design preview
+
+Open `/login` or `/signup`, or use **Sign in** in the header. Both use the supplied mobile + OTP design: enter any 10-digit example number and use demo code **123456**. Codes expire after five minutes; resend has a 30-second cooldown. Phone numbers and codes stay in component memory and are cleared on success or when leaving the page. No SMS is sent, account created, or authenticated session established. The dashboard remains directly accessible as a prototype. All page styles and assets are in the React app; the reference folder is not required.
+
+### Full-stack setup
 
 Install Docker Compose, Node.js 24 and pnpm 10.26.1. From the repository root:
 

@@ -51,6 +51,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
             })}
           </nav>
           <div className="pantry-header-actions">
+            <Link href="/login" className="pantry-sign-in">
+              Sign in
+            </Link>
             <span className="pantry-household">
               <Leaf className="h-4 w-4" /> My household
             </span>

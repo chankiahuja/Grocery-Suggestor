@@ -66,11 +66,13 @@ const [
   { default: Inventory },
   { default: ShoppingLists },
   { default: ShoppingListDetail },
+  { default: Auth },
 ] = await Promise.all([
   import("./dashboard"),
   import("./inventory"),
   import("./shopping-lists"),
   import("./shopping-list-detail"),
+  import("./auth"),
 ]);
 const originalFetch = globalThis.fetch;
 const timestamp = "2026-10-26T12:00:00.000Z";
@@ -395,8 +397,8 @@ class GroceryApiMock {
   }
 }
 
-function renderApp() {
-  const location = memoryLocation({ path: "/" });
+function renderApp(path = "/") {
+  const location = memoryLocation({ path });
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false, staleTime: 0 },
@@ -410,6 +412,8 @@ function renderApp() {
       <QueryClientProvider client={queryClient}>
         <Router hook={location.hook}>
           <Switch>
+            <Route path="/login" component={Auth} />
+            <Route path="/signup" component={Auth} />
             <Route path="/" component={Dashboard} />
             <Route path="/inventory" component={Inventory} />
             <Route path="/shopping-lists" component={ShoppingLists} />
@@ -439,6 +443,113 @@ afterEach(() => {
   cleanup();
   globalThis.fetch = originalFetch;
   window.history.replaceState({}, "", "/");
+});
+
+describe("mobile sign-in and sign-up preview", () => {
+  it("validates mobile and OTP, allows changing the number, and offers the dashboard after success", async () => {
+    globalThis.fetch = async () => {
+      throw new Error("Auth preview must not make network requests");
+    };
+    const { queryClient } = renderApp("/login");
+    await screen.findByRole("heading", { name: "Welcome home." });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Get verification code" }),
+    );
+    await screen.findByText("Enter your mobile number.");
+    fireEvent.change(screen.getByLabelText("Mobile number"), {
+      target: { value: "123" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Get verification code" }),
+    );
+    await screen.findByText("Enter exactly 10 digits, without +91 or spaces.");
+    fireEvent.change(screen.getByLabelText("Mobile number"), {
+      target: { value: "9876543210" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Get verification code" }),
+    );
+    await screen.findByLabelText("Verification code");
+    assert.equal(
+      screen
+        .getByRole("button", { name: /Resend in/ })
+        .hasAttribute("disabled"),
+      true,
+    );
+    fireEvent.change(screen.getByLabelText("Verification code"), {
+      target: { value: "654321" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Verify & continue" }));
+    await screen.findByText(
+      "That code does not match. For this preview, use 123456.",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Change number" }));
+    assert.equal(
+      (screen.getByLabelText("Mobile number") as HTMLInputElement).value,
+      "9876543210",
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Get verification code" }),
+    );
+    assert.equal(
+      ((await screen.findByLabelText("Verification code")) as HTMLInputElement)
+        .value,
+      "",
+    );
+    fireEvent.change(screen.getByLabelText("Verification code"), {
+      target: { value: "123456" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Verify & continue" }));
+    const next = await screen.findByRole("link", {
+      name: "Step into your home",
+    });
+    assert.equal(next.getAttribute("href"), "/");
+    assert.ok(
+      screen.getByText(/has not verified your phone or created an account/),
+    );
+    assert.equal(screen.queryByLabelText("Verification code"), null);
+    fireEvent.click(screen.getByRole("button", { name: "Start again" }));
+    assert.equal(
+      (screen.getByLabelText("Mobile number") as HTMLInputElement).value,
+      "",
+    );
+    queryClient.clear();
+  });
+
+  it("switches to signup and enables resend after the cooldown", async () => {
+    const { queryClient } = renderApp("/login");
+    fireEvent.click(screen.getByRole("link", { name: "Sign up" }));
+    await screen.findByRole("heading", { name: "Make yourself at home." });
+    fireEvent.change(screen.getByLabelText("Mobile number"), {
+      target: { value: "9876543210" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Get verification code" }),
+    );
+    await screen.findByLabelText("Verification code");
+    const realNow = Date.now;
+    const later = realNow() + 31000;
+    try {
+      Date.now = () => later;
+      const resend = await screen.findByRole(
+        "button",
+        { name: "Resend code" },
+        { timeout: 3000 },
+      );
+      fireEvent.click(resend);
+      await screen.findByText(
+        "A fresh demo code is ready: 123456. No SMS was sent.",
+      );
+      assert.ok(
+        screen
+          .getByRole("button", { name: /Resend in/ })
+          .hasAttribute("disabled"),
+      );
+    } finally {
+      Date.now = realNow;
+      queryClient.clear();
+    }
+  });
 });
 
 describe("shopping list selection and deletion", () => {
