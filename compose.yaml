@@ -14,9 +14,12 @@ services:
       interval: 3s
       retries: 20
   api:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     environment:
       DB_URL: jdbc:postgresql://db:5432/pantrypal
+      SPRING_PROFILES_ACTIVE: postgres
       DB_USER: ${DB_USER:-pantrypal}
       DB_PASSWORD: ${DB_PASSWORD:-pantrypal}
     ports:

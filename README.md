@@ -8,6 +8,19 @@ The active backend is Java/Spring Boot in [backend](backend). The React/TypeScri
 
 ## Quick start
 
+### Local application on port 8080 (embedded database)
+
+Install Node.js 24 and Java 17+, and set `JAVA_HOME` to your JDK directory. From the repository root:
+
+```sh
+npx pnpm@10.26.1 install
+npx pnpm@10.26.1 start
+```
+
+Open http://localhost:8080. Spring Boot serves React and the real API using embedded, file-backed H2. No Docker or separate database is required. Flyway creates the schema on first startup. Pantry and shopping data survive restarts in `backend/data/pantrypal.mv.db` (ignored by Git). This starts with an empty pantry; it does not import browser demo data. Stop with Ctrl+C. Restart the command after frontend changes.
+
+The `local` Spring profile is the default. Set `PANTRYPAL_DATA_DIR` to an absolute directory to choose a stable database location when launching from different working directories; otherwise `./data` is relative to the Java process. Set `SPRING_PROFILES_ACTIVE=postgres` and the `DB_URL`, `DB_USER`, `DB_PASSWORD` variables to use PostgreSQL instead.
+
 ### Frontend demo (no backend or database)
 
 ```sh
@@ -21,19 +34,24 @@ Open http://localhost:5173. Demo mode includes sample pantry items, stock and ex
 
 Open `/login` or `/signup`, or use **Sign in** in the header. Both use the supplied mobile + OTP design: enter any 10-digit example number and use demo code **123456**. Codes expire after five minutes; resend has a 30-second cooldown. Phone numbers and codes stay in component memory and are cleared on success or when leaving the page. No SMS is sent, account created, or authenticated session established. The dashboard remains directly accessible as a prototype. All page styles and assets are in the React app; the reference folder is not required.
 
-### Full-stack setup
+### Optional PostgreSQL setup with Docker
 
-Install Docker Compose, Node.js 24 and pnpm 10.26.1. From the repository root:
+Install Docker Desktop with Compose and start Docker. From the repository root:
 
 ```sh
 docker compose up --build -d
-npx pnpm@10.26.1 install
-npx pnpm@10.26.1 dev
 ```
 
-Open http://localhost:5173. The API is at http://localhost:8080/api/healthz. PostgreSQL data persists in the Compose volume. `docker compose down` stops the services and retains data.
+Open http://localhost:8080. Spring Boot's embedded server serves both the built React app and `/api`, including http://localhost:8080/api/healthz. No Vite server is required. PostgreSQL data persists in the Compose volume. `docker compose down` stops the services and retains data. Rebuild with the same command after source changes.
 
-For Java development, start only the database (`docker compose up -d db`), then run `sh ./mvnw spring-boot:run` inside `backend` (Windows: `.\mvnw.cmd spring-boot:run`). Java 17+ is supported; the Docker image uses Java 21. The wrapper downloads Maven on first use.
+For native Java development with PostgreSQL, set `SPRING_PROFILES_ACTIVE=postgres`, configure `DB_URL`, `DB_USER`, and `DB_PASSWORD`, and start your database. From the repository root run:
+
+```sh
+npx pnpm@10.26.1 install
+npx pnpm@10.26.1 start
+```
+
+This builds React, copies its output into the Spring classpath through Maven resources, and starts Spring Boot on http://localhost:8080. Restart this command after frontend changes. To package a standalone JAR, run `npx pnpm@10.26.1 build`, then `sh ./mvnw clean package` inside `backend` (Windows: `.\mvnw.cmd clean package`). The wrapper downloads Maven on first use. Optional Vite hot reload remains available with `npx pnpm@10.26.1 dev` on port 5173 while Spring is running.
 
 ## Checks
 
