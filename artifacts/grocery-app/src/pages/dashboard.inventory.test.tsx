@@ -67,12 +67,14 @@ const [
   { default: ShoppingLists },
   { default: ShoppingListDetail },
   { default: Auth },
+  { AppRoutes },
 ] = await Promise.all([
   import("./dashboard"),
   import("./inventory"),
   import("./shopping-lists"),
   import("./shopping-list-detail"),
   import("./auth"),
+  import("../App"),
 ]);
 const originalFetch = globalThis.fetch;
 const timestamp = "2026-10-26T12:00:00.000Z";
@@ -397,7 +399,7 @@ class GroceryApiMock {
   }
 }
 
-function renderApp(path = "/") {
+function renderApp(path = "/dashboard") {
   const location = memoryLocation({ path });
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -414,7 +416,7 @@ function renderApp(path = "/") {
           <Switch>
             <Route path="/login" component={Auth} />
             <Route path="/signup" component={Auth} />
-            <Route path="/" component={Dashboard} />
+            <Route path="/dashboard" component={Dashboard} />
             <Route path="/inventory" component={Inventory} />
             <Route path="/shopping-lists" component={ShoppingLists} />
             <Route path="/shopping-lists/:id" component={ShoppingListDetail} />
@@ -443,6 +445,41 @@ afterEach(() => {
   cleanup();
   globalThis.fetch = originalFetch;
   window.history.replaceState({}, "", "/");
+});
+
+describe("login landing routes", () => {
+  for (const path of ["/", "/login", "/signup", "/dashboard", "/inventory", "/shopping-lists/12", "/unknown/deep/page?from=bookmark"]) {
+    it(`opens login first for ${path}`, async () => {
+      globalThis.fetch = async () => { throw new Error("Landing must not request pantry data"); };
+      const location = memoryLocation({ path });
+      render(<Router hook={location.hook}><AppRoutes /></Router>);
+      await screen.findByRole("heading", { name: "Welcome home." });
+      assert.equal(screen.queryByRole("heading", { name: "Dashboard" }), null);
+      assert.equal(screen.queryByRole("link", { name: "Inventory" }), null);
+    });
+  }
+
+  it("opens the dashboard after the preview and returns to login on a fresh load", async () => {
+    const api = new MockPantryApi();
+    globalThis.fetch = api.fetch;
+    const location = memoryLocation({ path: "/inventory" });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const mount = () => render(<QueryClientProvider client={queryClient}><Router hook={location.hook}><AppRoutes /></Router></QueryClientProvider>);
+    const view = mount();
+    await screen.findByRole("heading", { name: "Welcome home." });
+    fireEvent.change(screen.getByLabelText("Mobile number"), { target: { value: "9876543210" } });
+    fireEvent.click(screen.getByRole("button", { name: "Get verification code" }));
+    fireEvent.change(await screen.findByLabelText("Verification code"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Verify & continue" }));
+    fireEvent.click(await screen.findByRole("link", { name: "Step into your home" }));
+    await screen.findByRole("heading", { name: "Dashboard" });
+    await openInventory();
+    await openDashboard();
+    view.unmount();
+    mount();
+    await screen.findByRole("heading", { name: "Welcome home." });
+    queryClient.clear();
+  });
 });
 
 describe("mobile sign-in and sign-up preview", () => {
@@ -503,7 +540,7 @@ describe("mobile sign-in and sign-up preview", () => {
     const next = await screen.findByRole("link", {
       name: "Step into your home",
     });
-    assert.equal(next.getAttribute("href"), "/");
+    assert.equal(next.getAttribute("href"), "/dashboard");
     assert.ok(
       screen.getByText(/has not verified your phone or created an account/),
     );

@@ -6,7 +6,7 @@ import { NotificationCenter } from "@/components/notification-center";
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const navItems = [
-    { path: "/", label: "Dashboard", icon: Home },
+    { path: "/dashboard", label: "Dashboard", icon: Home },
     { path: "/inventory", label: "Inventory", icon: Package },
     { path: "/shopping-lists", label: "Shopping Lists", icon: ShoppingCart },
   ];
@@ -20,7 +20,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     <div className="pantry-shell min-h-[100dvh] bg-background">
       <header className="pantry-header">
         <div className="pantry-header-inner">
-          <Link href="/" aria-label="Pantry Pal home" className="pantry-brand">
+          <Link href="/dashboard" aria-label="Pantry Pal home" className="pantry-brand">
             <img
               src={`${base}brand/pantry-pal-logo.svg`}
               alt="Pantry Pal"
@@ -32,8 +32,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
             {navItems.map((item) => {
               const Icon = item.icon;
               const active =
-                item.path === "/"
-                  ? location === "/"
+                item.path === "/dashboard"
+                  ? location === "/dashboard"
                   : location.startsWith(item.path);
               return (
                 <Link
