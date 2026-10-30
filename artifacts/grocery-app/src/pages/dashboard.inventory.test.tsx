@@ -448,11 +448,25 @@ afterEach(() => {
 });
 
 describe("login landing routes", () => {
-  for (const path of ["/", "/login", "/signup", "/dashboard", "/inventory", "/shopping-lists/12", "/unknown/deep/page?from=bookmark"]) {
+  for (const path of [
+    "/",
+    "/login",
+    "/signup",
+    "/dashboard",
+    "/inventory",
+    "/shopping-lists/12",
+    "/unknown/deep/page?from=bookmark",
+  ]) {
     it(`opens login first for ${path}`, async () => {
-      globalThis.fetch = async () => { throw new Error("Landing must not request pantry data"); };
+      globalThis.fetch = async () => {
+        throw new Error("Landing must not request pantry data");
+      };
       const location = memoryLocation({ path });
-      render(<Router hook={location.hook}><AppRoutes /></Router>);
+      render(
+        <Router hook={location.hook}>
+          <AppRoutes />
+        </Router>,
+      );
       await screen.findByRole("heading", { name: "Welcome home." });
       assert.equal(screen.queryByRole("heading", { name: "Dashboard" }), null);
       assert.equal(screen.queryByRole("link", { name: "Inventory" }), null);
@@ -463,16 +477,34 @@ describe("login landing routes", () => {
     const api = new MockPantryApi();
     globalThis.fetch = api.fetch;
     const location = memoryLocation({ path: "/inventory" });
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const mount = () => render(<QueryClientProvider client={queryClient}><Router hook={location.hook}><AppRoutes /></Router></QueryClientProvider>);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const mount = () =>
+      render(
+        <QueryClientProvider client={queryClient}>
+          <Router hook={location.hook}>
+            <AppRoutes />
+          </Router>
+        </QueryClientProvider>,
+      );
     const view = mount();
     await screen.findByRole("heading", { name: "Welcome home." });
-    fireEvent.change(screen.getByLabelText("Mobile number"), { target: { value: "9876543210" } });
-    fireEvent.click(screen.getByRole("button", { name: "Get verification code" }));
-    fireEvent.change(await screen.findByLabelText("Verification code"), { target: { value: "123456" } });
+    fireEvent.change(screen.getByLabelText("Mobile number"), {
+      target: { value: "9876543210" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Get verification code" }),
+    );
+    fireEvent.change(await screen.findByLabelText("Verification code"), {
+      target: { value: "123456" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Verify & continue" }));
-    fireEvent.click(await screen.findByRole("link", { name: "Step into your home" }));
     await screen.findByRole("heading", { name: "Dashboard" });
+    assert.equal(
+      screen.queryByRole("link", { name: "Step into your home" }),
+      null,
+    );
     await openInventory();
     await openDashboard();
     view.unmount();
@@ -483,7 +515,7 @@ describe("login landing routes", () => {
 });
 
 describe("mobile sign-in and sign-up preview", () => {
-  it("validates mobile and OTP, allows changing the number, and offers the dashboard after success", async () => {
+  it("validates mobile and OTP, allows changing the number, and opens the dashboard directly", async () => {
     globalThis.fetch = async () => {
       throw new Error("Auth preview must not make network requests");
     };
@@ -536,16 +568,15 @@ describe("mobile sign-in and sign-up preview", () => {
     fireEvent.change(screen.getByLabelText("Verification code"), {
       target: { value: "123456" },
     });
+    globalThis.fetch = new MockPantryApi().fetch;
     fireEvent.click(screen.getByRole("button", { name: "Verify & continue" }));
-    const next = await screen.findByRole("link", {
-      name: "Step into your home",
-    });
-    assert.equal(next.getAttribute("href"), "/dashboard");
-    assert.ok(
-      screen.getByText(/has not verified your phone or created an account/),
+    await screen.findByRole("heading", { name: "Dashboard" });
+    assert.equal(
+      screen.queryByRole("link", { name: "Step into your home" }),
+      null,
     );
     assert.equal(screen.queryByLabelText("Verification code"), null);
-    fireEvent.click(screen.getByRole("button", { name: "Start again" }));
+    fireEvent.click(screen.getByRole("link", { name: "Sign in" }));
     assert.equal(
       (screen.getByLabelText("Mobile number") as HTMLInputElement).value,
       "",
@@ -587,6 +618,126 @@ describe("mobile sign-in and sign-up preview", () => {
       queryClient.clear();
     }
   });
+});
+
+describe("email OTP preview", () => {
+  for (const signup of [false, true]) {
+    it(`validates email, preserves it on change, expires/resends OTP, and opens dashboard for ${signup ? "signup" : "login"}`, async () => {
+      const api = new MockPantryApi();
+      let allowDashboard = false;
+      globalThis.fetch = async (input, init) => {
+        assert.ok(allowDashboard, "OTP preview must not send network requests");
+        return api.fetch(input, init);
+      };
+      const location = memoryLocation({ path: "/login" });
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      render(
+        <QueryClientProvider client={queryClient}>
+          <Router hook={location.hook}>
+            <AppRoutes />
+          </Router>
+        </QueryClientProvider>,
+      );
+      await screen.findByRole("heading", { name: "Welcome home." });
+      if (signup)
+        fireEvent.click(screen.getByRole("link", { name: "Sign up" }));
+      fireEvent.click(screen.getByRole("button", { name: "Email address" }));
+      const emailInput = screen.getByLabelText(
+        "Email address",
+      ) as HTMLInputElement;
+      assert.equal(emailInput.type, "email");
+      assert.equal(screen.queryByText("+91"), null);
+      fireEvent.click(
+        screen.getByRole("button", { name: "Get verification code" }),
+      );
+      await screen.findByText("Enter your email address.");
+      fireEvent.change(emailInput, { target: { value: "invalid" } });
+      fireEvent.click(
+        screen.getByRole("button", { name: "Get verification code" }),
+      );
+      await screen.findByText(
+        "Enter a valid email address, such as you@example.com.",
+      );
+      fireEvent.change(emailInput, { target: { value: "you@example.com" } });
+      fireEvent.click(
+        screen.getByRole("button", { name: "Get verification code" }),
+      );
+      await screen.findByText("Confirm your email address to continue.");
+      fireEvent.click(screen.getByRole("button", { name: "Change email" }));
+      assert.equal(
+        (screen.getByLabelText("Email address") as HTMLInputElement).value,
+        "you@example.com",
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Mobile number" }));
+      assert.equal(
+        (screen.getByLabelText("Mobile number") as HTMLInputElement).value,
+        "",
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Email address" }));
+      fireEvent.change(screen.getByLabelText("Email address"), {
+        target: { value: "you@example.com" },
+      });
+      fireEvent.click(
+        screen.getByRole("button", { name: "Get verification code" }),
+      );
+      const realNow = Date.now;
+      const later = realNow() + 301000;
+      try {
+        Date.now = () => later;
+        fireEvent.change(screen.getByLabelText("Verification code"), {
+          target: { value: "123456" },
+        });
+        fireEvent.click(
+          screen.getByRole("button", { name: "Verify & continue" }),
+        );
+        await screen.findByText(
+          "This demo code has expired. Request another code.",
+        );
+        fireEvent.click(
+          await screen.findByRole(
+            "button",
+            { name: "Resend code" },
+            { timeout: 3000 },
+          ),
+        );
+        await screen.findByText(
+          "A fresh demo code is ready: 123456. No email was sent.",
+        );
+        assert.equal(
+          (screen.getByLabelText("Verification code") as HTMLInputElement)
+            .value,
+          "",
+        );
+        fireEvent.change(screen.getByLabelText("Verification code"), {
+          target: { value: "654321" },
+        });
+        fireEvent.click(
+          screen.getByRole("button", { name: "Verify & continue" }),
+        );
+        await screen.findByText(
+          "That code does not match. For this preview, use 123456.",
+        );
+        fireEvent.change(screen.getByLabelText("Verification code"), {
+          target: { value: "123456" },
+        });
+        allowDashboard = true;
+        fireEvent.click(
+          screen.getByRole("button", { name: "Verify & continue" }),
+        );
+        await screen.findByRole("heading", { name: "Dashboard" });
+        assert.equal(
+          screen.queryByRole("link", { name: "Step into your home" }),
+          null,
+        );
+        assert.equal(screen.queryByText("you@example.com"), null);
+      } finally {
+        Date.now = realNow;
+        queryClient.clear();
+      }
+    });
+  }
 });
 
 describe("shopping list selection and deletion", () => {

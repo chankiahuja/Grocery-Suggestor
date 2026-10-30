@@ -1,6 +1,26 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mobileError, otpError, OTP_LIFETIME_MS } from "./demo-auth";
+import {
+  mobileError,
+  emailError,
+  otpError,
+  OTP_LIFETIME_MS,
+} from "./demo-auth";
+
+test("demo email validation accepts addresses and rejects missing or malformed addresses", () => {
+  for (const value of ["you@example.com", " name+pantry@example.co.in "])
+    assert.equal(emailError(value), "");
+  for (const value of [
+    "",
+    "you",
+    "you@",
+    "@example.com",
+    "you@example",
+    "you name@example.com",
+    "you@@example.com",
+  ])
+    assert.ok(emailError(value));
+});
 
 test("demo mobile validation accepts ten digits and rejects country codes and spaces", () => {
   assert.equal(mobileError("9876543210"), "");
