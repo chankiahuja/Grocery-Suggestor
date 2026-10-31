@@ -64,6 +64,84 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
+export const getStreamPantryNotificationsUrl = () => {
+
+
+
+
+  return `/api/notifications/stream`
+}
+
+/**
+ * Connect with EventSource. Event pantry-event contains a JSON type (inventory_changed, purchase_completed, alerts_changed, or heartbeat). Recover current alert state from GET /suggestions.
+ * @summary Server-sent cache invalidation signals after inventory changes and purchases
+ */
+export const streamPantryNotifications = async ( options?: Parameters<typeof customFetch>[1]): Promise<string> => {
+
+  return customFetch<string>(getStreamPantryNotificationsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getStreamPantryNotificationsQueryKey = () => {
+    return [
+    `/api/notifications/stream`
+    ] as const;
+    }
+
+
+export const getStreamPantryNotificationsQueryOptions = <TData = Awaited<ReturnType<typeof streamPantryNotifications>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof streamPantryNotifications>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getStreamPantryNotificationsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof streamPantryNotifications>>> = ({ signal }) => streamPantryNotifications({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof streamPantryNotifications>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type StreamPantryNotificationsQueryResult = NonNullable<Awaited<ReturnType<typeof streamPantryNotifications>>>
+export type StreamPantryNotificationsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Server-sent cache invalidation signals after inventory changes and purchases
+ */
+
+export function useStreamPantryNotifications<TData = Awaited<ReturnType<typeof streamPantryNotifications>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof streamPantryNotifications>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getStreamPantryNotificationsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getHealthCheckUrl = () => {
 
 

@@ -39,8 +39,10 @@ export interface InventoryItemInput {
   unit: string;
   /** @minimum 0 */
   minThreshold: number;
-  expiresAt?: string;
-  notes?: string;
+  /** @nullable */
+  expiresAt?: string | null;
+  /** @nullable */
+  notes?: string | null;
 }
 
 export interface InventoryItemUpdate {
@@ -52,8 +54,10 @@ export interface InventoryItemUpdate {
   unit?: string;
   /** @minimum 0 */
   minThreshold?: number;
-  expiresAt?: string;
-  notes?: string;
+  /** @nullable */
+  expiresAt?: string | null;
+  /** @nullable */
+  notes?: string | null;
 }
 
 export interface CategoryCount {

@@ -439,9 +439,9 @@ components:
           type: number
           minimum: 0
         expiresAt:
-          type: string
+          type: ["string", "null"]
         notes:
-          type: string
+          type: ["string", "null"]
       required:
         - name
         - category
@@ -466,9 +466,9 @@ components:
           type: number
           minimum: 0
         expiresAt:
-          type: string
+          type: ["string", "null"]
         notes:
-          type: string
+          type: ["string", "null"]
 
     InventoryStats:
       type: object

@@ -10,7 +10,11 @@ import {
   getGetInventoryStatsQueryKey,
   getGetGrocerySuggestionsQueryKey,
 } from "@workspace/api-client-react";
-import type { InventoryItem } from "@workspace/api-client-react";
+import type {
+  InventoryItem,
+  InventoryItemInput,
+  InventoryItemUpdate,
+} from "@workspace/api-client-react";
 import {
   Dialog,
   DialogContent,
@@ -31,6 +35,10 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useNotifications } from "@/hooks/use-notifications";
+
+function nullableValue(value: string | undefined) {
+  return value === "" || value === undefined ? null : value;
+}
 
 const nonBlankNumber = (label: string) =>
   z.preprocess(
@@ -109,13 +117,14 @@ export function InventoryItemDialog({
     setIsSubmitting(true);
     try {
       if (item) {
+        const update: InventoryItemUpdate = {
+          ...values,
+          expiresAt: nullableValue(values.expiresAt),
+          notes: nullableValue(values.notes),
+        };
         await updateItem.mutateAsync({
           id: item.id,
-          data: {
-            ...values,
-            expiresAt: values.expiresAt || undefined,
-            notes: values.notes || undefined,
-          },
+          data: update,
         });
         if (values.quantity === 0) {
           notifyOutOfStock(values.name);
@@ -131,12 +140,13 @@ export function InventoryItemDialog({
           });
         }
       } else {
+        const input: InventoryItemInput = {
+          ...values,
+          expiresAt: nullableValue(values.expiresAt),
+          notes: nullableValue(values.notes),
+        };
         await createItem.mutateAsync({
-          data: {
-            ...values,
-            expiresAt: values.expiresAt || undefined,
-            notes: values.notes || undefined,
-          },
+          data: input,
         });
         if (values.quantity === 0) {
           notifyOutOfStock(values.name);
