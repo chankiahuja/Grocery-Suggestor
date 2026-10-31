@@ -1124,6 +1124,10 @@ describe("dashboard inventory attention refresh", () => {
     );
     fireEvent.click(generateButton);
 
+    await screen.findByRole("heading", { name: "Review shopping list" });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create shopping list" }),
+    );
     await screen.findByRole("heading", { name: "Low-stock shopping list" });
     assert.ok(
       screen.getByTestId("shopping-item-2").textContent?.includes("Rice"),

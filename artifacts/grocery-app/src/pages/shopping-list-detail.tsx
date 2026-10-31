@@ -18,6 +18,7 @@ import { AddShoppingItemDialog } from "@/components/add-shopping-item-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -43,6 +44,7 @@ export default function ShoppingListDetail() {
   const [itemToDelete, setItemToDelete] = useState<ShoppingListItem | null>(
     null,
   );
+  const [quantities, setQuantities] = useState<Record<number, string>>({});
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -76,6 +78,29 @@ export default function ShoppingListDetail() {
       toast({
         title: "Error",
         description: "Failed to update item.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleQuantitySave = async (item: ShoppingListItem) => {
+    const raw = quantities[item.id] ?? String(item.quantity);
+    const quantity = Number(raw);
+    if (!Number.isFinite(quantity) || quantity < 0) return;
+    if (quantity === item.quantity) return;
+    try {
+      await updateItem.mutateAsync({
+        id: listId,
+        itemId: item.id,
+        data: { quantity },
+      });
+      await queryClient.invalidateQueries({
+        queryKey: getGetShoppingListQueryKey(listId),
+      });
+    } catch {
+      toast({
+        title: "Error",
+        description: "Failed to update quantity.",
         variant: "destructive",
       });
     }
@@ -171,6 +196,13 @@ export default function ShoppingListDetail() {
     list.items.length > 0
       ? (list.items.filter((i) => i.purchased).length / list.items.length) * 100
       : 0;
+  const groupedItems = list.items.reduce<Record<string, ShoppingListItem[]>>(
+    (groups, item) => {
+      (groups[item.category] ??= []).push(item);
+      return groups;
+    },
+    {},
+  );
 
   return (
     <Layout>
@@ -238,62 +270,85 @@ export default function ShoppingListDetail() {
           </CardHeader>
           <CardContent>
             {list.items.length > 0 ? (
-              <div className="space-y-3">
-                {list.items.map((item, idx) => (
-                  <div
-                    key={item.id}
-                    className={cn(
-                      "p-4 rounded-lg border transition-all hover:shadow-sm animate-slide-up",
-                      item.purchased
-                        ? "bg-muted/50 border-border opacity-75"
-                        : "bg-card border-border",
-                    )}
-                    style={{ animationDelay: `${idx * 30}ms` }}
-                    data-testid={`shopping-item-${item.id}`}
+              <div className="space-y-6">
+                {Object.entries(groupedItems).map(([category, items]) => (
+                  <section
+                    key={category}
+                    className="space-y-3"
+                    data-testid={`shopping-category-${category}`}
                   >
-                    <div className="flex items-start gap-4">
-                      <Checkbox
-                        checked={item.purchased}
-                        onCheckedChange={() => handleTogglePurchased(item)}
-                        className="mt-1 animate-check-pulse"
-                        data-testid={`checkbox-purchased-${item.id}`}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-3 mb-2">
-                          <h4
-                            className={cn(
-                              "font-semibold text-lg",
-                              item.purchased &&
-                                "line-through text-muted-foreground",
-                            )}
-                          >
-                            {item.name}
-                          </h4>
-                          <span className="text-xs px-2 py-1 rounded bg-muted text-muted-foreground">
-                            {item.category}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          <span className="font-mono">
-                            {item.quantity} {item.unit}
-                          </span>
-                        </div>
-                        {item.notes && (
-                          <p className="text-sm text-muted-foreground mt-2">
-                            {item.notes}
-                          </p>
-                        )}
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDeleteClick(item)}
-                        data-testid={`button-delete-item-${item.id}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-semibold">{category}</h3>
+                      <span className="text-xs text-muted-foreground">
+                        {items.filter((item) => item.purchased).length} /{" "}
+                        {items.length} purchased
+                      </span>
                     </div>
-                  </div>
+                    {items.map((item, idx) => (
+                      <div
+                        key={item.id}
+                        className={cn(
+                          "p-4 rounded-lg border transition-all hover:shadow-sm animate-slide-up",
+                          item.purchased
+                            ? "bg-muted/50 border-border opacity-75"
+                            : "bg-card border-border",
+                        )}
+                        style={{ animationDelay: `${idx * 30}ms` }}
+                        data-testid={`shopping-item-${item.id}`}
+                      >
+                        <div className="flex items-start gap-4">
+                          <Checkbox
+                            checked={item.purchased}
+                            onCheckedChange={() => handleTogglePurchased(item)}
+                            className="mt-1 animate-check-pulse"
+                            data-testid={`checkbox-purchased-${item.id}`}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <h4
+                              className={cn(
+                                "font-semibold text-lg",
+                                item.purchased &&
+                                  "line-through text-muted-foreground",
+                              )}
+                            >
+                              {item.name}
+                            </h4>
+                            <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+                              <Input
+                                type="number"
+                                min="0"
+                                step="any"
+                                className="w-24"
+                                aria-label={`${item.name} quantity`}
+                                value={quantities[item.id] ?? item.quantity}
+                                onChange={(event) =>
+                                  setQuantities((previous) => ({
+                                    ...previous,
+                                    [item.id]: event.target.value,
+                                  }))
+                                }
+                                onBlur={() => void handleQuantitySave(item)}
+                              />
+                              <span>{item.unit}</span>
+                            </div>
+                            {item.notes && (
+                              <p className="text-sm text-muted-foreground mt-2">
+                                {item.notes}
+                              </p>
+                            )}
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDeleteClick(item)}
+                            data-testid={`button-delete-item-${item.id}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </section>
                 ))}
               </div>
             ) : (

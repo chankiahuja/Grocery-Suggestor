@@ -46,6 +46,17 @@ class PantryFlowTest {
         assertThat(service.suggestions()).extracting(s -> s.get("urgency")).containsExactly("expiring_soon");
         assertThatThrownBy(service::generateList).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
     }
+    @Test void reviewedGenerationUsesSelectedQuantitiesAndExcludesItems() {
+        long milk = PantryService.id(item("Milk", 0));
+        long cheese = PantryService.id(item("Cheese", 0));
+        var generated = service.generateList(Map.of("items", java.util.List.of(
+            Map.of("inventoryItemId", milk, "quantity", 4),
+            Map.of("inventoryItemId", cheese, "quantity", 0))));
+        var rows = repository.query("SELECT * FROM shopping_list_items WHERE shopping_list_id=?", PantryService.id(generated));
+        assertThat(rows).hasSize(1);
+        assertThat(PantryService.number(rows.get(0), "quantity")).isEqualTo(4);
+        assertThat(rows.get(0).get("inventoryItemId")).isEqualTo(milk);
+    }
     @Test void cannotModifyAnotherListsItem() {
         long first = PantryService.id(service.createList(Map.of("name","First")));
         long second = PantryService.id(service.createList(Map.of("name","Second")));

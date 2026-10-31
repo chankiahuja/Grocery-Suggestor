@@ -121,13 +121,42 @@ public class PantryService {
         repo.one("SELECT * FROM shopping_list_items WHERE id=? AND shopping_list_id=?", id, listId);
         repo.execute("DELETE FROM shopping_list_items WHERE id=?", id);
     }
-    public Map<String,Object> generateList() {
+    public Map<String,Object> generateList() { return generateList(Map.of()); }
+    public Map<String,Object> generateList(Map<String,Object> request) {
         var suggestions = suggestions().stream().filter(s -> !s.get("urgency").equals("expiring_soon")).toList();
         if (suggestions.isEmpty()) bad("No low-stock suggestions are available.");
+        var selected = new LinkedHashMap<Long, Map<String,Object>>();
+        Object requestedItems = request.get("items");
+        if (requestedItems == null) {
+            for (var suggestion : suggestions) selected.put(((Number) suggestion.get("inventoryItemId")).longValue(), suggestion);
+        } else if (requestedItems instanceof List<?> items) {
+            for (Object raw : items) {
+                if (!(raw instanceof Map<?,?>)) bad("items must contain objects");
+                Map<?,?> rawItem = (Map<?,?>) raw;
+                Object inventoryItemId = rawItem.get("inventoryItemId");
+                Object quantity = rawItem.get("quantity");
+                if (!(inventoryItemId instanceof Number) || !(quantity instanceof Number)) bad("Invalid generated item");
+                Number itemId = (Number) inventoryItemId;
+                Number amount = (Number) quantity;
+                if (!Double.isFinite(amount.doubleValue()) || amount.doubleValue() < 0) bad("Invalid generated item");
+                if (itemId.doubleValue() != itemId.longValue() || itemId.longValue() <= 0) bad("Invalid generated item");
+                long id = itemId.longValue();
+                var suggestion = suggestions.stream().filter(s -> ((Number) s.get("inventoryItemId")).longValue() == id).findFirst().orElse(null);
+                if (suggestion == null) bad("Selected item is no longer a low-stock suggestion");
+                if (amount.doubleValue() == 0) continue;
+                var selectedSuggestion = new LinkedHashMap<>(suggestion);
+                selectedSuggestion.put("quantity", amount.doubleValue());
+                selected.merge(id, selectedSuggestion, (existing, duplicate) -> {
+                    existing.put("quantity", number(existing, "quantity") + number(duplicate, "quantity"));
+                    return existing;
+                });
+            }
+        } else bad("items must be an array");
+        if (selected.isEmpty()) bad("Select at least one shopping item.");
         long listId = id(createList(Map.of("name", "Low-stock shopping list")));
-        for (var suggestion : suggestions) {
+        for (var suggestion : selected.values()) {
             var body = new LinkedHashMap<>(suggestion);
-            body.put("quantity", Math.max(number(suggestion,"minThreshold") - number(suggestion,"currentQuantity"), 1));
+            body.putIfAbsent("quantity", Math.max(number(suggestion,"minThreshold") - number(suggestion,"currentQuantity"), 1));
             body.put("notes", suggestion.get("reason")); addItem(listId, body);
         }
         return list(listId);
