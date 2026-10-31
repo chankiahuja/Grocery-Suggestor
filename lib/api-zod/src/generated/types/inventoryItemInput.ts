@@ -17,6 +17,8 @@ export interface InventoryItemInput {
   unit: string;
   /** @minimum 0 */
   minThreshold: number;
-  expiresAt?: string;
-  notes?: string;
+  /** @nullable */
+  expiresAt?: string | null;
+  /** @nullable */
+  notes?: string | null;
 }

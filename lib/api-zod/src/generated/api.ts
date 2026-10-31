@@ -9,6 +9,13 @@ import * as zod from 'zod';
 
 
 /**
+ * Connect with EventSource. Event pantry-event contains a JSON type (inventory_changed, purchase_completed, alerts_changed, or heartbeat). Recover current alert state from GET /suggestions.
+ * @summary Server-sent cache invalidation signals after inventory changes and purchases
+ */
+export const StreamPantryNotificationsResponse = zod.unknown()
+
+
+/**
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
@@ -57,8 +64,8 @@ export const CreateInventoryItemBody = zod.object({
   "quantity": zod.number().min(createInventoryItemBodyQuantityMin),
   "unit": zod.string().min(1),
   "minThreshold": zod.number().min(createInventoryItemBodyMinThresholdMin),
-  "expiresAt": zod.string().optional(),
-  "notes": zod.string().optional()
+  "expiresAt": zod.string().nullish(),
+  "notes": zod.string().nullish()
 })
 
 export const CreateInventoryItemResponse = zod.object({
@@ -131,8 +138,8 @@ export const UpdateInventoryItemBody = zod.object({
   "quantity": zod.number().min(updateInventoryItemBodyQuantityMin).optional(),
   "unit": zod.string().optional(),
   "minThreshold": zod.number().min(updateInventoryItemBodyMinThresholdMin).optional(),
-  "expiresAt": zod.string().optional(),
-  "notes": zod.string().optional()
+  "expiresAt": zod.string().nullish(),
+  "notes": zod.string().nullish()
 })
 
 export const UpdateInventoryItemResponse = zod.object({

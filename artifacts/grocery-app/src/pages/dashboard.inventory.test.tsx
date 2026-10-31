@@ -112,6 +112,7 @@ function dashboardItem(
 
 class GroceryApiMock {
   items: InventoryItem[] = [];
+  inventoryUpdateBodies: Record<string, unknown>[] = [];
   inventoryGetMode: "normal" | "pending" | "error" = "normal";
   shoppingList: ShoppingListWithItems = {
     id: 1,
@@ -216,7 +217,9 @@ class GroceryApiMock {
       const id = Number(inventoryItemMatch[1]);
       const item = this.items.find((candidate) => candidate.id === id);
       if (!item) return this.json({ error: "Item not found" }, 404);
-      Object.assign(item, this.readBody(init), { updatedAt: timestamp });
+      const update = this.readBody(init);
+      this.inventoryUpdateBodies.push(update);
+      Object.assign(item, update, { updatedAt: timestamp });
       return this.json(item);
     }
     if (inventoryItemMatch && method === "DELETE") {
@@ -1325,6 +1328,83 @@ describe("inventory quantity validation", () => {
     changeInput("input-item-quantity", "2.5");
     fireEvent.click(screen.getByTestId("button-save-item"));
     await waitFor(() => assert.equal(api.items[0]?.quantity, 2.5));
+
+    queryClient.clear();
+  });
+});
+
+describe("inventory optional field clearing", () => {
+  it("persists expiry-only, notes-only, and combined clearing", async () => {
+    const api = new GroceryApiMock();
+    api.items = [dashboardItem(1, "Rice", "Pantry", 4, 1)];
+    api.items[0]!.expiresAt = "2026-12-01";
+    api.items[0]!.notes = "Keep dry";
+    globalThis.fetch = api.fetch;
+    const { queryClient } = renderApp();
+
+    await openInventory();
+    fireEvent.click(screen.getByTestId("button-edit-1"));
+    await screen.findByTestId("dialog-inventory-item");
+    changeInput("input-item-expires", "");
+    fireEvent.click(screen.getByTestId("button-save-item"));
+    await waitFor(() => assert.equal(api.items[0]?.expiresAt, null));
+    assert.equal(api.items[0]?.notes, "Keep dry");
+    assert.deepEqual(api.inventoryUpdateBodies.at(-1), {
+      name: "Rice",
+      category: "Pantry",
+      quantity: 4,
+      unit: "each",
+      minThreshold: 1,
+      expiresAt: null,
+      notes: "Keep dry",
+    });
+
+    fireEvent.click(screen.getByTestId("button-edit-1"));
+    await screen.findByTestId("dialog-inventory-item");
+    changeInput("input-item-expires", "2027-01-15");
+    changeInput("input-item-notes", "");
+    fireEvent.click(screen.getByTestId("button-save-item"));
+    await waitFor(() => assert.equal(api.items[0]?.expiresAt, "2027-01-15"));
+    assert.equal(api.items[0]?.notes, null);
+    assert.deepEqual(api.inventoryUpdateBodies.at(-1), {
+      name: "Rice",
+      category: "Pantry",
+      quantity: 4,
+      unit: "each",
+      minThreshold: 1,
+      expiresAt: "2027-01-15",
+      notes: null,
+    });
+
+    fireEvent.click(screen.getByTestId("button-edit-1"));
+    await screen.findByTestId("dialog-inventory-item");
+    changeInput("input-item-expires", "");
+    changeInput("input-item-notes", "");
+    fireEvent.click(screen.getByTestId("button-save-item"));
+    await waitFor(() => {
+      assert.equal(api.items[0]?.expiresAt, null);
+      assert.equal(api.items[0]?.notes, null);
+    });
+    assert.deepEqual(api.inventoryUpdateBodies.at(-1), {
+      name: "Rice",
+      category: "Pantry",
+      quantity: 4,
+      unit: "each",
+      minThreshold: 1,
+      expiresAt: null,
+      notes: null,
+    });
+
+    fireEvent.click(screen.getByTestId("button-edit-1"));
+    await screen.findByTestId("dialog-inventory-item");
+    assert.equal(
+      (screen.getByTestId("input-item-expires") as HTMLInputElement).value,
+      "",
+    );
+    assert.equal(
+      (screen.getByTestId("input-item-notes") as HTMLTextAreaElement).value,
+      "",
+    );
 
     queryClient.clear();
   });
