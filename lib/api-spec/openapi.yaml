@@ -183,6 +183,14 @@ paths:
           required: true
           schema:
             type: number
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Unique key for safely retrying the same adjustment request.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 128
       requestBody:
         required: true
         content:

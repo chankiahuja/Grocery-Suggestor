@@ -53,8 +53,9 @@ public class PantryService {
         events.publishEvent(new PantryChanged("inventory_changed", id));
         return inventory(id);
     }
-    public Map<String,Object> adjustInventory(long id, Map<String,Object> body) {
-        inventory(id);
+    public Map<String,Object> adjustInventory(long id, String idempotencyKey, Map<String,Object> body) {
+        if (idempotencyKey == null || idempotencyKey.isBlank() || idempotencyKey.length() > 128) bad("Idempotency-Key must be 1 to 128 characters");
+        var item = repo.one("SELECT * FROM inventory_items WHERE id=? FOR UPDATE", id);
         Object operationValue = body.get("operation");
         if (!(operationValue instanceof String) || !(operationValue.equals("consume") || operationValue.equals("restock"))) {
             bad("operation must be consume or restock");
@@ -65,6 +66,15 @@ public class PantryService {
             bad("amount must be greater than zero");
         }
         double amount = ((Number) amountValue).doubleValue();
+        var previous = repo.query("SELECT operation, amount FROM inventory_adjustments WHERE inventory_item_id=? AND idempotency_key=?", id, idempotencyKey);
+        if (!previous.isEmpty()) {
+            var existing = previous.get(0);
+            if (!existing.get("operation").equals(operation) || Double.compare(number(existing, "amount"), amount) != 0) {
+                bad("Idempotency-Key was already used for a different adjustment");
+            }
+            return inventory(id);
+        }
+        double quantityBefore = number(item, "quantity");
         int changed;
         if (operation.equals("consume")) {
             changed = repo.execute("UPDATE inventory_items SET quantity=quantity-?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND quantity>=?", amount, id, amount);
@@ -72,6 +82,15 @@ public class PantryService {
         } else {
             changed = repo.execute("UPDATE inventory_items SET quantity=quantity+?, updated_at=CURRENT_TIMESTAMP WHERE id=?", amount, id);
         }
+        double quantityAfter = operation.equals("consume") ? quantityBefore - amount : quantityBefore + amount;
+        var adjustment = new LinkedHashMap<String,Object>();
+        adjustment.put("inventory_item_id", id);
+        adjustment.put("idempotency_key", idempotencyKey);
+        adjustment.put("operation", operation);
+        adjustment.put("amount", amount);
+        adjustment.put("quantity_before", quantityBefore);
+        adjustment.put("quantity_after", quantityAfter);
+        repo.insert("inventory_adjustments", adjustment);
         events.publishEvent(new PantryChanged("inventory_changed", id));
         return inventory(id);
     }

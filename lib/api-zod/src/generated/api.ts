@@ -173,6 +173,14 @@ export const AdjustInventoryItemParams = zod.object({
   "id": zod.coerce.number()
 })
 
+export const adjustInventoryItemHeaderIdempotencyKeyMax = 128;
+
+
+
+export const AdjustInventoryItemHeader = zod.object({
+  "Idempotency-Key": zod.string().min(1).max(adjustInventoryItemHeaderIdempotencyKeyMax).describe('Unique key for safely retrying the same adjustment request.')
+})
+
 export const adjustInventoryItemBodyAmountExclusiveMin = 0;
 
 

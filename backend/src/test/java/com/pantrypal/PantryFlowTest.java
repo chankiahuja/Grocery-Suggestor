@@ -72,28 +72,47 @@ class PantryFlowTest {
     }
     @Test void inventoryAdjustmentsAreAtomicAndValidateStock() throws Exception {
         long id = PantryService.id(item("Adjustment test", 5));
-        mvc.perform(post("/api/inventory/" + id + "/adjust").contentType("application/json")
+        mvc.perform(post("/api/inventory/" + id + "/adjust").header("Idempotency-Key", "adjust-consume-1").contentType("application/json")
             .content("{\"operation\":\"consume\",\"amount\":2}"))
             .andExpect(status().isOk()).andExpect(jsonPath("$.quantity").value(3));
-        mvc.perform(post("/api/inventory/" + id + "/adjust").contentType("application/json")
+        mvc.perform(post("/api/inventory/" + id + "/adjust").header("Idempotency-Key", "adjust-restock-1").contentType("application/json")
             .content("{\"operation\":\"restock\",\"amount\":4}"))
             .andExpect(status().isOk()).andExpect(jsonPath("$.quantity").value(7));
-        mvc.perform(post("/api/inventory/" + id + "/adjust").contentType("application/json")
+        mvc.perform(post("/api/inventory/" + id + "/adjust").header("Idempotency-Key", "adjust-overconsume-1").contentType("application/json")
             .content("{\"operation\":\"consume\",\"amount\":8}"))
             .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("amount exceeds available stock"));
         assertThat(PantryService.number(service.inventory(id), "quantity")).isEqualTo(7);
     }
     @Test void inventoryAdjustmentRejectsInvalidRequests() throws Exception {
         long id = PantryService.id(item("Invalid adjustment", 5));
-        mvc.perform(post("/api/inventory/" + id + "/adjust").contentType("application/json")
+        mvc.perform(post("/api/inventory/" + id + "/adjust").header("Idempotency-Key", "adjust-invalid-1").contentType("application/json")
             .content("{\"operation\":\"consume\",\"amount\":0}"))
             .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("amount must be greater than zero"));
-        mvc.perform(post("/api/inventory/" + id + "/adjust").contentType("application/json")
+        mvc.perform(post("/api/inventory/" + id + "/adjust").header("Idempotency-Key", "adjust-invalid-2").contentType("application/json")
             .content("{\"operation\":\"replace\",\"amount\":1}"))
             .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("operation must be consume or restock"));
-        mvc.perform(post("/api/inventory/999999/adjust").contentType("application/json")
+        mvc.perform(post("/api/inventory/999999/adjust").header("Idempotency-Key", "adjust-missing-1").contentType("application/json")
             .content("{\"operation\":\"restock\",\"amount\":1}"))
             .andExpect(status().isNotFound());
+    }
+    @Test void repeatedAdjustmentKeyDoesNotApplyTwiceAndConflictsAreRejected() throws Exception {
+        long id = PantryService.id(item("Retry-safe adjustment", 5));
+        mvc.perform(post("/api/inventory/" + id + "/adjust").header("Idempotency-Key", "retry-1").contentType("application/json")
+            .content("{\"operation\":\"consume\",\"amount\":2}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.quantity").value(3));
+        mvc.perform(post("/api/inventory/" + id + "/adjust").header("Idempotency-Key", "retry-1").contentType("application/json")
+            .content("{\"operation\":\"consume\",\"amount\":2}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.quantity").value(3));
+        mvc.perform(post("/api/inventory/" + id + "/adjust").header("Idempotency-Key", "retry-1").contentType("application/json")
+            .content("{\"operation\":\"restock\",\"amount\":2}"))
+            .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("Idempotency-Key was already used for a different adjustment"));
+        assertThat(repository.query("SELECT * FROM inventory_adjustments WHERE inventory_item_id=?", id)).hasSize(1);
+    }
+    @Test void adjustmentRequiresAnIdempotencyKey() throws Exception {
+        long id = PantryService.id(item("Missing key", 5));
+        mvc.perform(post("/api/inventory/" + id + "/adjust").contentType("application/json")
+            .content("{\"operation\":\"restock\",\"amount\":1}"))
+            .andExpect(status().isBadRequest());
     }
     @Test void notificationIsDeliveredOnlyAfterCommit() {
         clearInvocations(notifications);
