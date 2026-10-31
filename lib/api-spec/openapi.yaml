@@ -172,6 +172,43 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /inventory/{id}/adjust:
+    post:
+      operationId: adjustInventoryItem
+      tags: [inventory]
+      summary: Consume or restock an inventory item atomically
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventoryAdjustmentInput"
+      responses:
+        "200":
+          description: Adjusted inventory item
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryItem"
+        "400":
+          description: Invalid adjustment or insufficient stock
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /suggestions:
     get:
       operationId: getGrocerySuggestions
@@ -390,6 +427,19 @@ components:
           type: string
       required:
         - error
+
+    InventoryAdjustmentInput:
+      type: object
+      properties:
+        operation:
+          type: string
+          enum: [consume, restock]
+        amount:
+          type: number
+          exclusiveMinimum: 0
+      required:
+        - operation
+        - amount
 
     InventoryItem:
       type: object

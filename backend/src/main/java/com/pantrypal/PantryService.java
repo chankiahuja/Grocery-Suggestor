@@ -53,6 +53,28 @@ public class PantryService {
         events.publishEvent(new PantryChanged("inventory_changed", id));
         return inventory(id);
     }
+    public Map<String,Object> adjustInventory(long id, Map<String,Object> body) {
+        inventory(id);
+        Object operationValue = body.get("operation");
+        if (!(operationValue instanceof String) || !(operationValue.equals("consume") || operationValue.equals("restock"))) {
+            bad("operation must be consume or restock");
+        }
+        String operation = operationValue.toString();
+        Object amountValue = body.get("amount");
+        if (!(amountValue instanceof Number) || !Double.isFinite(((Number) amountValue).doubleValue()) || ((Number) amountValue).doubleValue() <= 0) {
+            bad("amount must be greater than zero");
+        }
+        double amount = ((Number) amountValue).doubleValue();
+        int changed;
+        if (operation.equals("consume")) {
+            changed = repo.execute("UPDATE inventory_items SET quantity=quantity-?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND quantity>=?", amount, id, amount);
+            if (changed == 0) bad("amount exceeds available stock");
+        } else {
+            changed = repo.execute("UPDATE inventory_items SET quantity=quantity+?, updated_at=CURRENT_TIMESTAMP WHERE id=?", amount, id);
+        }
+        events.publishEvent(new PantryChanged("inventory_changed", id));
+        return inventory(id);
+    }
     public void deleteInventory(long id) { inventory(id); repo.execute("DELETE FROM inventory_items WHERE id=?", id); events.publishEvent(new PantryChanged("inventory_changed", id)); }
     static boolean expiring(Map<String,Object> item) {
         if (item.get("expiresAt") == null) return false;

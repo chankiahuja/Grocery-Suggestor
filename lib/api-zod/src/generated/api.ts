@@ -167,6 +167,36 @@ export const DeleteInventoryItemResponse = zod.void()
 
 
 /**
+ * @summary Consume or restock an inventory item atomically
+ */
+export const AdjustInventoryItemParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const adjustInventoryItemBodyAmountExclusiveMin = 0;
+
+
+
+export const AdjustInventoryItemBody = zod.object({
+  "operation": zod.enum(['consume', 'restock']),
+  "amount": zod.number().gt(adjustInventoryItemBodyAmountExclusiveMin)
+})
+
+export const AdjustInventoryItemResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "category": zod.string(),
+  "quantity": zod.number(),
+  "unit": zod.string(),
+  "minThreshold": zod.number(),
+  "expiresAt": zod.string().nullable(),
+  "notes": zod.string().nullable(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
  * @summary Get grocery purchase suggestions based on inventory
  */
 export const GetGrocerySuggestionsResponseItem = zod.object({
