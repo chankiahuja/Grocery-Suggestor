@@ -30,6 +30,7 @@ import type {
   ListInventoryItemsParams,
   PurchaseResult,
   ShoppingList,
+  ShoppingListGenerationInput,
   ShoppingListInput,
   ShoppingListItem,
   ShoppingListItemInput,
@@ -759,14 +760,14 @@ export const getGenerateShoppingListFromSuggestionsUrl = () => {
 /**
  * @summary Create a shopping list from current low-stock suggestions
  */
-export const generateShoppingListFromSuggestions = async ( options?: Parameters<typeof customFetch>[1]): Promise<ShoppingListWithItems> => {
+export const generateShoppingListFromSuggestions = async (shoppingListGenerationInput?: ShoppingListGenerationInput, options?: Parameters<typeof customFetch>[1]): Promise<ShoppingListWithItems> => {
 
   return customFetch<ShoppingListWithItems>(getGenerateShoppingListFromSuggestionsUrl(),
   {
     ...options,
-    method: 'POST'
-
-
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(shoppingListGenerationInput)
   }
 );}
 
@@ -775,8 +776,8 @@ export const generateShoppingListFromSuggestions = async ( options?: Parameters<
 
 
 export const getGenerateShoppingListFromSuggestionsMutationOptions = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateShoppingListFromSuggestions>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof generateShoppingListFromSuggestions>>, TError,void, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateShoppingListFromSuggestions>>, TError,{data?: BodyType<ShoppingListGenerationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof generateShoppingListFromSuggestions>>, TError,{data?: BodyType<ShoppingListGenerationInput>}, TContext> => {
 
 const mutationKey = ['generateShoppingListFromSuggestions'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -788,10 +789,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof generateShoppingListFromSuggestions>>, void> = () => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof generateShoppingListFromSuggestions>>, {data?: BodyType<ShoppingListGenerationInput>}> = (props) => {
+          const {data} = props ?? {};
 
-
-          return  generateShoppingListFromSuggestions(requestOptions)
+          return  generateShoppingListFromSuggestions(data,requestOptions)
         }
 
 
@@ -802,18 +803,18 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type GenerateShoppingListFromSuggestionsMutationResult = NonNullable<Awaited<ReturnType<typeof generateShoppingListFromSuggestions>>>
-
+    export type GenerateShoppingListFromSuggestionsMutationBody = BodyType<ShoppingListGenerationInput> | undefined
     export type GenerateShoppingListFromSuggestionsMutationError = ErrorType<ErrorResponse>
 
     /**
  * @summary Create a shopping list from current low-stock suggestions
  */
 export const useGenerateShoppingListFromSuggestions = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateShoppingListFromSuggestions>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateShoppingListFromSuggestions>>, TError,{data?: BodyType<ShoppingListGenerationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof generateShoppingListFromSuggestions>>,
         TError,
-        void,
+        {data?: BodyType<ShoppingListGenerationInput>},
         TContext
       > => {
       return useMutation(getGenerateShoppingListFromSuggestionsMutationOptions(options));

@@ -20,7 +20,7 @@ public class PantryController {
     @PatchMapping("/inventory/{id}") public Object updateInventory(@PathVariable long id, @RequestBody Map<String,Object> body) { return service.saveInventory(id, body); }
     @DeleteMapping("/inventory/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) public void deleteInventory(@PathVariable long id) { service.deleteInventory(id); }
     @GetMapping("/suggestions") public Object suggestions() { return service.suggestions(); }
-    @PostMapping("/suggestions/generate-list") @ResponseStatus(HttpStatus.CREATED) public Object generate() { return service.generateList(); }
+    @PostMapping("/suggestions/generate-list") @ResponseStatus(HttpStatus.CREATED) public Object generate(@RequestBody(required=false) Map<String,Object> body) { return service.generateList(body == null ? Map.of() : body); }
     @GetMapping("/shopping-lists") public Object lists() { return service.lists(); }
     @PostMapping("/shopping-lists") @ResponseStatus(HttpStatus.CREATED) public Object createList(@RequestBody Map<String,Object> body) { return service.createList(body); }
     @GetMapping("/shopping-lists/{id}") public Object list(@PathVariable long id) { return service.list(id); }

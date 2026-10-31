@@ -150,6 +150,16 @@ export interface ShoppingListItemUpdate {
   notes?: string;
 }
 
+export type ShoppingListGenerationInputItemsItem = {
+  inventoryItemId: number;
+  /** @minimum 0 */
+  quantity: number;
+};
+
+export interface ShoppingListGenerationInput {
+  items?: ShoppingListGenerationInputItemsItem[];
+}
+
 export interface PurchaseResult {
   purchasedCount: number;
   updatedInventoryItems: number;

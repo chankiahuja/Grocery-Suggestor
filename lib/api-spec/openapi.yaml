@@ -191,6 +191,12 @@ paths:
       operationId: generateShoppingListFromSuggestions
       tags: [suggestions]
       summary: Create a shopping list from current low-stock suggestions
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShoppingListGenerationInput"
       responses:
         "201":
           description: Shopping list generated
@@ -654,6 +660,21 @@ components:
           minimum: 0
         notes:
           type: string
+
+    ShoppingListGenerationInput:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              inventoryItemId:
+                type: number
+              quantity:
+                type: number
+                minimum: 0
+            required: [inventoryItemId, quantity]
 
     PurchaseResult:
       type: object

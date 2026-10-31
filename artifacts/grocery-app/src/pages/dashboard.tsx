@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import {
   Package,
@@ -25,9 +25,20 @@ import { UrgencyBadge } from "@/components/urgency-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { getCategoryAttention } from "@/lib/category-attention";
 import { useToast } from "@/hooks/use-toast";
+
+type ReviewItem = {
+  inventoryItemId: number;
+  name: string;
+  category: string;
+  unit: string;
+  currentQuantity: number;
+  quantity: number;
+  reason: string;
+};
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
@@ -37,6 +48,8 @@ export default function Dashboard() {
   const { data: suggestions, isLoading: suggestionsLoading } =
     useGetGrocerySuggestions();
   const generateList = useGenerateShoppingListFromSuggestions();
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewItems, setReviewItems] = useState<ReviewItem[]>([]);
   const {
     data: inventoryItems,
     isLoading: inventoryLoading,
@@ -56,8 +69,38 @@ export default function Dashboard() {
     ) ?? false;
 
   const handleGenerateShoppingList = async () => {
+    const items = (suggestions ?? [])
+      .filter(
+        (suggestion) =>
+          (suggestion.urgency === "critical" || suggestion.urgency === "low") &&
+          suggestion.inventoryItemId != null,
+      )
+      .map((suggestion) => ({
+        inventoryItemId: suggestion.inventoryItemId!,
+        name: suggestion.name,
+        category: suggestion.category,
+        unit: suggestion.unit,
+        currentQuantity: suggestion.currentQuantity,
+        quantity: Math.max(
+          suggestion.minThreshold - suggestion.currentQuantity,
+          1,
+        ),
+        reason: suggestion.reason,
+      }));
+    setReviewItems(items);
+    setReviewOpen(true);
+  };
+
+  const handleConfirmShoppingList = async () => {
     try {
-      const list = await generateList.mutateAsync();
+      const list = await generateList.mutateAsync({
+        data: {
+          items: reviewItems.map(({ inventoryItemId, quantity }) => ({
+            inventoryItemId,
+            quantity,
+          })),
+        },
+      });
       await queryClient.invalidateQueries({
         queryKey: getListShoppingListsQueryKey(),
       });
@@ -65,6 +108,7 @@ export default function Dashboard() {
         title: "Shopping list generated",
         description: `${list.items.length} item${list.items.length === 1 ? "" : "s"} added from low-stock suggestions.`,
       });
+      setReviewOpen(false);
       setLocation(`/shopping-lists/${list.id}`);
     } catch {
       toast({
@@ -312,6 +356,104 @@ export default function Dashboard() {
                 {Array.from({ length: 3 }).map((_, i) => (
                   <Skeleton key={i} className="h-20 w-full" />
                 ))}
+              </div>
+            ) : reviewOpen ? (
+              <div className="space-y-5" data-testid="shopping-list-preview">
+                <div>
+                  <h3 className="text-lg font-semibold">
+                    Review shopping list
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    Adjust quantities or remove items before creating the list.
+                  </p>
+                </div>
+                {[...new Set(reviewItems.map((item) => item.category))].map(
+                  (category) => (
+                    <section key={category} className="space-y-2">
+                      <h4 className="font-medium">{category}</h4>
+                      {reviewItems
+                        .filter((item) => item.category === category)
+                        .map((item) => (
+                          <div
+                            key={item.inventoryItemId}
+                            className="flex flex-wrap items-center gap-3 rounded-lg border border-border p-3"
+                            data-testid={`preview-item-${item.inventoryItemId}`}
+                          >
+                            <div className="min-w-40 flex-1">
+                              <p className="font-medium">{item.name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {item.reason}
+                              </p>
+                            </div>
+                            <span className="text-xs text-muted-foreground">
+                              Current: {item.currentQuantity} {item.unit}
+                            </span>
+                            <Input
+                              type="number"
+                              min="0"
+                              step="any"
+                              value={item.quantity}
+                              aria-label={`${item.name} quantity`}
+                              className="w-24"
+                              onChange={(event) => {
+                                const quantity = Number(event.target.value);
+                                setReviewItems((previous) =>
+                                  previous.map((candidate) =>
+                                    candidate.inventoryItemId ===
+                                    item.inventoryItemId
+                                      ? {
+                                          ...candidate,
+                                          quantity: Number.isFinite(quantity)
+                                            ? quantity
+                                            : 0,
+                                        }
+                                      : candidate,
+                                  ),
+                                );
+                              }}
+                            />
+                            <span className="text-sm">{item.unit}</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                setReviewItems((previous) =>
+                                  previous.filter(
+                                    (candidate) =>
+                                      candidate.inventoryItemId !==
+                                      item.inventoryItemId,
+                                  ),
+                                )
+                              }
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        ))}
+                    </section>
+                  ),
+                )}
+                <div className="flex flex-wrap justify-end gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setReviewOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={handleConfirmShoppingList}
+                    disabled={
+                      generateList.isPending || reviewItems.length === 0
+                    }
+                  >
+                    {generateList.isPending
+                      ? "Creating..."
+                      : "Create shopping list"}
+                  </Button>
+                </div>
               </div>
             ) : suggestions && suggestions.length > 0 ? (
               <div className="space-y-3">

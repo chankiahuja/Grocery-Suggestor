@@ -18,6 +18,8 @@ export * from './inventoryStats';
 export * from './listInventoryItemsParams';
 export * from './purchaseResult';
 export * from './shoppingList';
+export * from './shoppingListGenerationInput';
+export * from './shoppingListGenerationInputItemsItem';
 export * from './shoppingListInput';
 export * from './shoppingListItem';
 export * from './shoppingListItemInput';
