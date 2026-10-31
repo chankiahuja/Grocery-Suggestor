@@ -1,23 +1,23 @@
-import { useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useCreateInventoryItem,
   useUpdateInventoryItem,
   getListInventoryItemsQueryKey,
   getGetInventoryStatsQueryKey,
   getGetGrocerySuggestionsQueryKey,
-} from '@workspace/api-client-react';
-import type { InventoryItem } from '@workspace/api-client-react';
+} from "@workspace/api-client-react";
+import type { InventoryItem } from "@workspace/api-client-react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from '@/components/ui/dialog';
+} from "@/components/ui/dialog";
 import {
   Form,
   FormControl,
@@ -25,19 +25,34 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { useToast } from '@/hooks/use-toast';
-import { useNotifications } from '@/hooks/use-notifications';
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
+import { useNotifications } from "@/hooks/use-notifications";
+
+const nonBlankNumber = (label: string) =>
+  z.preprocess(
+    (value) => {
+      if (typeof value === "string" && value.trim() === "") return undefined;
+      return typeof value === "number" ? value : Number(value);
+    },
+    z
+      .number({
+        required_error: `${label} is required`,
+        invalid_type_error: `${label} must be a number`,
+      })
+      .finite(`${label} must be a valid number`)
+      .min(0, `${label} must be 0 or greater`),
+  );
 
 const formSchema = z.object({
-  name: z.string().min(1, 'Name is required'),
-  category: z.string().min(1, 'Category is required'),
-  quantity: z.coerce.number().min(0, 'Quantity must be 0 or greater'),
-  unit: z.string().min(1, 'Unit is required'),
-  minThreshold: z.coerce.number().min(0, 'Threshold must be 0 or greater'),
+  name: z.string().min(1, "Name is required"),
+  category: z.string().min(1, "Category is required"),
+  quantity: nonBlankNumber("Quantity"),
+  unit: z.string().min(1, "Unit is required"),
+  minThreshold: nonBlankNumber("Threshold"),
   expiresAt: z.string().optional(),
   notes: z.string().optional(),
 });
@@ -66,13 +81,13 @@ export function InventoryItemDialog({
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      name: item?.name || '',
-      category: item?.category || '',
+      name: item?.name || "",
+      category: item?.category || "",
       quantity: item?.quantity || 0,
-      unit: item?.unit || '',
+      unit: item?.unit || "",
       minThreshold: item?.minThreshold || 0,
-      expiresAt: item?.expiresAt || '',
-      notes: item?.notes || '',
+      expiresAt: item?.expiresAt || "",
+      notes: item?.notes || "",
     },
   });
 
@@ -80,13 +95,13 @@ export function InventoryItemDialog({
     if (!open) return;
 
     form.reset({
-      name: item?.name || '',
-      category: item?.category || '',
+      name: item?.name || "",
+      category: item?.category || "",
       quantity: item?.quantity || 0,
-      unit: item?.unit || '',
+      unit: item?.unit || "",
       minThreshold: item?.minThreshold || 0,
-      expiresAt: item?.expiresAt || '',
-      notes: item?.notes || '',
+      expiresAt: item?.expiresAt || "",
+      notes: item?.notes || "",
     });
   }, [form, item, open]);
 
@@ -106,12 +121,12 @@ export function InventoryItemDialog({
           notifyOutOfStock(values.name);
           toast({
             title: `${values.name} is out of stock`,
-            description: 'Consider adding it to a shopping list.',
-            variant: 'destructive',
+            description: "Consider adding it to a shopping list.",
+            variant: "destructive",
           });
         } else {
           toast({
-            title: 'Item updated',
+            title: "Item updated",
             description: `${values.name} has been updated.`,
           });
         }
@@ -127,28 +142,34 @@ export function InventoryItemDialog({
           notifyOutOfStock(values.name);
           toast({
             title: `${values.name} added — and already out of stock`,
-            description: 'Consider adding it to a shopping list right away.',
-            variant: 'destructive',
+            description: "Consider adding it to a shopping list right away.",
+            variant: "destructive",
           });
         } else {
           toast({
-            title: 'Item added',
+            title: "Item added",
             description: `${values.name} has been added to inventory.`,
           });
         }
       }
 
-      queryClient.invalidateQueries({ queryKey: getListInventoryItemsQueryKey() });
-      queryClient.invalidateQueries({ queryKey: getGetInventoryStatsQueryKey() });
-      queryClient.invalidateQueries({ queryKey: getGetGrocerySuggestionsQueryKey() });
+      queryClient.invalidateQueries({
+        queryKey: getListInventoryItemsQueryKey(),
+      });
+      queryClient.invalidateQueries({
+        queryKey: getGetInventoryStatsQueryKey(),
+      });
+      queryClient.invalidateQueries({
+        queryKey: getGetGrocerySuggestionsQueryKey(),
+      });
 
       onOpenChange(false);
       form.reset();
     } catch (error) {
       toast({
-        title: 'Error',
-        description: 'Failed to save item. Please try again.',
-        variant: 'destructive',
+        title: "Error",
+        description: "Failed to save item. Please try again.",
+        variant: "destructive",
       });
     } finally {
       setIsSubmitting(false);
@@ -159,7 +180,7 @@ export function InventoryItemDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg" data-testid="dialog-inventory-item">
         <DialogHeader>
-          <DialogTitle>{item ? 'Edit Item' : 'Add New Item'}</DialogTitle>
+          <DialogTitle>{item ? "Edit Item" : "Add New Item"}</DialogTitle>
         </DialogHeader>
 
         <Form {...form}>
@@ -172,7 +193,11 @@ export function InventoryItemDialog({
                   <FormItem className="col-span-2">
                     <FormLabel>Name</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="e.g. Milk" data-testid="input-item-name" />
+                      <Input
+                        {...field}
+                        placeholder="e.g. Milk"
+                        data-testid="input-item-name"
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -186,7 +211,11 @@ export function InventoryItemDialog({
                   <FormItem>
                     <FormLabel>Category</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="e.g. Dairy" data-testid="input-item-category" />
+                      <Input
+                        {...field}
+                        placeholder="e.g. Dairy"
+                        data-testid="input-item-category"
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -200,7 +229,11 @@ export function InventoryItemDialog({
                   <FormItem>
                     <FormLabel>Unit</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="e.g. L, kg, pcs" data-testid="input-item-unit" />
+                      <Input
+                        {...field}
+                        placeholder="e.g. L, kg, pcs"
+                        data-testid="input-item-unit"
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -214,7 +247,12 @@ export function InventoryItemDialog({
                   <FormItem>
                     <FormLabel>Current Quantity</FormLabel>
                     <FormControl>
-                      <Input type="number" step="0.1" {...field} data-testid="input-item-quantity" />
+                      <Input
+                        type="number"
+                        step="0.1"
+                        {...field}
+                        data-testid="input-item-quantity"
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -228,7 +266,12 @@ export function InventoryItemDialog({
                   <FormItem>
                     <FormLabel>Min Threshold</FormLabel>
                     <FormControl>
-                      <Input type="number" step="0.1" {...field} data-testid="input-item-threshold" />
+                      <Input
+                        type="number"
+                        step="0.1"
+                        {...field}
+                        data-testid="input-item-threshold"
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -242,7 +285,11 @@ export function InventoryItemDialog({
                   <FormItem className="col-span-2">
                     <FormLabel>Expires At (optional)</FormLabel>
                     <FormControl>
-                      <Input type="date" {...field} data-testid="input-item-expires" />
+                      <Input
+                        type="date"
+                        {...field}
+                        data-testid="input-item-expires"
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -256,7 +303,11 @@ export function InventoryItemDialog({
                   <FormItem className="col-span-2">
                     <FormLabel>Notes (optional)</FormLabel>
                     <FormControl>
-                      <Textarea {...field} placeholder="Additional notes..." data-testid="input-item-notes" />
+                      <Textarea
+                        {...field}
+                        placeholder="Additional notes..."
+                        data-testid="input-item-notes"
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -273,8 +324,12 @@ export function InventoryItemDialog({
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={isSubmitting} data-testid="button-save-item">
-                {isSubmitting ? 'Saving...' : item ? 'Update' : 'Add Item'}
+              <Button
+                type="submit"
+                disabled={isSubmitting}
+                data-testid="button-save-item"
+              >
+                {isSubmitting ? "Saving..." : item ? "Update" : "Add Item"}
               </Button>
             </DialogFooter>
           </form>

@@ -4,6 +4,8 @@ import React from "react";
 import { MockPantryApi } from "../mocks/pantry-api";
 import { JSDOM } from "jsdom";
 import {
+  getGetGrocerySuggestionsQueryKey,
+  getGetInventoryStatsQueryKey,
   getListInventoryItemsQueryKey,
   type InventoryItem,
   type ShoppingListWithItems,
@@ -1275,6 +1277,54 @@ describe("dashboard inventory attention refresh", () => {
       screen.getByTestId("stat-total-items").textContent?.includes("0"),
       true,
     );
+
+    queryClient.clear();
+  });
+});
+
+describe("inventory quantity validation", () => {
+  it("rejects blank quantity while accepting explicit zero and decimals", async () => {
+    const api = new GroceryApiMock();
+    api.items = [dashboardItem(1, "Rice", "Pantry", 4, 1)];
+    globalThis.fetch = api.fetch;
+    const { queryClient } = renderApp();
+
+    await screen.findByText("Your pantry is in good shape.");
+    const statsBefore = queryClient.getQueryData(
+      getGetInventoryStatsQueryKey(),
+    );
+    const suggestionsBefore = queryClient.getQueryData(
+      getGetGrocerySuggestionsQueryKey(),
+    );
+
+    await openInventory();
+    fireEvent.click(screen.getByTestId("button-edit-1"));
+    await screen.findByTestId("dialog-inventory-item");
+
+    changeInput("input-item-quantity", "");
+    fireEvent.click(screen.getByTestId("button-save-item"));
+
+    await screen.findByText("Quantity is required");
+    assert.equal(api.items[0]?.quantity, 4);
+    assert.deepEqual(
+      queryClient.getQueryData(getGetInventoryStatsQueryKey()),
+      statsBefore,
+    );
+    assert.deepEqual(
+      queryClient.getQueryData(getGetGrocerySuggestionsQueryKey()),
+      suggestionsBefore,
+    );
+    assert.ok(screen.getByTestId("dialog-inventory-item"));
+
+    changeInput("input-item-quantity", "0");
+    fireEvent.click(screen.getByTestId("button-save-item"));
+    await waitFor(() => assert.equal(api.items[0]?.quantity, 0));
+
+    fireEvent.click(screen.getByTestId("button-edit-1"));
+    await screen.findByTestId("dialog-inventory-item");
+    changeInput("input-item-quantity", "2.5");
+    fireEvent.click(screen.getByTestId("button-save-item"));
+    await waitFor(() => assert.equal(api.items[0]?.quantity, 2.5));
 
     queryClient.clear();
   });

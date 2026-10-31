@@ -312,8 +312,15 @@ body {
     gap: 0;
     padding: 14px 20px 0;
   }
+  .pantry-brand {
+    min-width: 0;
+  }
   .pantry-brand img {
-    width: 190px;
+    width: min(190px, 52vw);
+  }
+  .pantry-header-actions {
+    gap: 8px;
+    margin-left: auto;
   }
   .pantry-navigation {
     order: 3;
