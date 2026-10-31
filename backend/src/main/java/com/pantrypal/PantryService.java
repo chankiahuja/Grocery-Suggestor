@@ -44,8 +44,9 @@ public class PantryService {
         return result;
     }
 
-    public List<Map<String,Object>> inventory() { return repo.query("SELECT * FROM inventory_items ORDER BY name"); }
-    public Map<String,Object> inventory(long id) { return repo.one("SELECT * FROM inventory_items WHERE id=?", id); }
+    private static final String INVENTORY_COLUMNS = "id,name,category,quantity,unit,min_threshold,expires_at,notes,created_at,updated_at";
+    public List<Map<String,Object>> inventory() { return repo.query("SELECT " + INVENTORY_COLUMNS + " FROM inventory_items ORDER BY name"); }
+    public Map<String,Object> inventory(long id) { return repo.one("SELECT " + INVENTORY_COLUMNS + " FROM inventory_items WHERE id=?", id); }
     public Map<String,Object> saveInventory(Long id, Map<String,Object> body) {
         var values = fields(body, id == null, true);
         if (id == null) id = repo.insert("inventory_items", values);
@@ -77,10 +78,10 @@ public class PantryService {
         double quantityBefore = number(item, "quantity");
         int changed;
         if (operation.equals("consume")) {
-            changed = repo.execute("UPDATE inventory_items SET quantity=quantity-?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND quantity>=?", amount, id, amount);
+            changed = repo.execute("UPDATE inventory_items SET quantity=quantity-?, revision=revision+1, updated_at=CURRENT_TIMESTAMP WHERE id=? AND quantity>=?", amount, id, amount);
             if (changed == 0) bad("amount exceeds available stock");
         } else {
-            changed = repo.execute("UPDATE inventory_items SET quantity=quantity+?, updated_at=CURRENT_TIMESTAMP WHERE id=?", amount, id);
+            changed = repo.execute("UPDATE inventory_items SET quantity=quantity+?, revision=revision+1, updated_at=CURRENT_TIMESTAMP WHERE id=?", amount, id);
         }
         double quantityAfter = operation.equals("consume") ? quantityBefore - amount : quantityBefore + amount;
         var adjustment = new LinkedHashMap<String,Object>();
@@ -90,9 +91,38 @@ public class PantryService {
         adjustment.put("amount", amount);
         adjustment.put("quantity_before", quantityBefore);
         adjustment.put("quantity_after", quantityAfter);
+        adjustment.put("inventory_revision", ((Number) item.get("revision")).longValue() + 1);
+        adjustment.put("undo_expires_at", OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(5));
         repo.insert("inventory_adjustments", adjustment);
         events.publishEvent(new PantryChanged("inventory_changed", id));
         return inventory(id);
+    }
+    public Map<String,Object> undoInventoryAdjustment(long id, Map<String,Object> body) {
+        Object key = body.get("idempotencyKey");
+        if (!(key instanceof String s) || s.isBlank() || s.length() > 128) bad("idempotencyKey must be 1 to 128 characters");
+        // All stock writers acquire this row lock (explicitly or through UPDATE).
+        // Check time after waiting for the lock, rather than using transaction-start time.
+        var item = repo.one("SELECT * FROM inventory_items WHERE id=? FOR UPDATE", id);
+        var adjustment = repo.one("SELECT * FROM inventory_adjustments WHERE inventory_item_id=? AND idempotency_key=?", id, key);
+        if (adjustment.get("undoneAt") != null) return Map.of("status", "already_undone", "inventory", inventory(id));
+        if (adjustment.get("inventoryRevision") == null || adjustment.get("undoExpiresAt") == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Historical adjustment is not eligible for undo");
+        }
+        Instant now = Instant.now();
+        if (!now.isBefore(Instant.parse(adjustment.get("undoExpiresAt").toString()))) {
+            throw new ResponseStatusException(HttpStatus.GONE, "The five-minute undo window has expired");
+        }
+        long revision = ((Number) item.get("revision")).longValue();
+        if (revision != ((Number) adjustment.get("inventoryRevision")).longValue()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Inventory changed after this adjustment");
+        }
+        // Restore the recorded value exactly, avoiding inverse floating-point arithmetic.
+        repo.execute("UPDATE inventory_items SET quantity=?, revision=revision+1, updated_at=? WHERE id=?",
+            adjustment.get("quantityBefore"), OffsetDateTime.ofInstant(now, ZoneOffset.UTC), id);
+        repo.execute("UPDATE inventory_adjustments SET undone_at=?, undo_revision=? WHERE id=?",
+            OffsetDateTime.ofInstant(now, ZoneOffset.UTC), revision + 1, adjustment.get("id"));
+        events.publishEvent(new PantryChanged("inventory_changed", id));
+        return Map.of("status", "undone", "inventory", inventory(id));
     }
     public void deleteInventory(long id) { inventory(id); repo.execute("DELETE FROM inventory_items WHERE id=?", id); events.publishEvent(new PantryChanged("inventory_changed", id)); }
     static boolean expiring(Map<String,Object> item) {
@@ -206,7 +236,7 @@ public class PantryService {
         repo.one("SELECT * FROM shopping_lists WHERE id=? FOR UPDATE", listId);
         var items = repo.query("SELECT * FROM shopping_list_items WHERE shopping_list_id=? AND purchased=TRUE AND restocked=FALSE AND inventory_item_id IS NOT NULL", listId);
         for (var item : items) {
-            repo.execute("UPDATE inventory_items SET quantity=quantity+?, updated_at=CURRENT_TIMESTAMP WHERE id=?", item.get("quantity"), item.get("inventoryItemId"));
+            repo.execute("UPDATE inventory_items SET quantity=quantity+?, revision=revision+1, updated_at=CURRENT_TIMESTAMP WHERE id=?", item.get("quantity"), item.get("inventoryItemId"));
             repo.execute("UPDATE shopping_list_items SET restocked=TRUE WHERE id=?", item.get("id"));
         }
         events.publishEvent(new PantryChanged("purchase_completed", null));

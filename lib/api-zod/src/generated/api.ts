@@ -205,6 +205,39 @@ export const AdjustInventoryItemResponse = zod.object({
 
 
 /**
+ * Supply the original adjustment's Idempotency-Key as idempotencyKey in the body. The adjustment response remains an InventoryItem. Undo restores only quantity, and is allowed strictly before five minutes after the original adjustment if no later inventory write occurred (including edits, purchases, adjustments and ABA changes that return to the same quantity). Historical adjustments without revision metadata are ineligible. Successful retries return already_undone and current inventory, even after expiry or later edits, without writes or notifications. Retrying the original adjustment after undo never reapplies it.
+ * @summary Undo a consume or restock adjustment within five minutes
+ */
+export const UndoInventoryAdjustmentParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const undoInventoryAdjustmentBodyIdempotencyKeyMax = 128;
+
+
+
+export const UndoInventoryAdjustmentBody = zod.object({
+  "idempotencyKey": zod.string().min(1).max(undoInventoryAdjustmentBodyIdempotencyKeyMax).describe('Original adjustment\'s Idempotency-Key, scoped to the inventory item')
+})
+
+export const UndoInventoryAdjustmentResponse = zod.object({
+  "status": zod.enum(['undone', 'already_undone']),
+  "inventory": zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "category": zod.string(),
+  "quantity": zod.number(),
+  "unit": zod.string(),
+  "minThreshold": zod.number(),
+  "expiresAt": zod.string().nullable(),
+  "notes": zod.string().nullable(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+})
+
+
+/**
  * @summary Get grocery purchase suggestions based on inventory
  */
 export const GetGrocerySuggestionsResponseItem = zod.object({

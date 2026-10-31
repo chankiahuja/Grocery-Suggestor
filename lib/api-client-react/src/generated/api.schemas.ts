@@ -13,19 +13,22 @@ export interface ErrorResponse {
   error: string;
 }
 
-export type InventoryAdjustmentInputOperation = typeof InventoryAdjustmentInputOperation[keyof typeof InventoryAdjustmentInputOperation];
-
-
-export const InventoryAdjustmentInputOperation = {
-  consume: 'consume',
-  restock: 'restock',
-} as const;
-
-export interface InventoryAdjustmentInput {
-  operation: InventoryAdjustmentInputOperation;
-  /** @exclusiveMinimum 0 */
-  amount: number;
+export interface InventoryUndoInput {
+  /**
+     * Original adjustment's Idempotency-Key, scoped to the inventory item
+     * @minLength 1
+     * @maxLength 128
+     */
+  idempotencyKey: string;
 }
+
+export type InventoryUndoResultStatus = typeof InventoryUndoResultStatus[keyof typeof InventoryUndoResultStatus];
+
+
+export const InventoryUndoResultStatus = {
+  undone: 'undone',
+  already_undone: 'already_undone',
+} as const;
 
 export interface InventoryItem {
   id: number;
@@ -40,6 +43,25 @@ export interface InventoryItem {
   notes: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface InventoryUndoResult {
+  status: InventoryUndoResultStatus;
+  inventory: InventoryItem;
+}
+
+export type InventoryAdjustmentInputOperation = typeof InventoryAdjustmentInputOperation[keyof typeof InventoryAdjustmentInputOperation];
+
+
+export const InventoryAdjustmentInputOperation = {
+  consume: 'consume',
+  restock: 'restock',
+} as const;
+
+export interface InventoryAdjustmentInput {
+  operation: InventoryAdjustmentInputOperation;
+  /** @exclusiveMinimum 0 */
+  amount: number;
 }
 
 export interface InventoryItemInput {
