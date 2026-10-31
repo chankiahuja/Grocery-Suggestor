@@ -13,6 +13,20 @@ export interface ErrorResponse {
   error: string;
 }
 
+export type InventoryAdjustmentInputOperation = typeof InventoryAdjustmentInputOperation[keyof typeof InventoryAdjustmentInputOperation];
+
+
+export const InventoryAdjustmentInputOperation = {
+  consume: 'consume',
+  restock: 'restock',
+} as const;
+
+export interface InventoryAdjustmentInput {
+  operation: InventoryAdjustmentInputOperation;
+  /** @exclusiveMinimum 0 */
+  amount: number;
+}
+
 export interface InventoryItem {
   id: number;
   name: string;

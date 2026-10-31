@@ -11,6 +11,8 @@ export * from './errorResponse';
 export * from './grocerySuggestion';
 export * from './grocerySuggestionUrgency';
 export * from './healthStatus';
+export * from './inventoryAdjustmentInput';
+export * from './inventoryAdjustmentInputOperation';
 export * from './inventoryItem';
 export * from './inventoryItemInput';
 export * from './inventoryItemUpdate';

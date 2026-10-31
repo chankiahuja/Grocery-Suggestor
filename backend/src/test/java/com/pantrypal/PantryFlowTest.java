@@ -70,6 +70,31 @@ class PantryFlowTest {
         mvc.perform(get("/api/inventory/999999")).andExpect(status().isNotFound());
         mvc.perform(get("/api/healthz")).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("ok"));
     }
+    @Test void inventoryAdjustmentsAreAtomicAndValidateStock() throws Exception {
+        long id = PantryService.id(item("Adjustment test", 5));
+        mvc.perform(post("/api/inventory/" + id + "/adjust").contentType("application/json")
+            .content("{\"operation\":\"consume\",\"amount\":2}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.quantity").value(3));
+        mvc.perform(post("/api/inventory/" + id + "/adjust").contentType("application/json")
+            .content("{\"operation\":\"restock\",\"amount\":4}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.quantity").value(7));
+        mvc.perform(post("/api/inventory/" + id + "/adjust").contentType("application/json")
+            .content("{\"operation\":\"consume\",\"amount\":8}"))
+            .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("amount exceeds available stock"));
+        assertThat(PantryService.number(service.inventory(id), "quantity")).isEqualTo(7);
+    }
+    @Test void inventoryAdjustmentRejectsInvalidRequests() throws Exception {
+        long id = PantryService.id(item("Invalid adjustment", 5));
+        mvc.perform(post("/api/inventory/" + id + "/adjust").contentType("application/json")
+            .content("{\"operation\":\"consume\",\"amount\":0}"))
+            .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("amount must be greater than zero"));
+        mvc.perform(post("/api/inventory/" + id + "/adjust").contentType("application/json")
+            .content("{\"operation\":\"replace\",\"amount\":1}"))
+            .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("operation must be consume or restock"));
+        mvc.perform(post("/api/inventory/999999/adjust").contentType("application/json")
+            .content("{\"operation\":\"restock\",\"amount\":1}"))
+            .andExpect(status().isNotFound());
+    }
     @Test void notificationIsDeliveredOnlyAfterCommit() {
         clearInvocations(notifications);
         long id = PantryService.id(item("Event test",0));

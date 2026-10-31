@@ -23,6 +23,7 @@ import type {
   ErrorResponse,
   GrocerySuggestion,
   HealthStatus,
+  InventoryAdjustmentInput,
   InventoryItem,
   InventoryItemInput,
   InventoryItemUpdate,
@@ -670,6 +671,78 @@ export const useDeleteInventoryItem = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getDeleteInventoryItemMutationOptions(options));
+    }
+
+export const getAdjustInventoryItemUrl = (id: number,) => {
+
+
+
+
+  return `/api/inventory/${id}/adjust`
+}
+
+/**
+ * @summary Consume or restock an inventory item atomically
+ */
+export const adjustInventoryItem = async (id: number,
+    inventoryAdjustmentInput: InventoryAdjustmentInput, options?: Parameters<typeof customFetch>[1]): Promise<InventoryItem> => {
+
+  return customFetch<InventoryItem>(getAdjustInventoryItemUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(inventoryAdjustmentInput)
+  }
+);}
+
+
+
+
+
+export const getAdjustInventoryItemMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adjustInventoryItem>>, TError,{id: number;data: BodyType<InventoryAdjustmentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adjustInventoryItem>>, TError,{id: number;data: BodyType<InventoryAdjustmentInput>}, TContext> => {
+
+const mutationKey = ['adjustInventoryItem'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adjustInventoryItem>>, {id: number;data: BodyType<InventoryAdjustmentInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  adjustInventoryItem(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdjustInventoryItemMutationResult = NonNullable<Awaited<ReturnType<typeof adjustInventoryItem>>>
+    export type AdjustInventoryItemMutationBody = BodyType<InventoryAdjustmentInput>
+    export type AdjustInventoryItemMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Consume or restock an inventory item atomically
+ */
+export const useAdjustInventoryItem = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adjustInventoryItem>>, TError,{id: number;data: BodyType<InventoryAdjustmentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof adjustInventoryItem>>,
+        TError,
+        {id: number;data: BodyType<InventoryAdjustmentInput>},
+        TContext
+      > => {
+      return useMutation(getAdjustInventoryItemMutationOptions(options));
     }
 
 export const getGetGrocerySuggestionsUrl = () => {
