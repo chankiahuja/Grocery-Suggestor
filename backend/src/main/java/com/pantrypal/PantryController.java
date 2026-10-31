@@ -19,6 +19,7 @@ public class PantryController {
     @PostMapping("/inventory") @ResponseStatus(HttpStatus.CREATED) public Object createInventory(@RequestBody Map<String,Object> body) { return service.saveInventory(null, body); }
     @PatchMapping("/inventory/{id}") public Object updateInventory(@PathVariable long id, @RequestBody Map<String,Object> body) { return service.saveInventory(id, body); }
     @PostMapping("/inventory/{id}/adjust") public Object adjustInventory(@PathVariable long id, @RequestHeader("Idempotency-Key") String idempotencyKey, @RequestBody Map<String,Object> body) { return service.adjustInventory(id, idempotencyKey, body); }
+    @PostMapping("/inventory/{id}/undo") public Object undoInventoryAdjustment(@PathVariable long id, @RequestBody Map<String,Object> body) { return service.undoInventoryAdjustment(id, body); }
     @DeleteMapping("/inventory/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) public void deleteInventory(@PathVariable long id) { service.deleteInventory(id); }
     @GetMapping("/suggestions") public Object suggestions() { return service.suggestions(); }
     @PostMapping("/suggestions/generate-list") @ResponseStatus(HttpStatus.CREATED) public Object generate(@RequestBody(required=false) Map<String,Object> body) { return service.generateList(body == null ? Map.of() : body); }

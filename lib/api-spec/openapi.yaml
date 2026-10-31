@@ -217,6 +217,64 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /inventory/{id}/undo:
+    post:
+      operationId: undoInventoryAdjustment
+      tags: [inventory]
+      summary: Undo a consume or restock adjustment within five minutes
+      description: >-
+        Supply the original adjustment's Idempotency-Key as idempotencyKey in the body.
+        The adjustment response remains an InventoryItem. Undo restores only quantity,
+        and is allowed strictly before five minutes after the original adjustment if no
+        later inventory write occurred (including edits, purchases, adjustments and ABA
+        changes that return to the same quantity). Historical adjustments without revision
+        metadata are ineligible. Successful retries return already_undone and current
+        inventory, even after expiry or later edits, without writes or notifications.
+        Retrying the original adjustment after undo never reapplies it.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventoryUndoInput"
+      responses:
+        "200":
+          description: Undo applied or previously applied; includes current inventory
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryUndoResult"
+        "400":
+          description: Missing, blank, non-string or oversized idempotencyKey; no writes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Item or adjustment key for this item not found; no writes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Inventory changed or historical adjustment is ineligible; no writes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "410":
+          description: Five-minute undo window expired; no writes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /suggestions:
     get:
       operationId: getGrocerySuggestions
@@ -435,6 +493,26 @@ components:
           type: string
       required:
         - error
+
+    InventoryUndoInput:
+      type: object
+      properties:
+        idempotencyKey:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: Original adjustment's Idempotency-Key, scoped to the inventory item
+      required: [idempotencyKey]
+
+    InventoryUndoResult:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [undone, already_undone]
+        inventory:
+          $ref: "#/components/schemas/InventoryItem"
+      required: [status, inventory]
 
     InventoryAdjustmentInput:
       type: object

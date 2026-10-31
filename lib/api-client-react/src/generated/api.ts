@@ -28,6 +28,8 @@ import type {
   InventoryItemInput,
   InventoryItemUpdate,
   InventoryStats,
+  InventoryUndoInput,
+  InventoryUndoResult,
   ListInventoryItemsParams,
   PurchaseResult,
   ShoppingList,
@@ -743,6 +745,79 @@ export const useAdjustInventoryItem = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getAdjustInventoryItemMutationOptions(options));
+    }
+
+export const getUndoInventoryAdjustmentUrl = (id: number,) => {
+
+
+
+
+  return `/api/inventory/${id}/undo`
+}
+
+/**
+ * Supply the original adjustment's Idempotency-Key as idempotencyKey in the body. The adjustment response remains an InventoryItem. Undo restores only quantity, and is allowed strictly before five minutes after the original adjustment if no later inventory write occurred (including edits, purchases, adjustments and ABA changes that return to the same quantity). Historical adjustments without revision metadata are ineligible. Successful retries return already_undone and current inventory, even after expiry or later edits, without writes or notifications. Retrying the original adjustment after undo never reapplies it.
+ * @summary Undo a consume or restock adjustment within five minutes
+ */
+export const undoInventoryAdjustment = async (id: number,
+    inventoryUndoInput: InventoryUndoInput, options?: Parameters<typeof customFetch>[1]): Promise<InventoryUndoResult> => {
+
+  return customFetch<InventoryUndoResult>(getUndoInventoryAdjustmentUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(inventoryUndoInput)
+  }
+);}
+
+
+
+
+
+export const getUndoInventoryAdjustmentMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof undoInventoryAdjustment>>, TError,{id: number;data: BodyType<InventoryUndoInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof undoInventoryAdjustment>>, TError,{id: number;data: BodyType<InventoryUndoInput>}, TContext> => {
+
+const mutationKey = ['undoInventoryAdjustment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof undoInventoryAdjustment>>, {id: number;data: BodyType<InventoryUndoInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  undoInventoryAdjustment(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UndoInventoryAdjustmentMutationResult = NonNullable<Awaited<ReturnType<typeof undoInventoryAdjustment>>>
+    export type UndoInventoryAdjustmentMutationBody = BodyType<InventoryUndoInput>
+    export type UndoInventoryAdjustmentMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Undo a consume or restock adjustment within five minutes
+ */
+export const useUndoInventoryAdjustment = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof undoInventoryAdjustment>>, TError,{id: number;data: BodyType<InventoryUndoInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof undoInventoryAdjustment>>,
+        TError,
+        {id: number;data: BodyType<InventoryUndoInput>},
+        TContext
+      > => {
+      return useMutation(getUndoInventoryAdjustmentMutationOptions(options));
     }
 
 export const getGetGrocerySuggestionsUrl = () => {
