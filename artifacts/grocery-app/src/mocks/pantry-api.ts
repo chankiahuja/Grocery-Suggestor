@@ -9,11 +9,16 @@ type State = {
   inventory: InventoryItem[];
   lists: ShoppingListWithItems[];
   applied: number[];
+  revisions?: Record<number, number>;
   adjustments?: {
     inventoryItemId: number;
     key: string;
     operation: "consume" | "restock";
     amount: number;
+    previousQuantity?: number;
+    revision?: number;
+    expiresAt?: number;
+    undone?: boolean;
   }[];
   nextId: number;
 };
@@ -168,6 +173,10 @@ export class MockPantryApi {
       return this.json(data, status);
     };
     const missing = () => this.json({ error: "Resource not found" }, 404);
+    const revise = (itemId: number) => {
+      const revisions = (this.state.revisions ??= {});
+      return (revisions[itemId] = (revisions[itemId] ?? 0) + 1);
+    };
 
     if (parts[0] === "healthz") return this.json({ status: "ok" });
     if (parts[0] === "suggestions") {
@@ -248,6 +257,25 @@ export class MockPantryApi {
       } else {
         const item = this.state.inventory.find((i) => i.id === id);
         if (!item) return missing();
+        if (parts.length === 3 && parts[2] === "undo" && method === "POST") {
+          const key = body?.idempotencyKey;
+          if (typeof key !== "string" || !key.trim() || key.length > 128)
+            return this.json({ error: "idempotencyKey must be 1 to 128 characters" }, 400);
+          const adjustment = this.state.adjustments?.find((entry) => entry.inventoryItemId === id && entry.key === key);
+          if (!adjustment) return missing();
+          if (adjustment.undone) return this.json({ status: "already_undone", inventory: item });
+          if (adjustment.revision === undefined || adjustment.previousQuantity === undefined || adjustment.expiresAt === undefined)
+            return this.json({ error: "Historical adjustment cannot be undone" }, 409);
+          if (Date.now() >= adjustment.expiresAt)
+            return this.json({ error: "Undo window expired" }, 410);
+          if (this.state.revisions?.[id] !== adjustment.revision)
+            return this.json({ error: "Inventory changed after adjustment" }, 409);
+          item.quantity = adjustment.previousQuantity;
+          item.updatedAt = now;
+          revise(id);
+          adjustment.undone = true;
+          return save({ status: "undone", inventory: item });
+        }
         if (parts.length === 3 && parts[2] === "adjust" && method === "POST") {
           const key = new Headers(init?.headers ?? request?.headers).get(
             "Idempotency-Key",
@@ -273,6 +301,7 @@ export class MockPantryApi {
           }
           if (operation === "consume" && amount > item.quantity)
             return this.json({ error: "amount exceeds available stock" }, 400);
+          const previousQuantity = item.quantity;
           item.quantity += operation === "consume" ? -amount : amount;
           item.updatedAt = now;
           (this.state.adjustments ??= []).push({
@@ -280,12 +309,16 @@ export class MockPantryApi {
             key,
             operation,
             amount,
+            previousQuantity,
+            revision: revise(id),
+            expiresAt: Date.now() + 5 * 60_000,
           });
           return save(item);
         }
         if (method === "GET") return this.json(item);
         if (method === "PATCH") {
           Object.assign(item, body, { updatedAt: now });
+          revise(id);
           return save(item);
         }
         if (method === "DELETE") {
@@ -345,6 +378,7 @@ export class MockPantryApi {
           if (row.purchased && item && !this.state.applied.includes(row.id)) {
             item.quantity += row.quantity;
             item.updatedAt = now;
+            revise(item.id);
             this.state.applied.push(row.id);
             count++;
           }

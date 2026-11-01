@@ -1,8 +1,6 @@
 import { useRef, useState } from "react";
 import {
   adjustInventoryItem,
-  getGetInventoryItemQueryKey,
-  getListInventoryItemsQueryKey,
   type InventoryItem,
   type InventoryAdjustmentInput,
 } from "@workspace/api-client-react";
@@ -19,7 +17,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useToast } from "@/hooks/use-toast";
+import { useAdjustmentFeedback } from "@/components/adjustment-feedback";
+import { refreshPantry } from "@/lib/refresh-pantry";
 
 export function InventoryAdjustmentDialog({
   item,
@@ -34,10 +33,14 @@ export function InventoryAdjustmentDialog({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const busy = useRef(false);
-  const attempt = useRef<{ key: string; amount: number } | null>(null);
+  const attempt = useRef<{
+    key: string;
+    amount: number;
+    expiresAt: number;
+  } | null>(null);
   const [retryRequired, setRetryRequired] = useState(false);
   const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const showFeedback = useAdjustmentFeedback();
   const title = operation === "consume" ? "Consume" : "Restock";
 
   async function submit(event: React.FormEvent) {
@@ -58,7 +61,11 @@ export function InventoryAdjustmentDialog({
     setError("");
     try {
       if (!attempt.current || attempt.current.amount !== value) {
-        attempt.current = { key: crypto.randomUUID(), amount: value };
+        attempt.current = {
+          key: crypto.randomUUID(),
+          amount: value,
+          expiresAt: Date.now() + 5 * 60_000,
+        };
       }
       const updated = await adjustInventoryItem(
         item.id,
@@ -67,21 +74,11 @@ export function InventoryAdjustmentDialog({
           headers: { "Idempotency-Key": attempt.current.key },
         },
       );
-      queryClient.setQueryData(getGetInventoryItemQueryKey(item.id), updated);
-      queryClient.setQueriesData<InventoryItem[]>(
-        { queryKey: getListInventoryItemsQueryKey() },
-        (items) =>
-          items?.map((existing) =>
-            existing.id === updated.id ? updated : existing,
-          ),
-      );
-      // Reconcile filtered lists (e.g. an item restocked above its threshold).
-      void queryClient.invalidateQueries({
-        queryKey: getListInventoryItemsQueryKey(),
-      });
-      toast({
-        title: operation === "consume" ? "Stock consumed" : "Stock restocked",
-        description: `${updated.name}: ${updated.quantity} ${updated.unit} available.`,
+      refreshPantry(queryClient, updated);
+      showFeedback({
+        item: updated,
+        key: attempt.current.key,
+        expiresAt: attempt.current.expiresAt,
       });
       onClose();
     } catch (cause) {
@@ -91,6 +88,7 @@ export function InventoryAdjustmentDialog({
         failure.status >= 500 ||
         (failure.status >= 200 && failure.status < 300);
       setRetryRequired(uncertain);
+      if (uncertain) refreshPantry(queryClient);
       if (!uncertain) attempt.current = null;
       setError(
         uncertain
