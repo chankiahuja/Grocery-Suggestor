@@ -1,6 +1,138 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { MockPantryApi } from "./pantry-api";
+import { MockPantryApi, seedState } from "./pantry-api";
+
+function adjust(
+  api: MockPantryApi,
+  body: unknown,
+  key: string | undefined = "adjustment-1",
+  id = 2,
+) {
+  return api.fetch(`/api/inventory/${id}/adjust`, {
+    method: "POST",
+    headers: key === undefined ? {} : { "Idempotency-Key": key },
+    body: JSON.stringify(body),
+  });
+}
+
+test("consume and restock adjust quantities, preserve item fields, and persist", async () => {
+  let saves = 0;
+  const api = new MockPantryApi(undefined, () => saves++);
+  const original = { ...api.state.inventory[1] };
+  api.state.inventory[1].updatedAt = "2000-01-01T00:00:00.000Z";
+  const consumed = await adjust(api, { operation: "consume", amount: 1.5 });
+  assert.equal(consumed.status, 200);
+  const item = await consumed.json();
+  assert.equal(item.quantity, 2.5);
+  assert.notEqual(item.updatedAt, "2000-01-01T00:00:00.000Z");
+  assert.deepEqual(item, { ...original, quantity: 2.5, updatedAt: item.updatedAt });
+  const restocked = await adjust(api, { operation: "restock", amount: 0.5 }, "restock");
+  assert.equal(restocked.status, 200);
+  assert.equal((await restocked.json()).quantity, 3);
+  const emptied = await adjust(api, { operation: "consume", amount: 3 }, "empty");
+  assert.equal(emptied.status, 200);
+  assert.equal((await emptied.json()).quantity, 0);
+  assert.equal(saves, 3);
+});
+
+test("invalid adjustments and insufficient stock leave state and keys unchanged", async () => {
+  let saves = 0;
+  const api = new MockPantryApi(undefined, () => saves++);
+  const before = JSON.stringify(api.state);
+  const bodies = [
+    {}, null, { operation: "replace", amount: 1 },
+    { operation: "CONSUME", amount: 1 },
+    ...[undefined, null, "1", true, 0, -1].map((amount) => ({ operation: "consume", amount })),
+    { operation: "consume", amount: 5 },
+  ];
+  for (const body of bodies) {
+    assert.equal((await adjust(api, body)).status, 400, JSON.stringify(body));
+  }
+  // JSON exponent overflow exercises non-finite numbers without JSON.stringify converting them to null.
+  for (const amount of ["1e309", "-1e309"]) {
+    const response = await api.fetch("/api/inventory/2/adjust", {
+      method: "POST",
+      headers: { "Idempotency-Key": "adjustment-1" },
+      body: `{"operation":"restock","amount":${amount}}`,
+    });
+    assert.equal(response.status, 400);
+  }
+  assert.equal(JSON.stringify(api.state), before);
+  assert.equal(saves, 0);
+  assert.equal((await adjust(api, { operation: "consume", amount: 1 })).status, 200);
+});
+
+test("adjustment keys are required, bounded, and read from Request or init headers", async () => {
+  const api = new MockPantryApi();
+  const body = { operation: "restock", amount: 1 };
+  for (const key of ["", "   ", "a".repeat(129)]) {
+    assert.equal((await adjust(api, body, key)).status, 400);
+  }
+  assert.equal((await api.fetch("/api/inventory/2/adjust", {
+    method: "POST", body: JSON.stringify(body),
+  })).status, 400);
+  assert.equal((await adjust(api, body, "a")).status, 200);
+  assert.equal((await adjust(api, body, "b".repeat(128))).status, 200);
+  const request = () => new Request("http://localhost/api/inventory/2/adjust", {
+    method: "POST",
+    headers: { "idempotency-key": "request-key" },
+    body: JSON.stringify(body),
+  });
+  assert.equal((await api.fetch(request())).status, 200);
+  assert.equal((await api.fetch(request())).status, 200);
+  assert.equal(api.state.inventory[1].quantity, 7);
+  assert.equal((await api.fetch(request(), {
+    headers: new Headers({ "IDEMPOTENCY-KEY": "override-key" }),
+  })).status, 200);
+  assert.equal(api.state.inventory[1].quantity, 8);
+});
+
+test("replay returns current inventory without a mutation and rejects conflicting payloads", async () => {
+  let saves = 0;
+  const api = new MockPantryApi(undefined, () => saves++);
+  const body = { operation: "consume", amount: 3 };
+  assert.equal((await adjust(api, body)).status, 200);
+  // A replay still succeeds when current stock can no longer cover the original amount.
+  assert.equal((await adjust(api, body)).status, 200);
+  assert.equal(saves, 1);
+  await api.fetch("/api/inventory/2", {
+    method: "PATCH", body: JSON.stringify({ quantity: 0, notes: "Changed later" }),
+  });
+  const before = JSON.stringify(api.state);
+  const replay = await adjust(api, body);
+  assert.equal(replay.status, 200);
+  assert.deepEqual(await replay.json(), api.state.inventory[1]);
+  for (const conflicting of [
+    { operation: "restock", amount: 3 },
+    { operation: "consume", amount: 2 },
+  ]) {
+    assert.equal((await adjust(api, conflicting)).status, 400);
+  }
+  assert.equal(JSON.stringify(api.state), before);
+  assert.equal(saves, 2);
+  // Keys belong to an item, so another item may use the same key independently.
+  assert.equal((await adjust(api, { operation: "restock", amount: 2 }, "adjustment-1", 1)).status, 200);
+  assert.equal(api.state.inventory[0].quantity, 2);
+  assert.equal((await adjust(api, body, "missing", 99999)).status, 404);
+});
+
+test("old demo state accepts adjustments and persisted keys survive a storage round trip", async () => {
+  const oldState = seedState();
+  assert.equal(oldState.adjustments, undefined);
+  let stored = JSON.stringify(oldState);
+  const api = new MockPantryApi(JSON.parse(stored), (state) => {
+    stored = JSON.stringify(state);
+  });
+  const body = { operation: "restock", amount: 2 };
+  assert.equal((await adjust(api, body)).status, 200);
+  let replaySaves = 0;
+  const reloaded = new MockPantryApi(JSON.parse(stored), () => replaySaves++);
+  const replay = await adjust(reloaded, body);
+  assert.equal(replay.status, 200);
+  assert.equal((await replay.json()).quantity, 6);
+  assert.equal(replaySaves, 0);
+  assert.equal((await adjust(reloaded, { ...body, amount: 3 })).status, 400);
+});
 
 test("demo shortage to shopping to restock is repeat-safe and persists changes", async () => {
   let saved = false;

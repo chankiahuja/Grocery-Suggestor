@@ -20,6 +20,7 @@ import type { InventoryItem } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import { InventoryItemDialog } from "@/components/inventory-item-dialog";
+import { InventoryAdjustmentDialog } from "@/components/inventory-adjustment-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,10 @@ export default function Inventory() {
   const [expiringSoonFilter, setExpiringSoonFilter] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | undefined>();
+  const [adjustment, setAdjustment] = useState<{
+    item: InventoryItem;
+    operation: "consume" | "restock";
+  } | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<InventoryItem | null>(null);
 
@@ -285,6 +290,31 @@ export default function Inventory() {
                           </Button>
                         </div>
                       </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={item.quantity === 0}
+                          aria-label={`Consume ${item.name}`}
+                          data-testid={`button-consume-${item.id}`}
+                          onClick={() =>
+                            setAdjustment({ item, operation: "consume" })
+                          }
+                        >
+                          Consume
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          aria-label={`Restock ${item.name}`}
+                          data-testid={`button-restock-${item.id}`}
+                          onClick={() =>
+                            setAdjustment({ item, operation: "restock" })
+                          }
+                        >
+                          Restock
+                        </Button>
+                      </div>
                     </div>
                   );
                 })}
@@ -305,6 +335,16 @@ export default function Inventory() {
         onOpenChange={setDialogOpen}
         item={editingItem}
       />
+      {adjustment && (
+        <InventoryAdjustmentDialog
+          item={
+            items?.find((item) => item.id === adjustment.item.id) ??
+            adjustment.item
+          }
+          operation={adjustment.operation}
+          onClose={() => setAdjustment(null)}
+        />
+      )}
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent data-testid="dialog-delete-confirm">

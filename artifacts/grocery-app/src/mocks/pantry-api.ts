@@ -9,6 +9,12 @@ type State = {
   inventory: InventoryItem[];
   lists: ShoppingListWithItems[];
   applied: number[];
+  adjustments?: {
+    inventoryItemId: number;
+    key: string;
+    operation: "consume" | "restock";
+    amount: number;
+  }[];
   nextId: number;
 };
 
@@ -242,6 +248,41 @@ export class MockPantryApi {
       } else {
         const item = this.state.inventory.find((i) => i.id === id);
         if (!item) return missing();
+        if (parts.length === 3 && parts[2] === "adjust" && method === "POST") {
+          const key = new Headers(init?.headers ?? request?.headers).get(
+            "Idempotency-Key",
+          );
+          if (!key?.trim() || key.length > 128)
+            return this.json({ error: "Idempotency-Key must be 1 to 128 characters" }, 400);
+          const operation = body?.operation;
+          const amount = body?.amount;
+          if (operation !== "consume" && operation !== "restock")
+            return this.json({ error: "operation must be consume or restock" }, 400);
+          if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0)
+            return this.json({ error: "amount must be greater than zero" }, 400);
+          const previous = this.state.adjustments?.find(
+            (entry) => entry.inventoryItemId === id && entry.key === key,
+          );
+          if (previous) {
+            if (previous.operation !== operation || previous.amount !== amount)
+              return this.json(
+                { error: "Idempotency-Key was already used for a different adjustment" },
+                400,
+              );
+            return this.json(item);
+          }
+          if (operation === "consume" && amount > item.quantity)
+            return this.json({ error: "amount exceeds available stock" }, 400);
+          item.quantity += operation === "consume" ? -amount : amount;
+          item.updatedAt = now;
+          (this.state.adjustments ??= []).push({
+            inventoryItemId: id,
+            key,
+            operation,
+            amount,
+          });
+          return save(item);
+        }
         if (method === "GET") return this.json(item);
         if (method === "PATCH") {
           Object.assign(item, body, { updatedAt: now });
