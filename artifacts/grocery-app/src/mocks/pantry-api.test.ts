@@ -2,6 +2,44 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { MockPantryApi, seedState } from "./pantry-api";
 
+function undo(api: MockPantryApi, key = "adjustment-1", id = 2) {
+  return api.fetch(`/api/inventory/${id}/undo`, { method: "POST", body: JSON.stringify({ idempotencyKey: key }) });
+}
+
+test("demo Undo persists and retries do not restore stock twice or reapply adjustments", async () => {
+  let saved = "";
+  const api = new MockPantryApi(undefined, (state) => { saved = JSON.stringify(state); });
+  await adjust(api, { operation: "consume", amount: 1 });
+  const first = await undo(api);
+  assert.equal((await first.json()).status, "undone");
+  assert.equal(api.state.inventory[1].quantity, 4);
+  const reloaded = new MockPantryApi(JSON.parse(saved));
+  assert.equal((await (await undo(reloaded)).json()).status, "already_undone");
+  await adjust(reloaded, { operation: "consume", amount: 1 });
+  assert.equal(reloaded.state.inventory[1].quantity, 4);
+});
+
+test("demo Undo rejects expired, historical, missing and intervening writes including ABA and purchases", async () => {
+  for (const change of ["expiry", "historical", "edit", "adjustment", "purchase"] as const) {
+    const api = new MockPantryApi();
+    await adjust(api, { operation: "restock", amount: 1 }, "adjustment-1", 1);
+    if (change === "expiry") api.state.adjustments![0].expiresAt = Date.now() - 1;
+    if (change === "historical") delete api.state.adjustments![0].revision;
+    if (change === "edit") {
+      for (const quantity of [2, 1]) await api.fetch("/api/inventory/1", { method: "PATCH", body: JSON.stringify({ quantity }) });
+    }
+    if (change === "adjustment") await adjust(api, { operation: "consume", amount: 1 }, "later", 1);
+    if (change === "purchase") {
+      await api.fetch("/api/shopping-lists/20/items/21", { method: "PATCH", body: JSON.stringify({ purchased: true }) });
+      await api.fetch("/api/shopping-lists/20/purchase", { method: "POST" });
+    }
+    const before = JSON.stringify(api.state);
+    assert.equal((await undo(api, "adjustment-1", 1)).status, change === "expiry" ? 410 : 409);
+    assert.equal(JSON.stringify(api.state), before);
+    assert.equal((await undo(api, "missing", 1)).status, 404);
+  }
+});
+
 function adjust(
   api: MockPantryApi,
   body: unknown,

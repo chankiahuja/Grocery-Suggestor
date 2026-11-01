@@ -9,6 +9,7 @@ import ShoppingListDetail from "@/pages/shopping-list-detail";
 import Auth from "@/pages/auth";
 import { Route, Switch, Redirect, Router as WouterRouter } from "wouter";
 import { LoginGate } from "@/lib/preview-access";
+import { AdjustmentFeedbackProvider } from "@/components/adjustment-feedback";
 
 const queryClient = new QueryClient();
 
@@ -32,7 +33,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <AppRoutes />
+          <AdjustmentFeedbackProvider><AppRoutes /></AdjustmentFeedbackProvider>
         </WouterRouter>
         <Toaster />
       </TooltipProvider>

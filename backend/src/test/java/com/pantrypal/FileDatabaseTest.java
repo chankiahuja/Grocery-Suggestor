@@ -14,7 +14,9 @@ class FileDatabaseTest {
         String url = "jdbc:h2:file:" + directory.resolve("pantry").toString().replace('\\', '/')
             + ";MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_ON_EXIT=FALSE";
         var flyway = Flyway.configure().dataSource(url, "sa", "").load();
-        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(1);
+        int pendingMigrations = flyway.info().pending().length;
+        assertThat(pendingMigrations).isPositive();
+        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(pendingMigrations);
         try (var connection = DriverManager.getConnection(url, "sa", "");
              var statement = connection.createStatement()) {
             statement.executeUpdate("INSERT INTO inventory_items (name, category, quantity, unit, min_threshold) VALUES ('Persistence check', 'Other', 3, 'pieces', 1)");

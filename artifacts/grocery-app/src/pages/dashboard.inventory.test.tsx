@@ -1347,7 +1347,7 @@ describe("inventory optional field clearing", () => {
     const { queryClient } = renderApp();
 
     await openInventory();
-    fireEvent.click(screen.getByTestId("button-edit-1"));
+    fireEvent.click(await screen.findByTestId("button-edit-1"));
     await screen.findByTestId("dialog-inventory-item");
     changeInput("input-item-expires", "");
     fireEvent.click(screen.getByTestId("button-save-item"));
