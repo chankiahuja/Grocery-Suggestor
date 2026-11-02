@@ -1,19 +1,131 @@
 # Architecture
 
+## Application overview
+
+PantryPal is a React application backed by one Spring Boot service and a relational database. Spring Boot serves both the built frontend and the API on port 8080. The diagram below shows the normal full-stack runtime.
+
+```mermaid
+flowchart TB
+    User["User"]
+
+    subgraph Browser["Browser: React and TypeScript"]
+        Screens["Dashboard, inventory and shopping lists"]
+        Feedback["Consume / Restock dialogs and Undo feedback"]
+        Queries["Generated API client and React Query cache"]
+        Bell["Notification bell"]
+        Stream["EventSource connection"]
+        Screens --> Queries
+        Screens --> Feedback --> Queries
+        Bell -->|Read suggestions; poll every 30 seconds| Queries
+        Stream -->|Invalidate queries| Queries
+    end
+
+    subgraph Spring["Spring Boot: port 8080"]
+        Static["React static assets and page-route fallback"]
+        Controller["REST controllers: /api"]
+        Service["PantryService: validation, suggestions and transactions"]
+        Repo["PantryRepository: parameterized JDBC queries"]
+        Events["NotificationEvents: after-commit listener"]
+        Scheduler["Scheduled stock and expiry check"]
+        Controller --> Service --> Repo
+        Service -.->|PantryChanged; delivered after commit| Events
+        Scheduler -->|Read current suggestions| Service
+        Scheduler -->|Alert changes or heartbeat| Events
+    end
+
+    DB[("H2 file locally OR PostgreSQL with postgres profile")]
+    Flyway["Flyway schema migrations"]
+    User --> Screens
+    Static -->|HTML, JavaScript and CSS| Screens
+    Queries -->|HTTP requests| Controller
+    Controller -->|JSON responses| Queries
+    Repo --> DB
+    Flyway --> DB
+    Events -->|SSE: /api/notifications/stream| Stream
+```
+
+The server owns validation and committed stock. React Query caches server responses and refetches dependent views after changes. SSE carries refresh signals; the notification bell recovers its alert contents from the suggestions API. There is no message broker or durable notification inbox.
+
+OpenAPI defines the REST contract and generates the TypeScript client; it does not generate the Spring backend. Database changes use new Flyway migrations. Historical Express/Drizzle packages are outside this runtime.
+
+## Pantry and shopping workflow
+
+```mermaid
+flowchart TD
+    Open["Open application"] --> Login["Login / signup design preview: demo OTP"]
+    Login --> Dashboard["Dashboard: quantities, stock and expiry attention"]
+    Dashboard --> Inventory["Inventory: add, edit or delete items"]
+    Inventory --> Adjust["Consume or Restock: enter amount in item units"]
+    Adjust --> Validate{"Valid amount and enough stock?"}
+    Validate -->|No| Error["Show validation error"]
+    Error --> Adjust
+    Validate -->|Yes| Commit["Commit atomic adjustment with retry key"]
+    Commit --> Feedback["Show confirmed quantity and bounded Undo"]
+    Feedback --> Undo{"User chooses Undo?"}
+    Undo -->|Yes| Eligible{"Within five minutes and no intervening write?"}
+    Eligible -->|Yes| Restore["Restore prior quantity once, transactionally"]
+    Eligible -->|No| Rejected["Explain expiry or conflict; keep newer stock"]
+
+    Dashboard --> Suggestions["Suggestions: out of stock, low stock or expiring soon"]
+    Suggestions --> Review["Review shopping quantities; exclude expiry-only reminders"]
+    Review --> Confirm{"Confirm selected items?"}
+    Confirm -->|No| Dashboard
+    Confirm -->|Yes| List["Create shopping list transactionally"]
+    List --> Purchased["Mark bought items and complete purchase"]
+    Purchased --> Restock["Restock linked purchased rows once in one transaction"]
+
+    Commit --> Refresh["Refresh inventory, dashboard, suggestions and notifications"]
+    Restore --> Refresh
+    Restock --> Refresh
+    Refresh --> Dashboard
+```
+
+The login/signup screen is a frontend design preview, not API authentication. Real accounts and household authorization remain separate work. Shopping-list generation revalidates selected items against current stock on the server. Purchase completion leaves unlinked manual shopping items out of inventory.
+
+## Adjustment transaction and refresh sequence
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as React UI and query cache
+    participant API as Spring controller and service
+    participant DB as Database
+    participant Events as After-commit listener
+
+    User->>UI: Consume or Restock an amount
+    UI->>API: POST adjustment with Idempotency-Key
+    API->>DB: Begin transaction and lock inventory row
+    API->>API: Validate operation, amount and stock
+    API->>DB: Look up item-scoped request key
+    alt Identical retry
+        DB-->>API: Existing adjustment
+        API->>DB: Read current inventory; finish without another write
+        API-->>UI: Current inventory; no duplicate adjustment
+    else Key reused with another payload
+        API-->>UI: Reject request without changing stock
+    else New valid adjustment
+        API->>DB: Update quantity and revision; save history and Undo expiry
+        API->>API: Publish transaction-bound PantryChanged event
+        API->>DB: Commit stock and history together
+        API->>Events: Deliver event after successful commit
+        Events-->>UI: SSE inventory_changed refresh signal
+        API-->>UI: Confirmed inventory response
+        UI->>UI: Refresh dependent queries and show Undo
+    end
+
+    Note over UI,Events: Response refresh works without SSE; the bell also polls suggestions
+    Note over API,DB: Rollback preserves stock/history and suppresses the transaction event
+```
+
+Undo is a separate transaction using the original adjustment key. It locks the inventory row, checks expiry and revision, and commits the restored quantity and used marker together. A successful retry reports `already_undone` without applying another change. The SSE signal and HTTP response are separate refresh paths; clients must not depend on their arrival order.
+
+## Runtime modes and implementation details
+
 The `/login` and `/signup` routes are frontend-only email-or-mobile/OTP design previews with scoped styling. Signup includes a required name held only in the form; it is cleared on success/navigation and never displayed in the workspace or persisted. They share a React component and in-memory form state, use no authentication API, and never persist email addresses or phone numbers or establish a session. A valid demo OTP clears the identifier/code and navigates straight to `/dashboard`, without an intermediate success screen. Every fresh page load replaces the initial URL with `/login` before rendering app screens. A memory-only preview gate allows app navigation after the demo code succeeds; reloading resets it. The dashboard lives at `/dashboard`. Unknown extensionless page URLs serve the React entry point, while missing APIs and assets retain 404s. This does not authenticate users or protect API access. Real OTP verification and accounts are a separate integration.
 
 An optional `dev:mock` frontend mode loads a browser-side REST adapter before React starts. It seeds relative-date pantry examples, persists demo edits in localStorage, and supports the existing inventory/suggestions/shopping flows. It does not connect to Spring, PostgreSQL or SSE. Normal development uses the architecture below.
 
-```text
-Browser -> Spring Boot embedded server :8080
-             |-- React static assets + client routes
-             |-- /api -> JDBC -> H2 file (local default)
-                               PostgreSQL :5432 (postgres profile)
-                    |
-            committed PantryChanged events
-                    |
-             SSE -> React Query refresh
-```
+The application overview above shows this runtime. Optional Vite development on port 5173 serves React with hot reload and proxies `/api`, including SSE, to Spring Boot on port 8080. The browser demo adapter is an alternative runtime using localStorage and does not contact Spring or a database.
 
 The frontend production build is included in the Spring classpath and executable JAR by Maven resources. `pnpm start` builds it before launching Spring; the Docker multi-stage build does both. Explicit client routes forward to `index.html`, while API endpoints and missing asset requests retain their normal HTTP behavior. Optional Vite development on :5173 proxies `/api` to Spring for hot reload.
 

@@ -6,6 +6,8 @@ The React theme adapts the supplied Pantry Pal design. Its logo, hero image and 
 
 The active backend is Java/Spring Boot in [backend](backend). The React/TypeScript app remains in [artifacts/grocery-app](artifacts/grocery-app). See [environment setup](docs/ENVIRONMENT.md) and [architecture](docs/ARCHITECTURE.md).
 
+For visual walkthroughs, see the [application architecture](docs/ARCHITECTURE.md#application-overview), [pantry and shopping workflow](docs/ARCHITECTURE.md#pantry-and-shopping-workflow), and [transaction sequence](docs/ARCHITECTURE.md#adjustment-transaction-and-refresh-sequence).
+
 ## Quick start
 
 ### Local application on port 8080 (embedded database)
