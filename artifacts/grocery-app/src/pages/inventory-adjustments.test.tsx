@@ -16,6 +16,7 @@ for (const key of [
   "navigator",
   "location",
   "history",
+  "localStorage",
   "HTMLElement",
   "HTMLInputElement",
   "HTMLButtonElement",
@@ -46,17 +47,21 @@ Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", {
   value: true,
 });
 dom.window.HTMLElement.prototype.scrollIntoView = () => {};
-const { cleanup, fireEvent, render, screen, waitFor } =
+const { cleanup, fireEvent, render, screen, waitFor, within } =
   await import("@testing-library/react");
 const { default: Inventory } = await import("./inventory");
 const { default: Dashboard } = await import("./dashboard");
 const { AdjustmentFeedbackProvider } =
   await import("../components/adjustment-feedback");
-const { getGetInventoryStatsQueryKey, getGetGrocerySuggestionsQueryKey } =
-  await import("@workspace/api-client-react");
+const {
+  getGetInventoryStatsQueryKey,
+  getGetGrocerySuggestionsQueryKey,
+  getGetInventoryItemQueryKey,
+} = await import("@workspace/api-client-react");
 const originalFetch = globalThis.fetch;
 afterEach(() => {
   cleanup();
+  localStorage.clear();
   globalThis.fetch = originalFetch;
 });
 function renderApp(path: string) {
@@ -80,6 +85,61 @@ function renderApp(path: string) {
 }
 
 describe("quick inventory adjustments", () => {
+  it("refreshes the visible notification snapshot and item detail after restock and Undo without SSE", async () => {
+    const api = new MockPantryApi();
+    globalThis.fetch = api.fetch;
+    const { queryClient } = renderApp("/inventory");
+    try {
+      await screen.findByTestId("button-restock-1");
+      queryClient.setQueryData(getGetInventoryItemQueryKey(1), api.state.inventory[0]);
+      fireEvent.click(screen.getByTestId("notification-bell"));
+      await within(screen.getByTestId("notification-panel")).findByText("Milk");
+      fireEvent.click(screen.getByTestId("notification-bell"));
+      fireEvent.click(screen.getByTestId("button-restock-1"));
+      fireEvent.change(screen.getByLabelText("Amount (litres)"), { target: { value: "3" } });
+      fireEvent.click(screen.getByRole("button", { name: "Restock" }));
+      const undo = await screen.findByRole("button", { name: "Undo Milk" });
+      assert.equal(queryClient.getQueryData<{ quantity: number }>(getGetInventoryItemQueryKey(1))?.quantity, 3);
+      assert.equal(queryClient.getQueryState(getGetInventoryItemQueryKey(1))?.isInvalidated, true);
+      fireEvent.click(screen.getByTestId("notification-bell"));
+      await waitFor(() => assert.equal(within(screen.getByTestId("notification-panel")).queryByText("Milk"), null));
+      fireEvent.click(undo);
+      await screen.findByText(/Milk: adjustment undone/);
+      await within(screen.getByTestId("notification-panel")).findByText("Milk");
+      assert.equal(queryClient.getQueryData<{ quantity: number }>(getGetInventoryItemQueryKey(1))?.quantity, 0);
+    } finally { queryClient.clear(); }
+  });
+
+  it("shows a server rejection without success feedback and permits a corrected request with a fresh key", async () => {
+    const api = new MockPantryApi();
+    const keys: string[] = [];
+    globalThis.fetch = async (input, init) => {
+      if (String(input).endsWith("/adjust")) {
+        keys.push(new Headers(init?.headers).get("Idempotency-Key")!);
+        if (keys.length === 1) return new Response(JSON.stringify({ error: "amount exceeds available stock" }), {
+          status: 400, headers: { "Content-Type": "application/json" },
+        });
+      }
+      return api.fetch(input, init);
+    };
+    const { queryClient } = renderApp("/inventory");
+    try {
+      fireEvent.click(await screen.findByTestId("button-consume-2"));
+      fireEvent.click(screen.getByRole("button", { name: "Consume" }));
+      assert.match((await screen.findByRole("alert")).textContent!, /amount exceeds available stock/);
+      assert.equal(screen.queryByRole("button", { name: "Undo Eggs" }), null);
+      assert.equal(api.state.inventory[1].quantity, 4);
+      assert.equal((screen.getByLabelText("Amount (each)") as HTMLInputElement).disabled, false);
+      fireEvent.change(screen.getByLabelText("Amount (each)"), { target: { value: "0.5" } });
+      fireEvent.click(screen.getByRole("button", { name: "Consume" }));
+      await screen.findByRole("button", { name: "Undo Eggs" });
+      assert.equal(keys.length, 2);
+      assert.ok(keys.every(Boolean));
+      assert.notEqual(keys[0], keys[1]);
+      assert.equal(api.state.inventory[1].quantity, 3.5);
+    } finally { queryClient.clear(); }
+  });
+
   async function consumeEggs() {
     fireEvent.click(await screen.findByTestId("button-consume-2"));
     const consumeSubmit = screen.getByRole("button", { name: "Consume" });
