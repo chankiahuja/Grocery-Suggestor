@@ -36,6 +36,8 @@ Open http://localhost:5173. Demo mode includes sample pantry items, stock and ex
 
 ### Email sign-in and signup
 
+See the [email OTP authentication flow](docs/EMAIL-OTP-AUTH-FLOW.md) for request and verification diagrams, session handling, and edge cases.
+
 Normal full-stack mode uses real email OTP and persistent server-side sessions. Start Mailpit locally (SMTP on `localhost:1025`, inbox at http://localhost:8025), then start PantryPal. Choose **Email address**, enter a valid email and request a code. Mailpit captures the message; enter its six-digit code in PantryPal. Signup requires a name and creates an account after verification. Codes expire after five minutes, can be used once, and are subject to server-enforced resend and attempt limits. Signed-in sessions survive page reloads and server restarts through the database; logout invalidates the session. Pantry and shopping API requests require a session. Data remains shared among authenticated users until GS-15 adds household isolation.
 
 `dev:mock` keeps the browser-only OTP preview with code `123456` and localStorage pantry data. Its navigation gate does not authenticate against Spring. In full-stack mode, **Mobile number** remains an explicitly unauthenticated preview; use email for account access. The fixed demo code cannot authenticate against the backend.
