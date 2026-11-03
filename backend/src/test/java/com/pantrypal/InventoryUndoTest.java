@@ -19,7 +19,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest
-@AutoConfigureMockMvc
+@AutoConfigureMockMvc(addFilters=false) // Transaction behavior is separate from AuthFlowTest's security checks.
 class InventoryUndoTest {
     @Autowired PantryService service;
     @Autowired PantryRepository repo;

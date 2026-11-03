@@ -1,7 +1,16 @@
 spring:
+  mail:
+    host: localhost
+    port: 1025
+  session:
+    jdbc:
+      initialize-schema: never
   datasource:
     url: jdbc:h2:mem:pantry;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE
     username: sa
     password:
 pantrypal:
+  auth:
+    cookie-secure: false
+    mail-from: PantryPal <no-reply@pantrypal.test>
   expiry-check-ms: 3600000

@@ -16,7 +16,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest
-@AutoConfigureMockMvc
+@AutoConfigureMockMvc(addFilters=false) // Business-flow tests; AuthFlowTest exercises the real security chain.
 @Transactional
 class PantryFlowTest {
     @Autowired PantryService service;

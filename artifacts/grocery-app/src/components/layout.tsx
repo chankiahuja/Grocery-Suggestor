@@ -4,11 +4,14 @@ import { cn } from "@/lib/utils";
 import { NotificationCenter } from "@/components/notification-center";
 import { useLogoutPreview } from "@/lib/preview-access";
 import { useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location, navigate] = useLocation();
   const logout = useLogoutPreview();
   const queryClient = useQueryClient();
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState("");
   const navItems = [
     { path: "/dashboard", label: "Dashboard", icon: Home },
     { path: "/inventory", label: "Inventory", icon: Package },
@@ -62,14 +65,21 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <button
               type="button"
               className="pantry-sign-in"
-              onClick={() => {
-                logout();
-                queryClient.clear();
-                navigate("/login", { replace: true });
+              disabled={loggingOut}
+              onClick={async () => {
+                setLoggingOut(true);
+                setLogoutError("");
+                try {
+                  await logout();
+                  queryClient.clear();
+                  navigate("/login", { replace: true });
+                } catch { setLogoutError("Logout could not be confirmed. Please try again."); }
+                finally { setLoggingOut(false); }
               }}
             >
               Logout
             </button>
+            {logoutError && <span role="alert">{logoutError}</span>}
             <span className="pantry-household">
               <Leaf className="h-4 w-4" /> My household
             </span>

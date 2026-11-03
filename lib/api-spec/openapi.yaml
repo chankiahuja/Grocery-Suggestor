@@ -3,7 +3,13 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: Grocery Suggester API
+  description: Grocery Suggester API with email OTP authentication and CSRF-protected sessions.
+security:
+  - SessionCookie: []
+x-authentication-notes: >-
+  API access requires a session except for health and auth endpoints. Obtain a CSRF token
+  from GET /auth/session and send it as X-CSRF-TOKEN on POST/PATCH/DELETE, including auth
+  writes. Refresh the token after verification/logout. Production requires HTTPS and Secure cookies.
 servers:
   - url: /api
     description: Base API path
@@ -17,6 +23,91 @@ tags:
   - name: shopping-lists
     description: Shopping list management
 paths:
+  /auth/session:
+    get:
+      operationId: getAuthSession
+      tags: [auth]
+      security: []
+      summary: Restore the session and obtain a CSRF token
+      responses:
+        "200":
+          description: Current account or anonymous session; never cache this response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSession"
+  /auth/code:
+    post:
+      operationId: requestEmailCode
+      tags: [auth]
+      security:
+        - CsrfToken: []
+      summary: Send an expiring single-use email code; server enforces request limits and resend cooldown
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmailCodeRequest"
+      responses:
+        "200":
+          description: Code delivered to the configured email transport
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailChallenge"
+        "400":
+          description: Invalid email, intent or signup name
+        "403":
+          description: Missing or invalid CSRF token
+        "429":
+          description: Request limit or resend cooldown exceeded
+        "503":
+          description: Delivery failed; challenge invalidated
+  /auth/verify:
+    post:
+      operationId: verifyEmailCode
+      tags: [auth]
+      security:
+        - CsrfToken: []
+      summary: Verify a code, create an account for signup or sign in an existing account for login, and rotate the session and CSRF token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmailVerification"
+      responses:
+        "200":
+          description: Authenticated session; session credential is an HttpOnly cookie
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSession"
+        "400":
+          description: Invalid, superseded or reused code, or login without an existing account
+        "403":
+          description: Missing or invalid CSRF token
+        "410":
+          description: Expired code
+        "429":
+          description: Attempt limit exceeded
+  /auth/logout:
+    post:
+      operationId: logoutSession
+      tags: [auth]
+      security:
+        - CsrfToken: []
+      summary: Invalidate the server session and return a fresh anonymous CSRF token
+      responses:
+        "200":
+          description: Signed out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSession"
+        "403":
+          description: Missing or invalid CSRF token
   /notifications/stream:
     get:
       operationId: streamPantryNotifications
@@ -32,6 +123,7 @@ paths:
                 type: string
   /healthz:
     get:
+      security: []
       operationId: healthCheck
       tags: [health]
       summary: Health check
@@ -477,7 +569,77 @@ paths:
                 $ref: "#/components/schemas/PurchaseResult"
 
 components:
+  securitySchemes:
+    SessionCookie:
+      type: apiKey
+      in: cookie
+      name: PANTRYPAL_SESSION
+    CsrfToken:
+      type: apiKey
+      in: header
+      name: X-CSRF-TOKEN
   schemas:
+    AuthAccount:
+      type: object
+      required: [id, email, name]
+      properties:
+        id:
+          type: integer
+          format: int64
+        email:
+          type: string
+          format: email
+        name:
+          type: [string, "null"]
+    AuthSession:
+      type: object
+      required: [authenticated, account, csrfToken]
+      properties:
+        authenticated:
+          type: boolean
+        account:
+          oneOf:
+            - $ref: "#/components/schemas/AuthAccount"
+            - type: "null"
+        csrfToken:
+          type: string
+    EmailCodeRequest:
+      type: object
+      required: [email, intent]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        intent:
+          type: string
+          enum: [login, signup]
+        name:
+          type: string
+          maxLength: 100
+          description: Required for signup; never changes the name of an existing account
+    EmailChallenge:
+      type: object
+      required: [challengeId, expiresAt, resendAt]
+      properties:
+        challengeId:
+          type: string
+        expiresAt:
+          type: string
+        resendAt:
+          type: string
+    EmailVerification:
+      type: object
+      required: [email, challengeId, code]
+      properties:
+        email:
+          type: string
+          format: email
+        challengeId:
+          type: string
+        code:
+          type: string
+          pattern: '^[0-9]{6}$'
     HealthStatus:
       type: object
       properties:

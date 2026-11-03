@@ -9,7 +9,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest
-@AutoConfigureMockMvc
+@AutoConfigureMockMvc(addFilters=false) // Routing only; API protection is checked by AuthFlowTest.
 class FrontendRoutingTest {
     @Autowired MockMvc mvc;
 

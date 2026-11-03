@@ -25,6 +25,18 @@ Copy [`.env.example`](../.env.example) to `.env` to override Compose credentials
 | PORT | 5173 | Vite |
 | BASE_PATH | / | Vite |
 | API_TARGET | http://localhost:8080 | Vite proxy |
+| MAIL_HOST / MAIL_PORT | localhost / 1025 | Spring SMTP transport; local Mailpit defaults |
+| MAIL_FROM | PantryPal <no-reply@pantrypal.test> | Disposable local sender; configure a verified sender for real delivery |
+| MAIL_USERNAME / MAIL_PASSWORD | empty | SMTP credentials when using a provider |
+| MAIL_SMTP_AUTH / MAIL_STARTTLS | false / false | Enable for a provider that requires them |
+| AUTH_COOKIE_SECURE | false in local profile; true otherwise | Secure session-cookie flag; set true behind HTTPS |
+| AUTH_OTP_SECRET | random process-local if empty | Set a secret of at least 32 bytes to keep pending codes valid across restarts |
+| AUTH_OTP_LIFETIME_SECONDS / AUTH_RESEND_COOLDOWN_SECONDS / AUTH_MAX_ATTEMPTS | 300 / 30 / 5 | Server-side code lifetime, resend delay, per-code attempt cap |
+| DEMO_SEED_EMAIL | prompt | Optional email used by the authenticated `seed:demo` command |
+
+For native Windows development, run your installed Mailpit executable with `--listen 127.0.0.1:8025 --smtp 127.0.0.1:1025`, then open http://localhost:8025 to read verification codes. Full-stack sign-in requires this SMTP service when the default `MAIL_HOST`/`MAIL_PORT` are used. Docker Compose runs its own Mailpit service at the same host ports and uses `mailpit:1025` inside its network; stop native Mailpit before starting Compose to avoid port conflicts. The browser-only `dev:mock` mode still uses code `123456` without sending mail or creating a server session.
+
+Normal mode issues an HttpOnly, SameSite=Lax session cookie and a CSRF token returned by `GET /api/auth/session`. Session attributes are stored through Spring Session JDBC; Flyway creates the tables. Cookies are Secure by default outside the `local` profile. Serve a deployed app over HTTPS, keep `AUTH_COOKIE_SECURE=true`, and configure SMTP credentials only through environment variables. The local account database still shares inventory between signed-in accounts until GS-15 is implemented. A missing `AUTH_OTP_SECRET` invalidates outstanding codes on backend restart, while signed-in sessions continue to work.
 
 The default full-stack application uses Spring Boot's embedded server on http://localhost:8080 for React assets and `/api`, including SSE. Maven includes `artifacts/grocery-app/dist/public` as classpath static resources; build React before running Maven directly. Docker Compose builds both frontend and backend from the repository root. Use `docker build -f backend/Dockerfile .` for a standalone image build.
 
@@ -52,4 +64,4 @@ For PostgreSQL, set `$env:SPRING_PROFILES_ACTIVE = 'postgres'` and configure `DB
 - No alerts: add a pantry item with quantity zero or an expiry within seven days. The SSE stream is `/api/notifications/stream`; suggestions are the recoverable alert snapshot.
 - Browser notifications require explicit permission. In-app bell alerts work without it.
 
-Prototype limits: shared household data without accounts; Spring events and SSE are process-local and not durable. Reconnects and polling recover current stock alerts; purchase events are cache refresh signals, not a historical notification inbox.
+Prototype limits: email accounts and sessions exist, but pantry and shopping data remain shared until GS-15 adds household authorization; Spring events and SSE are process-local and not durable. Reconnects and polling recover current stock alerts; purchase events are cache refresh signals, not a historical notification inbox.

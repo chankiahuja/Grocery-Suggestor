@@ -19,13 +19,13 @@ npx pnpm@10.26.1 install
 npx pnpm@10.26.1 start
 ```
 
-Open http://localhost:8080. Spring Boot serves React and the real API using embedded, file-backed H2. No Docker or separate database is required. Flyway creates the schema on first startup. Pantry and shopping data survive restarts in `backend/data/pantrypal.mv.db` (ignored by Git). This starts with an empty pantry; it does not import browser demo data. Stop with Ctrl+C. Restart the command after frontend changes.
+Open http://localhost:8080. Start Mailpit for email sign-in as described below. Spring Boot serves React and the real API using embedded, file-backed H2. No Docker or separate database is required. Flyway creates the schema on first startup. Pantry and shopping data survive restarts in `backend/data/pantrypal.mv.db` (ignored by Git). This starts with an empty pantry; it does not import browser demo data. Stop with Ctrl+C. Restart the command after frontend changes.
 
 The `local` Spring profile is the default. Set `PANTRYPAL_DATA_DIR` to an absolute directory to choose a stable database location when launching from different working directories; otherwise `./data` is relative to the Java process. Set `SPRING_PROFILES_ACTIVE=postgres` and the `DB_URL`, `DB_USER`, `DB_PASSWORD` variables to use PostgreSQL instead.
 
 ### Frontend demo (no backend or database)
 
-To add the same sample pantry and Weekend groceries list to the running Spring Boot app on port 8080, run `npx pnpm@10.26.1 seed:demo` from the repository root. This explicit local command reuses the browser demo dataset, adds missing examples through the API, and preserves existing quantities and purchase progress when repeated. It does not import browser localStorage. H2 retains these records across restarts; samples are not automatically recreated when you delete them. Expiry dates for newly added examples are relative to the day you run the command.
+To add the same sample pantry and Weekend groceries list to the running Spring Boot app on port 8080, run `npx pnpm@10.26.1 seed:demo` from the repository root after starting Mailpit. This explicit local command reuses the browser demo dataset, adds missing examples through the API, and preserves existing quantities and purchase progress when repeated. It does not import browser localStorage. H2 retains these records across restarts; samples are not automatically recreated when you delete them. Expiry dates for newly added examples are relative to the day you run the command.
 
 ```sh
 npx pnpm@10.26.1 install
@@ -34,9 +34,13 @@ npx pnpm@10.26.1 dev:mock
 
 Open http://localhost:5173. Demo mode includes sample pantry items, stock and expiry alerts, and a shopping list. Add/edit/delete items, generate lists, and complete purchases. Changes stay in this browser; **Reset demo data** restores the samples. Sample expiry dates are relative to the day the demo is first seeded. This is local sample data, not an import of the former Replit database.
 
-### Sign-in/sign-up design preview
+### Email sign-in and signup
 
-Every fresh load opens `/login`; use **Create account** to switch to signup. Signup requires a name, held only in the form and cleared on success or when leaving the page. The name is not stored, sent to an API, or shown on Dashboard or other app screens. The sage/ivory theme is maintained within the React app. Both forms support **Mobile number** or **Email address**: enter a 10-digit example number or a valid-format email, then use demo code **123456**. Successful verification opens the dashboard directly, without a confirmation screen. Codes expire after five minutes; resend has a 30-second cooldown. Email addresses, phone numbers and codes stay in component memory and are cleared on success or when leaving the page. No SMS or email is sent, account created, or authenticated session established. Every fresh page load opens `/login`, including direct links to dashboard, inventory, signup, or unknown page URLs. Completing the OTP preview unlocks navigation to `/dashboard` in memory until the page reloads. This is a frontend navigation gate, not API authentication. All page styles and assets are maintained in the React app.
+Normal full-stack mode uses real email OTP and persistent server-side sessions. Start Mailpit locally (SMTP on `localhost:1025`, inbox at http://localhost:8025), then start PantryPal. Choose **Email address**, enter a valid email and request a code. Mailpit captures the message; enter its six-digit code in PantryPal. Signup requires a name and creates an account after verification. Codes expire after five minutes, can be used once, and are subject to server-enforced resend and attempt limits. Signed-in sessions survive page reloads and server restarts through the database; logout invalidates the session. Pantry and shopping API requests require a session. Data remains shared among authenticated users until GS-15 adds household isolation.
+
+`dev:mock` keeps the browser-only OTP preview with code `123456` and localStorage pantry data. Its navigation gate does not authenticate against Spring. In full-stack mode, **Mobile number** remains an explicitly unauthenticated preview; use email for account access. The fixed demo code cannot authenticate against the backend.
+
+The `seed:demo` command requests a local email code, prompts for the code shown in Mailpit and then seeds through an authenticated session. Optionally set `DEMO_SEED_EMAIL` to skip the email prompt. See [environment setup](docs/ENVIRONMENT.md) for mail and session settings.
 
 ### Optional PostgreSQL setup with Docker
 

@@ -17,6 +17,12 @@ const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 
 let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
+let _csrfToken: string | null = null;
+let _onUnauthorized: (() => void) | null = null;
+
+/** Browser session credentials stay in HttpOnly cookies; only the CSRF token is held in memory. */
+export function setCsrfToken(token: string | null): void { _csrfToken = token; }
+export function setUnauthorizedHandler(handler: (() => void) | null): void { _onUnauthorized = handler; }
 
 /**
  * Set a base URL that is prepended to every relative request URL
@@ -360,9 +366,14 @@ export async function customFetch<T = unknown>(
 
   const requestInfo = { method, url: resolveUrl(input) };
 
-  const response = await fetch(input, { ...init, method, headers });
+  if (_csrfToken && !["GET", "HEAD", "OPTIONS"].includes(method)) {
+    headers.set("X-CSRF-TOKEN", _csrfToken);
+  }
+
+  const response = await fetch(input, { credentials: "same-origin", ...init, method, headers });
 
   if (!response.ok) {
+    if (response.status === 401) _onUnauthorized?.();
     const errorData = await parseErrorBody(response, method);
     throw new ApiError(response, errorData, requestInfo);
   }

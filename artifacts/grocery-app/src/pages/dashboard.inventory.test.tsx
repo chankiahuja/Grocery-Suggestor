@@ -68,7 +68,7 @@ const [
   { default: Inventory },
   { default: ShoppingLists },
   { default: ShoppingListDetail },
-  { default: Auth },
+  { PreviewAuth: Auth },
   { AppRoutes },
 ] = await Promise.all([
   import("./dashboard"),
@@ -467,14 +467,18 @@ describe("login landing routes", () => {
         throw new Error("Landing must not request pantry data");
       };
       const location = memoryLocation({ path });
+      const queryClient = new QueryClient();
       render(
-        <Router hook={location.hook}>
-          <AppRoutes />
-        </Router>,
+        <QueryClientProvider client={queryClient}>
+          <Router hook={location.hook}>
+            <AppRoutes preview />
+          </Router>
+        </QueryClientProvider>,
       );
       await screen.findByRole("heading", { name: "Welcome home." });
       assert.equal(screen.queryByRole("heading", { name: "Dashboard" }), null);
       assert.equal(screen.queryByRole("link", { name: "Inventory" }), null);
+      queryClient.clear();
     });
   }
 
@@ -489,7 +493,7 @@ describe("login landing routes", () => {
       render(
         <QueryClientProvider client={queryClient}>
           <Router hook={location.hook}>
-            <AppRoutes />
+            <AppRoutes preview />
           </Router>
         </QueryClientProvider>,
       );
@@ -529,7 +533,7 @@ describe("logout", () => {
     render(
       <QueryClientProvider client={queryClient}>
         <Router hook={location.hook}>
-          <AppRoutes />
+          <AppRoutes preview />
         </Router>
       </QueryClientProvider>,
     );
@@ -627,7 +631,7 @@ describe("mobile sign-in and sign-up preview", () => {
     assert.equal(screen.queryByLabelText("Verification code"), null);
     fireEvent.click(screen.getByRole("button", { name: "Logout" }));
     assert.equal(
-      (screen.getByLabelText("Mobile number") as HTMLInputElement).value,
+      ((await screen.findByLabelText("Mobile number")) as HTMLInputElement).value,
       "",
     );
     queryClient.clear();
@@ -735,7 +739,7 @@ describe("email OTP preview", () => {
       render(
         <QueryClientProvider client={queryClient}>
           <Router hook={location.hook}>
-            <AppRoutes />
+            <AppRoutes preview />
           </Router>
         </QueryClientProvider>,
       );
