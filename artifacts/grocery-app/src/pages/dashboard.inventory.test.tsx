@@ -169,6 +169,9 @@ class GroceryApiMock {
           (item) => item.quantity > 0 && item.quantity <= item.minThreshold,
         );
       }
+      if (url.searchParams.get("outOfStock") === "true") {
+        items = items.filter((item) => item.quantity === 0);
+      }
       return this.json(items);
     }
 
@@ -1290,6 +1293,52 @@ describe("dashboard inventory attention refresh", () => {
     );
 
     queryClient.clear();
+  });
+});
+
+describe("stock count navigation", () => {
+  it("opens matching inventory filters from dashboard counts", async () => {
+    const api = new MockPantryApi();
+    globalThis.fetch = api.fetch;
+    const { queryClient } = renderApp();
+    try {
+      await screen.findByTestId("stat-low-stock");
+      assert.equal(screen.getByRole("link", { name: "View Total Items in inventory" }).getAttribute("href"), "/inventory");
+      assert.equal(screen.getByRole("link", { name: "View Expiring Soon in inventory" }).getAttribute("href"), "/inventory?stock=expiring");
+
+      fireEvent.click(screen.getByRole("link", { name: "View Low Stock in inventory" }));
+      await waitFor(() => assert.equal(screen.getByRole("button", { name: "Low Stock" }).getAttribute("aria-pressed"), "true"));
+      await screen.findByText("4 Items");
+      assert.equal(screen.queryByTestId("inventory-item-1"), null);
+
+      await openDashboard();
+      fireEvent.click(screen.getByRole("link", { name: "View Out of Stock in inventory" }));
+      await waitFor(() => assert.equal(screen.getByRole("button", { name: "Out of Stock" }).getAttribute("aria-pressed"), "true"));
+      await screen.findByText("2 Items");
+      assert.ok(screen.getByTestId("inventory-item-1"));
+      assert.ok(screen.getByTestId("inventory-item-9"));
+    } finally { queryClient.clear(); }
+  });
+  it("restores stock and category from a direct URL and preserves category when switching stock", async () => {
+    const api = new MockPantryApi();
+    globalThis.fetch = api.fetch;
+    const { queryClient } = renderApp("/inventory?stock=out&category=Dairy");
+    try {
+      await screen.findByText("1 Items");
+      assert.equal(screen.getByRole("button", { name: "Out of Stock" }).getAttribute("aria-pressed"), "true");
+      assert.ok(screen.getByTestId("inventory-item-1"));
+      fireEvent.click(screen.getByRole("button", { name: "Low Stock" }));
+      await waitFor(() => assert.equal(screen.getByRole("button", { name: "Low Stock" }).getAttribute("aria-pressed"), "true"));
+      await screen.findByText("1 Items");
+      assert.ok(screen.getByTestId("inventory-item-2"));
+      assert.equal(screen.queryByTestId("inventory-item-1"), null);
+      fireEvent.click(screen.getByRole("button", { name: "Produce" }));
+      await waitFor(() => assert.ok(screen.getByTestId("inventory-item-5")));
+      fireEvent.click(screen.getByRole("button", { name: "Out of Stock" }));
+      await screen.findByText("0 Items");
+      fireEvent.click(screen.getByRole("button", { name: "Produce" }));
+      await screen.findByText("2 Items");
+    } finally { queryClient.clear(); }
   });
 });
 

@@ -10,9 +10,10 @@ public class PantryController {
     final PantryService service;
     public PantryController(PantryService service) { this.service = service; }
     @GetMapping("/healthz") public Object health() { return Map.of("status", "ok"); }
-    @GetMapping("/inventory") public Object inventory(@RequestParam(required=false) String category, @RequestParam(required=false) Boolean lowStock) {
+    @GetMapping("/inventory") public Object inventory(@RequestParam(required=false) String category, @RequestParam(required=false) Boolean lowStock, @RequestParam(required=false) Boolean outOfStock) {
         return service.inventory().stream().filter(i -> category == null || category.equals(i.get("category")))
-            .filter(i -> !Boolean.TRUE.equals(lowStock) || PantryService.number(i,"quantity") <= PantryService.number(i,"minThreshold")).toList();
+            .filter(i -> !Boolean.TRUE.equals(lowStock) || (PantryService.number(i,"quantity") > 0 && PantryService.number(i,"quantity") <= PantryService.number(i,"minThreshold")))
+            .filter(i -> !Boolean.TRUE.equals(outOfStock) || PantryService.number(i,"quantity") == 0).toList();
     }
     @GetMapping("/inventory/stats") public Object stats() { return service.stats(); }
     @GetMapping("/inventory/{id}") public Object inventory(@PathVariable long id) { return service.inventory(id); }

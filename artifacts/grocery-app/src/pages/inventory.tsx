@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { useSearch } from "wouter";
+import { useState } from "react";
+import { useLocation, useSearch } from "wouter";
 import {
   Search,
   Plus,
@@ -8,6 +8,7 @@ import {
   Trash2,
   Filter,
   Clock,
+  CircleX,
 } from "lucide-react";
 import {
   useListInventoryItems,
@@ -41,12 +42,20 @@ import { isExpiringSoon } from "@/lib/category-attention";
 
 export default function Inventory() {
   const searchParams = useSearch();
+  const [, setLocation] = useLocation();
   const [search, setSearch] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(() =>
-    new URLSearchParams(window.location.search).get("category"),
-  );
-  const [lowStockFilter, setLowStockFilter] = useState(false);
-  const [expiringSoonFilter, setExpiringSoonFilter] = useState(false);
+  const filters = new URLSearchParams(searchParams);
+  const selectedCategory = filters.get("category");
+  const selectedStock = filters.get("stock");
+  const stockFilter = selectedStock === "low" || selectedStock === "out" || selectedStock === "expiring"
+    ? selectedStock : null;
+  const updateFilter = (key: "category" | "stock", value: string | null) => {
+    const next = new URLSearchParams(searchParams);
+    if (value === null) next.delete(key);
+    else next.set(key, value);
+    const query = next.toString();
+    setLocation(`/inventory${query ? `?${query}` : ""}`);
+  };
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | undefined>();
   const [adjustment, setAdjustment] = useState<{
@@ -59,17 +68,14 @@ export default function Inventory() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  useEffect(() => {
-    setSelectedCategory(new URLSearchParams(searchParams).get("category"));
-  }, [searchParams]);
-
   const { data: items, isLoading } = useListInventoryItems(
-    lowStockFilter ? { lowStock: true } : undefined,
+    stockFilter === "low" ? { lowStock: true } : stockFilter === "out" ? { outOfStock: true } : undefined,
   );
+  const { data: allItems } = useListInventoryItems();
   const deleteItem = useDeleteInventoryItem();
 
-  const categories = items
-    ? Array.from(new Set(items.map((item) => item.category)))
+  const categories = allItems
+    ? Array.from(new Set(allItems.map((item) => item.category)))
     : [];
 
   const filteredItems = items?.filter((item) => {
@@ -80,7 +86,7 @@ export default function Inventory() {
       ? item.category === selectedCategory
       : true;
     const matchesExpiration =
-      !expiringSoonFilter || isExpiringSoon(item.expiresAt);
+      stockFilter !== "expiring" || isExpiringSoon(item.expiresAt);
     return matchesSearch && matchesCategory && matchesExpiration;
   });
 
@@ -161,20 +167,31 @@ export default function Inventory() {
               </div>
               <div className="flex gap-2 flex-wrap">
                 <Button
-                  variant={lowStockFilter ? "default" : "outline"}
+                  variant={stockFilter === "low" ? "default" : "outline"}
                   size="sm"
-                  onClick={() => setLowStockFilter(!lowStockFilter)}
+                  onClick={() => updateFilter("stock", stockFilter === "low" ? null : "low")}
                   data-testid="filter-low-stock"
+                  aria-pressed={stockFilter === "low"}
                 >
                   <Filter className="h-4 w-4 mr-2" />
                   Low Stock
                 </Button>
                 <Button
-                  variant={expiringSoonFilter ? "default" : "outline"}
+                  variant={stockFilter === "out" ? "default" : "outline"}
                   size="sm"
-                  onClick={() => setExpiringSoonFilter(!expiringSoonFilter)}
+                  onClick={() => updateFilter("stock", stockFilter === "out" ? null : "out")}
+                  data-testid="filter-out-of-stock"
+                  aria-pressed={stockFilter === "out"}
+                >
+                  <CircleX className="h-4 w-4 mr-2" />
+                  Out of Stock
+                </Button>
+                <Button
+                  variant={stockFilter === "expiring" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => updateFilter("stock", stockFilter === "expiring" ? null : "expiring")}
                   data-testid="filter-expiring-soon"
-                  aria-pressed={expiringSoonFilter}
+                  aria-pressed={stockFilter === "expiring"}
                 >
                   <Clock className="h-4 w-4 mr-2" />
                   Expiring Soon
@@ -184,9 +201,7 @@ export default function Inventory() {
                     key={cat}
                     variant={selectedCategory === cat ? "default" : "outline"}
                     size="sm"
-                    onClick={() =>
-                      setSelectedCategory(selectedCategory === cat ? null : cat)
-                    }
+                    onClick={() => updateFilter("category", selectedCategory === cat ? null : cat)}
                     data-testid={`filter-category-${cat.toLowerCase()}`}
                   >
                     {cat}

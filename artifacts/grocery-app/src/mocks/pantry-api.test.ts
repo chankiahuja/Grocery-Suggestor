@@ -228,7 +228,12 @@ test("demo shortage to shopping to restock is repeat-safe and persists changes",
   });
   await call(`inventory/${item.id}`, "PATCH", { quantity: 0 });
   assert.ok(
-    (await call("inventory?category=Beverages&lowStock=true")).some(
+    !(await call("inventory?category=Beverages&lowStock=true")).some(
+      (i: { id: number }) => i.id === item.id,
+    ),
+  );
+  assert.ok(
+    (await call("inventory?category=Beverages&outOfStock=true")).some(
       (i: { id: number }) => i.id === item.id,
     ),
   );

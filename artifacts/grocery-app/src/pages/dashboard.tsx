@@ -168,24 +168,28 @@ export default function Dashboard() {
                 value={stats?.totalItems || 0}
                 icon={Package}
                 testId="stat-total-items"
+                href="/inventory"
               />
               <StatCard
                 label="Low Stock"
                 value={stats?.lowStockCount || 0}
                 icon={AlertCircle}
                 testId="stat-low-stock"
+                href="/inventory?stock=low"
               />
               <StatCard
                 label="Out of Stock"
                 value={stats?.outOfStockCount || 0}
                 icon={AlertCircle}
                 testId="stat-out-of-stock"
+                href="/inventory?stock=out"
               />
               <StatCard
                 label="Expiring Soon"
                 value={stats?.expiringCount || 0}
                 icon={Clock}
                 testId="stat-expiring"
+                href="/inventory?stock=expiring"
               />
             </>
           )}

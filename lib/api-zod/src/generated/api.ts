@@ -45,7 +45,7 @@ export const RequestEmailCodeResponse = zod.object({
 
 
 /**
- * @summary Verify a code, create or sign in an account and rotate the session and CSRF token
+ * @summary Verify a code, create an account for signup or sign in an existing account for login, and rotate the session and CSRF token
  */
 export const verifyEmailCodeBodyCodeRegExp = new RegExp('^[0-9]{6}$');
 
@@ -101,7 +101,8 @@ export const HealthCheckResponse = zod.object({
  */
 export const ListInventoryItemsQueryParams = zod.object({
   "category": zod.coerce.string().optional(),
-  "lowStock": zod.coerce.boolean().optional()
+  "lowStock": zod.coerce.boolean().optional().describe('Return only items with positive quantity at or below their minimum threshold.'),
+  "outOfStock": zod.coerce.boolean().optional().describe('Return only items with zero quantity.')
 })
 
 export const ListInventoryItemsResponseItem = zod.object({
