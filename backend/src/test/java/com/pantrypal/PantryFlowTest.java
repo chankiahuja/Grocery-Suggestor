@@ -70,6 +70,22 @@ class PantryFlowTest {
         mvc.perform(get("/api/inventory/999999")).andExpect(status().isNotFound());
         mvc.perform(get("/api/healthz")).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("ok"));
     }
+    @Test void stockFiltersMatchDistinctDashboardCounts() throws Exception {
+        item("Empty milk", 0);
+        item("Low milk", 1);
+        item("Full milk", 3);
+        mvc.perform(get("/api/inventory/stats"))
+            .andExpect(jsonPath("$.lowStockCount").value(1))
+            .andExpect(jsonPath("$.outOfStockCount").value(1));
+        mvc.perform(get("/api/inventory").param("lowStock", "true"))
+            .andExpect(jsonPath("$[0].name").value("Low milk"))
+            .andExpect(jsonPath("$.length()").value(1));
+        mvc.perform(get("/api/inventory").param("outOfStock", "true").param("category", "Dairy"))
+            .andExpect(jsonPath("$[0].name").value("Empty milk"))
+            .andExpect(jsonPath("$.length()").value(1));
+        mvc.perform(get("/api/inventory").param("outOfStock", "true").param("category", "Produce"))
+            .andExpect(content().json("[]"));
+    }
     @Test void inventoryAdjustmentsAreAtomicAndValidateStock() throws Exception {
         long id = PantryService.id(item("Adjustment test", 5));
         mvc.perform(post("/api/inventory/" + id + "/adjust").header("Idempotency-Key", "adjust-consume-1").contentType("application/json")

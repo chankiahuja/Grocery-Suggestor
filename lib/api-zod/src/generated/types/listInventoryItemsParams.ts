@@ -8,5 +8,12 @@
 
 export type ListInventoryItemsParams = {
 category?: string;
+/**
+ * Return only items with positive quantity at or below their minimum threshold.
+ */
 lowStock?: boolean;
+/**
+ * Return only items with zero quantity.
+ */
+outOfStock?: boolean;
 };

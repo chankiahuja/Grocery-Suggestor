@@ -229,7 +229,7 @@ export const getVerifyEmailCodeUrl = () => {
 }
 
 /**
- * @summary Verify a code, create or sign in an account and rotate the session and CSRF token
+ * @summary Verify a code, create an account for signup or sign in an existing account for login, and rotate the session and CSRF token
  */
 export const verifyEmailCode = async (emailVerification: EmailVerification, options?: Parameters<typeof customFetch>[1]): Promise<AuthSession> => {
 
@@ -278,7 +278,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type VerifyEmailCodeMutationError = ErrorType<void>
 
     /**
- * @summary Verify a code, create or sign in an account and rotate the session and CSRF token
+ * @summary Verify a code, create an account for signup or sign in an existing account for login, and rotate the session and CSRF token
  */
 export const useVerifyEmailCode = <TError = ErrorType<void>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyEmailCode>>, TError,{data: BodyType<EmailVerification>}, TContext>, request?: SecondParameter<typeof customFetch>}

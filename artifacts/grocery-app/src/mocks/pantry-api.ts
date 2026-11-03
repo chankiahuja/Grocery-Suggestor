@@ -238,7 +238,9 @@ export class MockPantryApi {
                   (!url.searchParams.has("category") ||
                     i.category === url.searchParams.get("category")) &&
                   (url.searchParams.get("lowStock") !== "true" ||
-                    i.quantity <= i.minThreshold),
+                    (i.quantity > 0 && i.quantity <= i.minThreshold)) &&
+                  (url.searchParams.get("outOfStock") !== "true" ||
+                    i.quantity === 0),
               )
               .sort((a, b) => a.name.localeCompare(b.name)),
           );

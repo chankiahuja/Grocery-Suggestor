@@ -149,6 +149,13 @@ paths:
         - name: lowStock
           in: query
           required: false
+          description: Return only items with positive quantity at or below their minimum threshold.
+          schema:
+            type: boolean
+        - name: outOfStock
+          in: query
+          required: false
+          description: Return only items with zero quantity.
           schema:
             type: boolean
       responses:
