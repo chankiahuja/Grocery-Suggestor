@@ -208,7 +208,7 @@ describe("quick inventory adjustments", () => {
         screen.getByTestId("inventory-item-2").textContent!,
         /4 each/,
       );
-      fireEvent.click(screen.getByTestId("filter-low-stock"));
+      fireEvent.click(screen.getByTestId("filter-out-of-stock"));
       fireEvent.click(await screen.findByTestId("button-restock-1"));
       fireEvent.change(screen.getByLabelText("Amount (litres)"), {
         target: { value: "3" },
