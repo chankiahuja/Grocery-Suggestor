@@ -19,7 +19,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest
-@AutoConfigureMockMvc
+@AutoConfigureMockMvc(addFilters=false) // AuthFlowTest covers API authentication and CSRF independently.
 class AdjustmentWorkflowTest {
     @Autowired PantryService service;
     @Autowired PantryRepository repo;

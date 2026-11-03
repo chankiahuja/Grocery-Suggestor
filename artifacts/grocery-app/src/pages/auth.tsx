@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { ArrowUpRight, Leaf } from "lucide-react";
-import { useCompletePreview } from "@/lib/preview-access";
+import { useCompletePreview, useSessionAccess } from "@/lib/preview-access";
+import { getAuthSession, requestEmailCode, setCsrfToken, verifyEmailCode } from "@workspace/api-client-react";
 import {
   DEMO_OTP,
   OTP_LIFETIME_MS,
@@ -11,12 +12,17 @@ import {
   otpError,
 } from "@/lib/demo-auth";
 
-export default function Auth() {
+export default function Auth() { return <AuthScreen />; }
+export function PreviewAuth() { return <AuthScreen demo />; }
+
+function AuthScreen({ demo }: { demo?: boolean }) {
+  const session = useSessionAccess();
+  const preview = demo ?? session.demo;
   const completePreview = useCompletePreview();
   const [location, navigate] = useLocation();
   const signup = location === "/signup";
   const [step, setStep] = useState<"mobile" | "otp">("mobile");
-  const [method, setMethod] = useState<"mobile" | "email">("mobile");
+  const [method, setMethod] = useState<"mobile" | "email">(preview ? "mobile" : "email");
   const isEmail = method === "email";
   const [identifier, setIdentifier] = useState("");
   const [fullName, setFullName] = useState("");
@@ -24,6 +30,10 @@ export default function Auth() {
   const [otp, setOtp] = useState("");
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
+  const [pending, setPending] = useState(false);
+  const busy = useRef(false);
+  const requestVersion = useRef(0);
+  const [challengeId, setChallengeId] = useState("");
   const [expiresAt, setExpiresAt] = useState(0);
   const [resendAt, setResendAt] = useState(0);
   const [now, setNow] = useState(Date.now);
@@ -34,6 +44,10 @@ export default function Auth() {
   const remaining = Math.max(0, Math.ceil((resendAt - now) / 1000));
 
   function reset() {
+    requestVersion.current++;
+    busy.current = false;
+    setPending(false);
+    setChallengeId("");
     setStep("mobile");
     setOtp("");
     setError("");
@@ -54,6 +68,7 @@ export default function Auth() {
     setFullName("");
     setNameError("");
   }, [location]);
+  useEffect(() => () => { requestVersion.current++; }, []);
   useEffect(() => {
     if (step !== "otp") return;
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -74,6 +89,86 @@ export default function Auth() {
     setResendAt(timestamp + RESEND_COOLDOWN_MS);
     setOtp("");
     setError("");
+  }
+
+  function failureMessage(cause: unknown) {
+    return (cause as { data?: { error?: string } })?.data?.error || "Unable to connect. Please try again.";
+  }
+
+  async function sendCode() {
+    if (busy.current) return;
+    if (preview || !isEmail) {
+      issueDemoCode();
+      setStep("otp");
+      if (!isEmail && !preview) setStatus("Mobile preview only. No SMS is sent and this will not sign you in.");
+      return;
+    }
+    busy.current = true;
+    setPending(true);
+    setError("");
+    const version = ++requestVersion.current;
+    try {
+      const challenge = await requestEmailCode({ email: identifier.trim(), intent: signup ? "signup" : "login", ...(signup ? { name: fullName.trim() } : {}) }, { signal: AbortSignal.timeout(15_000) });
+      if (version !== requestVersion.current) return;
+      setChallengeId(challenge.challengeId);
+      setExpiresAt(Date.parse(challenge.expiresAt));
+      setResendAt(Date.parse(challenge.resendAt));
+      setNow(Date.now());
+      setOtp("");
+      setStatus("Code sent. Check your email inbox.");
+      setStep("otp");
+    } catch (cause) {
+      if (version === requestVersion.current) setError(failureMessage(cause));
+    } finally {
+      if (version === requestVersion.current) { busy.current = false; setPending(false); }
+    }
+  }
+
+  async function verifyCode() {
+    if (busy.current) return;
+    const message = preview || !isEmail ? otpError(otp, expiresAt)
+      : !/^[0-9]{6}$/.test(otp.trim()) ? "Enter a 6-digit verification code." : "";
+    setError(message);
+    if (message) { otpInput.current?.focus(); return; }
+    if (!isEmail && !preview) {
+      setExpiresAt(0);
+      setOtp("");
+      setStatus("Mobile preview complete. You are not signed in. Change to email to sign in.");
+      return;
+    }
+    busy.current = true;
+    setPending(true);
+    const version = ++requestVersion.current;
+    try {
+      if (preview) completePreview();
+      else {
+        const result = await verifyEmailCode({ email: identifier.trim(), challengeId, code: otp.trim() }, { signal: AbortSignal.timeout(15_000) });
+        if (version !== requestVersion.current) return;
+        session.signedIn(result);
+      }
+      setExpiresAt(0); setOtp(""); setIdentifier(""); setFullName(""); setNameError("");
+      navigate("/dashboard", { replace: true });
+    } catch (cause) {
+      if (version !== requestVersion.current) return;
+      const status = (cause as { status?: number })?.status;
+      if (!preview && (!status || status >= 500)) {
+        try {
+          // A lost response may have completed verification and consumed the code.
+          const restored = await getAuthSession({ signal: AbortSignal.timeout(5000) });
+          if (version !== requestVersion.current) return;
+          setCsrfToken(restored.csrfToken);
+          if (restored.authenticated) {
+            session.signedIn(restored);
+            setOtp(""); setIdentifier(""); setFullName("");
+            navigate("/dashboard", { replace: true });
+            return;
+          }
+        } catch { /* Keep the original failure; the user can retry session restoration after reload. */ }
+      }
+      setError(failureMessage(cause));
+    } finally {
+      if (version === requestVersion.current) { busy.current = false; setPending(false); }
+    }
   }
 
   return (
@@ -141,7 +236,9 @@ export default function Auth() {
           <p className="auth-subtitle">
             {step === "otp"
               ? `Confirm your ${isEmail ? "email address" : "mobile number"} to continue.`
-              : signup
+              : !isEmail && !preview
+                ? "Mobile is a preview. Use email for account access."
+                : signup
                 ? "Create your account. Make room for simpler days."
                 : "Your email or mobile. No password to remember."}
           </p>
@@ -172,8 +269,7 @@ export default function Auth() {
                     return;
                   }
                   setIdentifier(identifier.trim());
-                  issueDemoCode();
-                  setStep("otp");
+                  void sendCode();
                 }}
               >
                 {signup && (
@@ -189,6 +285,7 @@ export default function Auth() {
                         placeholder="What should we call you?"
                         maxLength={100}
                         required
+                        disabled={pending}
                         value={fullName}
                         aria-invalid={!!nameError}
                         aria-describedby="auth-name-error"
@@ -221,6 +318,7 @@ export default function Auth() {
                     <button
                       key={option}
                       type="button"
+                      disabled={pending}
                       aria-pressed={method === option}
                       onClick={() => {
                         if (option === method) return;
@@ -250,6 +348,7 @@ export default function Auth() {
                       autoComplete={isEmail ? "email" : "tel-national"}
                       placeholder={isEmail ? "you@example.com" : "9876543210"}
                       required
+                      disabled={pending}
                       value={identifier}
                       aria-invalid={!!error}
                       aria-describedby="auth-mobile-hint auth-error"
@@ -269,8 +368,8 @@ export default function Auth() {
                     {error}
                   </p>
                 </div>
-                <button className="auth-submit" type="submit">
-                  Get verification code <ArrowUpRight size={18} />
+                <button className="auth-submit" type="submit" disabled={pending}>
+                  {pending ? "Sending code…" : "Get verification code"} <ArrowUpRight size={18} />
                 </button>
                 <p className="auth-new-account">
                   {signup
@@ -285,19 +384,7 @@ export default function Auth() {
               noValidate
               onSubmit={(event) => {
                 event.preventDefault();
-                const message = otpError(otp, expiresAt);
-                setError(message);
-                if (message) {
-                  otpInput.current?.focus();
-                  return;
-                }
-                setExpiresAt(0);
-                setOtp("");
-                setIdentifier("");
-                setFullName("");
-                setNameError("");
-                completePreview();
-                navigate("/dashboard", { replace: true });
+                void verifyCode();
               }}
             >
               <div className="auth-number-summary">
@@ -309,6 +396,7 @@ export default function Auth() {
                 <button
                   className="auth-text-button"
                   type="button"
+                  disabled={pending}
                   onClick={reset}
                 >
                   {isEmail ? "Change email" : "Change number"}
@@ -328,6 +416,7 @@ export default function Auth() {
                     placeholder="000000"
                     maxLength={6}
                     required
+                    disabled={pending}
                     value={otp}
                     aria-invalid={!!error}
                     aria-describedby="auth-otp-hint auth-error"
@@ -344,21 +433,21 @@ export default function Auth() {
                   {error}
                 </p>
               </div>
-              <button className="auth-submit" type="submit">
-                Verify &amp; continue <ArrowUpRight size={18} />
+              <button className="auth-submit" type="submit" disabled={pending}>
+                {pending ? "Verifying…" : "Verify & continue"} <ArrowUpRight size={18} />
               </button>
               <div className="auth-resend-row">
                 <span>Need another code?</span>
                 <button
                   className="auth-text-button"
                   type="button"
-                  disabled={remaining > 0}
+                  disabled={remaining > 0 || pending}
                   onClick={() => {
                     if (Date.now() < resendAt) return;
-                    issueDemoCode();
-                    setStatus(
-                      `A fresh demo code is ready: ${DEMO_OTP}. No ${isEmail ? "email" : "SMS"} was sent.`,
-                    );
+                    if (preview || !isEmail) {
+                      issueDemoCode();
+                      setStatus(`A fresh demo code is ready: ${DEMO_OTP}. No ${isEmail ? "email" : "SMS"} was sent.`);
+                    } else { void sendCode(); }
                     otpInput.current?.focus();
                   }}
                 >
@@ -370,14 +459,13 @@ export default function Auth() {
               </p>
             </form>
           )}
-          <aside className="auth-demo-notice">
-            <strong>Interactive preview</strong>
+          {(preview || !isEmail) && <aside className="auth-demo-notice">
+            <strong>{preview ? "Interactive preview" : "Mobile preview — not authenticated"}</strong>
             <p>
-              No SMS or email is sent. Use demo code <b>{DEMO_OTP}</b> on the
-              next screen. Real verification is not connected; no account or
-              authenticated session is created.
+              {preview ? "No SMS or email is sent." : "No SMS is sent. Sign in with email for real access."} Use demo code <b>{DEMO_OTP}</b> on the
+              next screen. No account or authenticated session is created by this preview.
             </p>
-          </aside>
+          </aside>}
         </div>
         <footer className="auth-form-footer">
           <span>© Pantry Pal · A little more in order.</span>

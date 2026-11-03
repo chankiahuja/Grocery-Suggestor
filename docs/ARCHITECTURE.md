@@ -24,10 +24,12 @@ flowchart TB
         Static["React static assets and page-route fallback"]
         Controller["REST controllers: /api"]
         Service["PantryService: validation, suggestions and transactions"]
+        Auth["AuthService: email OTP, accounts and sessions"]
         Repo["PantryRepository: parameterized JDBC queries"]
         Events["NotificationEvents: after-commit listener"]
         Scheduler["Scheduled stock and expiry check"]
         Controller --> Service --> Repo
+        Controller --> Auth --> Repo
         Service -.->|PantryChanged; delivered after commit| Events
         Scheduler -->|Read current suggestions| Service
         Scheduler -->|Alert changes or heartbeat| Events
@@ -44,7 +46,7 @@ flowchart TB
     Events -->|SSE: /api/notifications/stream| Stream
 ```
 
-The server owns validation and committed stock. React Query caches server responses and refetches dependent views after changes. SSE carries refresh signals; the notification bell recovers its alert contents from the suggestions API. There is no message broker or durable notification inbox.
+The server owns validation, authenticated sessions and committed stock. React Query caches server responses and refetches dependent views after changes. SSE carries refresh signals; the notification bell recovers its alert contents from the suggestions API. There is no message broker or durable notification inbox.
 
 OpenAPI defines the REST contract and generates the TypeScript client; it does not generate the Spring backend. Database changes use new Flyway migrations. Historical Express/Drizzle packages are outside this runtime.
 
@@ -52,7 +54,7 @@ OpenAPI defines the REST contract and generates the TypeScript client; it does n
 
 ```mermaid
 flowchart TD
-    Open["Open application"] --> Login["Login / signup design preview: demo OTP"]
+    Open["Open application"] --> Login["Email OTP and database-backed session"]
     Login --> Dashboard["Dashboard: quantities, stock and expiry attention"]
     Dashboard --> Inventory["Inventory: add, edit or delete items"]
     Inventory --> Adjust["Consume or Restock: enter amount in item units"]
@@ -80,7 +82,7 @@ flowchart TD
     Refresh --> Dashboard
 ```
 
-The login/signup screen is a frontend design preview, not API authentication. Real accounts and household authorization remain separate work. Shopping-list generation revalidates selected items against current stock on the server. Purchase completion leaves unlinked manual shopping items out of inventory.
+Normal login/signup uses server-verified email codes and database-backed sessions; the mobile and browser-only mock flows remain previews. Household authorization remains separate work. Shopping-list generation revalidates selected items against current stock on the server. Purchase completion leaves unlinked manual shopping items out of inventory.
 
 ## Adjustment transaction and refresh sequence
 
@@ -121,9 +123,7 @@ Undo is a separate transaction using the original adjustment key. It locks the i
 
 ## Runtime modes and implementation details
 
-The `/login` and `/signup` routes are frontend-only email-or-mobile/OTP design previews with scoped styling. Signup includes a required name held only in the form; it is cleared on success/navigation and never displayed in the workspace or persisted. They share a React component and in-memory form state, use no authentication API, and never persist email addresses or phone numbers or establish a session. A valid demo OTP clears the identifier/code and navigates straight to `/dashboard`, without an intermediate success screen. Every fresh page load replaces the initial URL with `/login` before rendering app screens. A memory-only preview gate allows app navigation after the demo code succeeds; reloading resets it. The dashboard lives at `/dashboard`. Unknown extensionless page URLs serve the React entry point, while missing APIs and assets retain 404s. This does not authenticate users or protect API access. Real OTP verification and accounts are a separate integration.
-
-An optional `dev:mock` frontend mode loads a browser-side REST adapter before React starts. It seeds relative-date pantry examples, persists demo edits in localStorage, and supports the existing inventory/suggestions/shopping flows. It does not connect to Spring, PostgreSQL or SSE. Normal development uses the architecture below.
+The `/login` and `/signup` routes use server-side email OTP in the full-stack runtime. `GET /api/auth/session` returns the current account and CSRF token. `POST /api/auth/code` sends an unpredictable, expiring code via SMTP; `POST /api/auth/verify` consumes it once, creates or finds an account, rotates the session ID, and returns a new CSRF token. Spring Session JDBC stores HttpOnly session cookies in the database so a signed-in session survives a reload or server restart. Spring Security requires the session for pantry, shopping and notification APIs and requires `X-CSRF-TOKEN` on unsafe requests. Server-side logout invalidates the session. Mailpit captures local email; production SMTP requires a configured delivery provider and HTTPS-secure cookies. The mobile option is explicitly an unauthenticated preview. `dev:mock` retains its separate in-browser demo code and localStorage data. Accounts still share pantry data until GS-15 adds household membership and ownership rules.
 
 The application overview above shows this runtime. Optional Vite development on port 5173 serves React with hot reload and proxies `/api`, including SSE, to Spring Boot on port 8080. The browser demo adapter is an alternative runtime using localStorage and does not contact Spring or a database.
 
@@ -139,7 +139,7 @@ Rules use UTC dates: zero quantity is critical; positive quantity at/below thres
 
 Purchases lock the list, atomically increase linked inventory, and mark rows as restocked in one transaction. Repeating completion skips already applied rows. Unlinked manual shopping items do not create pantry records automatically. Item changes are scoped to the supplied shopping-list ID.
 
-No broker, authentication, email delivery, deployment platform or production hardening is part of this prototype. Historical Express/Drizzle sources are reference material, not runtime dependencies.
+There is no message broker or deployment platform. Email OTP and session authentication are part of the active backend; household authorization and production hardening remain separate work. Historical Express/Drizzle sources are reference material, not runtime dependencies.
 
 Confirmed consume/restock changes show dismissible Undo feedback above the React routes, so it remains available while navigating between views. The client bounds the action to five minutes from the first request (including safe retries); the server remains authoritative about eligibility. Undo uses the original adjustment key and explains expired, already-used, missing and conflicting results. Uncertain Undo responses can be retried with the same key. Adjustment and Undo responses refresh inventory lists/details, dashboard stats, suggestions and the notification snapshot directly, even without SSE. Demo mode implements the same Undo outcomes in browser storage, including revision conflicts from edits and completed purchases.
 

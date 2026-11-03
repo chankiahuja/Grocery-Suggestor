@@ -13,9 +13,9 @@ import { AdjustmentFeedbackProvider } from "@/components/adjustment-feedback";
 
 const queryClient = new QueryClient();
 
-export function AppRoutes() {
+export function AppRoutes({ preview }: { preview?: boolean } = {}) {
   return (
-    <LoginGate><Switch>
+    <LoginGate preview={preview}><Switch>
       <Route path="/login" component={Auth} />
       <Route path="/signup" component={Auth} />
       <Route path="/"><Redirect to="/login" replace /></Route>

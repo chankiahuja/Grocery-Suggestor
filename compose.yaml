@@ -22,10 +22,22 @@ services:
       SPRING_PROFILES_ACTIVE: postgres
       DB_USER: ${DB_USER:-pantrypal}
       DB_PASSWORD: ${DB_PASSWORD:-pantrypal}
+      MAIL_HOST: mailpit
+      MAIL_PORT: 1025
+      MAIL_FROM: ${MAIL_FROM:-PantryPal <no-reply@pantrypal.test>}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
+      AUTH_OTP_SECRET: ${AUTH_OTP_SECRET:-}
     ports:
       - "8080:8080"
     depends_on:
       db:
         condition: service_healthy
+      mailpit:
+        condition: service_started
+  mailpit:
+    image: axllent/mailpit:v1.27
+    ports:
+      - "127.0.0.1:8025:8025"
+      - "127.0.0.1:1025:1025"
 volumes:
   pantry-data:
