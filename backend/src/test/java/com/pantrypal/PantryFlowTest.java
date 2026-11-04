@@ -130,6 +130,16 @@ class PantryFlowTest {
             .content("{\"operation\":\"restock\",\"amount\":1}"))
             .andExpect(status().isBadRequest());
     }
+    @Test void directInventoryEditInvalidatesPendingUndo() {
+        long id = PantryService.id(item("Manual edit", 5));
+        service.adjustInventory(id, "manual-edit-undo", Map.of("operation", "consume", "amount", 2));
+
+        service.saveInventory(id, Map.of("quantity", 4));
+
+        assertThatThrownBy(() -> service.undoInventoryAdjustment(id, Map.of("idempotencyKey", "manual-edit-undo")))
+            .hasMessageContaining("Inventory changed after this adjustment");
+        assertThat(PantryService.number(service.inventory(id), "quantity")).isEqualTo(4);
+    }
     @Test void notificationIsDeliveredOnlyAfterCommit() {
         clearInvocations(notifications);
         long id = PantryService.id(item("Event test",0));
