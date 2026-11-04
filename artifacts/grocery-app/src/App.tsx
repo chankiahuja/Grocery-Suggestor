@@ -6,6 +6,7 @@ import Dashboard from "@/pages/dashboard";
 import Inventory from "@/pages/inventory";
 import ShoppingLists from "@/pages/shopping-lists";
 import ShoppingListDetail from "@/pages/shopping-list-detail";
+import ComparePrices from "@/pages/compare-prices";
 import Auth from "@/pages/auth";
 import Landing from "@/pages/landing";
 import { Route, Switch, Redirect, Router as WouterRouter } from "wouter";
@@ -24,6 +25,7 @@ export function AppRoutes({ preview }: { preview?: boolean } = {}) {
       <Route path="/inventory" component={Inventory} />
       <Route path="/shopping-lists" component={ShoppingLists} />
       <Route path="/shopping-lists/:id" component={ShoppingListDetail} />
+      <Route path="/compare-prices" component={ComparePrices} />
       <Route component={NotFound} />
     </Switch></LoginGate>
   );

@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useParams, useLocation } from "wouter";
-import { Plus, ShoppingBag, ArrowLeft, Trash2 } from "lucide-react";
+import { Link, useParams, useLocation } from "wouter";
+import { Plus, ShoppingBag, ArrowLeft, Trash2, Tags } from "lucide-react";
 import {
   useGetShoppingList,
   useUpdateShoppingListItem,
@@ -218,6 +218,12 @@ export default function ShoppingListDetail() {
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Lists
           </Button>
+          <Link href={`/compare-prices?listId=${listId}`}>
+            <Button variant="outline" size="sm" className="mb-4" data-testid="button-compare-prices">
+              <Tags className="h-4 w-4 mr-2" />
+              Compare prices
+            </Button>
+          </Link>
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <h2 className="text-3xl font-bold tracking-tight">{list.name}</h2>

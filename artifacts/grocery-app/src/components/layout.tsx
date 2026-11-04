@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Home, Package, ShoppingCart, Leaf } from "lucide-react";
+import { Home, Package, ShoppingCart, Tags, Leaf } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NotificationCenter } from "@/components/notification-center";
 import { useLogoutPreview } from "@/lib/preview-access";
@@ -16,9 +16,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { path: "/dashboard", label: "Dashboard", icon: Home },
     { path: "/inventory", label: "Inventory", icon: Package },
     { path: "/shopping-lists", label: "Shopping Lists", icon: ShoppingCart },
+    { path: "/compare-prices", label: "Compare Prices", icon: Tags },
   ];
   const section = location.startsWith("/shopping-lists")
     ? "Shopping Lists"
+    : location.startsWith("/compare-prices")
+      ? "Compare Prices"
     : location === "/inventory"
       ? "Home inventory"
       : "Overview";
