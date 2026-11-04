@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, ShoppingCart, Trash2, ChevronRight } from "lucide-react";
+import { Plus, ShoppingCart, Trash2, ChevronRight, Tags } from "lucide-react";
 import { Link } from "wouter";
 import {
   useListShoppingLists,
@@ -120,6 +120,12 @@ export default function ShoppingLists() {
             <Plus className="h-4 w-4 mr-2" />
             New List
           </Button>
+          <Link href="/compare-prices">
+            <Button variant="outline" data-testid="button-compare-prices">
+              <Tags className="h-4 w-4 mr-2" />
+              Compare prices
+            </Button>
+          </Link>
         </div>
 
         <Card>
