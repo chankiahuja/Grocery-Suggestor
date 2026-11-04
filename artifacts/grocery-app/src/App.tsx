@@ -7,6 +7,7 @@ import Inventory from "@/pages/inventory";
 import ShoppingLists from "@/pages/shopping-lists";
 import ShoppingListDetail from "@/pages/shopping-list-detail";
 import Auth from "@/pages/auth";
+import Landing from "@/pages/landing";
 import { Route, Switch, Redirect, Router as WouterRouter } from "wouter";
 import { LoginGate } from "@/lib/preview-access";
 import { AdjustmentFeedbackProvider } from "@/components/adjustment-feedback";
@@ -18,7 +19,7 @@ export function AppRoutes({ preview }: { preview?: boolean } = {}) {
     <LoginGate preview={preview}><Switch>
       <Route path="/login" component={Auth} />
       <Route path="/signup" component={Auth} />
-      <Route path="/"><Redirect to="/login" replace /></Route>
+      <Route path="/" component={Landing} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/inventory" component={Inventory} />
       <Route path="/shopping-lists" component={ShoppingLists} />
