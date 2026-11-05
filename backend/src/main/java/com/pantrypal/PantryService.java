@@ -13,11 +13,14 @@ import org.springframework.http.HttpStatus;
 public class PantryService {
     final PantryRepository repo;
     final ApplicationEventPublisher events;
-    public record PantryChanged(String type, Long inventoryItemId) {}
+    public record PantryChanged(String type, Long inventoryItemId, Long accountId) {
+        public PantryChanged(String type, Long inventoryItemId) { this(type, inventoryItemId, null); }
+    }
     public PantryService(PantryRepository repo, ApplicationEventPublisher events) { this.repo = repo; this.events = events; }
     static double number(Map<String,Object> row, String key) { return ((Number) row.get(key)).doubleValue(); }
     static long id(Map<String,Object> row) { return ((Number) row.get("id")).longValue(); }
     static void bad(String reason) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, reason); }
+    public List<Long> accountIds() { return repo.accountIds(); }
 
     // Explicit allowlist: client keys never become SQL identifiers.
     Map<String,Object> fields(Map<String,Object> body, boolean create, boolean inventory) {
@@ -55,7 +58,7 @@ public class PantryService {
         var values = fields(body, id == null, true);
         if (id == null) { if (ownerId != null) values.put("account_id", ownerId); id = repo.insert("inventory_items", values); }
         else { inventory(ownerId, id); values.put("updated_at", OffsetDateTime.now(ZoneOffset.UTC)); repo.update("inventory_items", id, values, ownerId); }
-        events.publishEvent(new PantryChanged("inventory_changed", id));
+        events.publishEvent(new PantryChanged("inventory_changed", id, ownerId));
         return inventory(ownerId, id);
     }
     public Map<String,Object> adjustInventory(long id, String idempotencyKey, Map<String,Object> body) { return adjustInventory(null, id, idempotencyKey, body); }
@@ -99,7 +102,7 @@ public class PantryService {
         adjustment.put("inventory_revision", ((Number) item.get("revision")).longValue() + 1);
         adjustment.put("undo_expires_at", OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(5));
         repo.insert("inventory_adjustments", adjustment);
-        events.publishEvent(new PantryChanged("inventory_changed", id));
+        events.publishEvent(new PantryChanged("inventory_changed", id, ownerId));
         return inventory(ownerId, id);
     }
     public Map<String,Object> undoInventoryAdjustment(long id, Map<String,Object> body) { return undoInventoryAdjustment(null, id, body); }
@@ -127,11 +130,11 @@ public class PantryService {
             adjustment.get("quantityBefore"), OffsetDateTime.ofInstant(now, ZoneOffset.UTC), id);
         repo.execute("UPDATE inventory_adjustments SET undone_at=?, undo_revision=? WHERE id=?",
             OffsetDateTime.ofInstant(now, ZoneOffset.UTC), revision + 1, adjustment.get("id"));
-        events.publishEvent(new PantryChanged("inventory_changed", id));
+        events.publishEvent(new PantryChanged("inventory_changed", id, ownerId));
         return Map.of("status", "undone", "inventory", inventory(ownerId, id));
     }
     public void deleteInventory(long id) { deleteInventory(null, id); }
-    public void deleteInventory(Long ownerId, long id) { inventory(ownerId, id); repo.execute("DELETE FROM inventory_items WHERE id=? AND " + ownerWhere("account_id", ownerId), id); events.publishEvent(new PantryChanged("inventory_changed", id)); }
+    public void deleteInventory(Long ownerId, long id) { inventory(ownerId, id); repo.execute("DELETE FROM inventory_items WHERE id=? AND " + ownerWhere("account_id", ownerId), id); events.publishEvent(new PantryChanged("inventory_changed", id, ownerId)); }
     static boolean expiring(Map<String,Object> item) {
         if (item.get("expiresAt") == null) return false;
         var date = LocalDate.parse(item.get("expiresAt").toString());
@@ -259,7 +262,7 @@ public class PantryService {
             repo.execute("UPDATE inventory_items SET quantity=quantity+?, revision=revision+1, updated_at=CURRENT_TIMESTAMP WHERE id=? AND " + ownerWhere("account_id", ownerId), item.get("quantity"), item.get("inventoryItemId"));
             repo.execute("UPDATE shopping_list_items SET restocked=TRUE WHERE id=? AND " + ownerWhere("account_id", ownerId), item.get("id"));
         }
-        events.publishEvent(new PantryChanged("purchase_completed", null));
+        events.publishEvent(new PantryChanged("purchase_completed", null, ownerId));
         return Map.of("purchasedCount", items.size(), "updatedInventoryItems", items.size());
     }
 }
