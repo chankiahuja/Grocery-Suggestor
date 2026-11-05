@@ -53,9 +53,14 @@ public class PantryRepository {
     }
 
     public void update(String table, long id, Map<String,Object> values) {
+        update(table, id, values, null);
+    }
+
+    public void update(String table, long id, Map<String,Object> values, Long accountId) {
         if (values.isEmpty()) return;
         var args = new ArrayList<>(values.values()); args.add(id);
         String revision = table.equals("inventory_items") ? ",revision=revision+1" : "";
-        jdbc.update("UPDATE " + table + " SET " + String.join(",", values.keySet().stream().map(k -> k + "=?").toList()) + revision + " WHERE id=?", args.toArray());
+        String ownership = accountId == null ? "account_id IS NULL" : "account_id=" + accountId;
+        jdbc.update("UPDATE " + table + " SET " + String.join(",", values.keySet().stream().map(k -> k + "=?").toList()) + revision + " WHERE id=? AND " + ownership, args.toArray());
     }
 }
