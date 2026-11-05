@@ -24,7 +24,11 @@ public class NotificationEvents {
     }
     SseEmitter subscribe(Authentication authentication, SseEmitter emitter) {
         long accountId = Long.parseLong(authentication.getName());
-        clients.computeIfAbsent(accountId, ignored -> new CopyOnWriteArrayList<>()).add(emitter);
+        clients.compute(accountId, (ignored, accountClients) -> {
+            var registeredClients = accountClients == null ? new CopyOnWriteArrayList<SseEmitter>() : accountClients;
+            registeredClients.add(emitter);
+            return registeredClients;
+        });
         emitter.onCompletion(() -> removeClient(accountId, emitter));
         emitter.onTimeout(() -> removeClient(accountId, emitter));
         emitter.onError(error -> removeClient(accountId, emitter));
