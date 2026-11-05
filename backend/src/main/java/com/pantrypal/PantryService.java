@@ -45,18 +45,23 @@ public class PantryService {
     }
 
     private static final String INVENTORY_COLUMNS = "id,name,category,quantity,unit,min_threshold,expires_at,notes,created_at,updated_at";
-    public List<Map<String,Object>> inventory() { return repo.query("SELECT " + INVENTORY_COLUMNS + " FROM inventory_items ORDER BY name"); }
-    public Map<String,Object> inventory(long id) { return repo.one("SELECT " + INVENTORY_COLUMNS + " FROM inventory_items WHERE id=?", id); }
-    public Map<String,Object> saveInventory(Long id, Map<String,Object> body) {
+    private String ownerWhere(String column, Long ownerId) { return ownerId == null ? column + " IS NULL" : column + "=" + ownerId; }
+    public List<Map<String,Object>> inventory() { return inventory(null); }
+    public List<Map<String,Object>> inventory(Long ownerId) { return repo.query("SELECT " + INVENTORY_COLUMNS + " FROM inventory_items WHERE " + ownerWhere("account_id", ownerId) + " ORDER BY name"); }
+    public Map<String,Object> inventory(long id) { return inventory(null, id); }
+    public Map<String,Object> inventory(Long ownerId, long id) { return repo.one("SELECT " + INVENTORY_COLUMNS + " FROM inventory_items WHERE id=? AND " + ownerWhere("account_id", ownerId), id); }
+    public Map<String,Object> saveInventory(Long id, Map<String,Object> body) { return saveInventory(null, id, body); }
+    public Map<String,Object> saveInventory(Long ownerId, Long id, Map<String,Object> body) {
         var values = fields(body, id == null, true);
-        if (id == null) id = repo.insert("inventory_items", values);
-        else { inventory(id); values.put("updated_at", OffsetDateTime.now(ZoneOffset.UTC)); repo.update("inventory_items", id, values); }
+        if (id == null) { if (ownerId != null) values.put("account_id", ownerId); id = repo.insert("inventory_items", values); }
+        else { inventory(ownerId, id); values.put("updated_at", OffsetDateTime.now(ZoneOffset.UTC)); repo.update("inventory_items", id, values, ownerId); }
         events.publishEvent(new PantryChanged("inventory_changed", id));
-        return inventory(id);
+        return inventory(ownerId, id);
     }
-    public Map<String,Object> adjustInventory(long id, String idempotencyKey, Map<String,Object> body) {
+    public Map<String,Object> adjustInventory(long id, String idempotencyKey, Map<String,Object> body) { return adjustInventory(null, id, idempotencyKey, body); }
+    public Map<String,Object> adjustInventory(Long ownerId, long id, String idempotencyKey, Map<String,Object> body) {
         if (idempotencyKey == null || idempotencyKey.isBlank() || idempotencyKey.length() > 128) bad("Idempotency-Key must be 1 to 128 characters");
-        var item = repo.one("SELECT * FROM inventory_items WHERE id=? FOR UPDATE", id);
+        var item = repo.one("SELECT * FROM inventory_items WHERE id=? AND " + ownerWhere("account_id", ownerId) + " FOR UPDATE", id);
         Object operationValue = body.get("operation");
         if (!(operationValue instanceof String) || !(operationValue.equals("consume") || operationValue.equals("restock"))) {
             bad("operation must be consume or restock");
@@ -95,16 +100,17 @@ public class PantryService {
         adjustment.put("undo_expires_at", OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(5));
         repo.insert("inventory_adjustments", adjustment);
         events.publishEvent(new PantryChanged("inventory_changed", id));
-        return inventory(id);
+        return inventory(ownerId, id);
     }
-    public Map<String,Object> undoInventoryAdjustment(long id, Map<String,Object> body) {
+    public Map<String,Object> undoInventoryAdjustment(long id, Map<String,Object> body) { return undoInventoryAdjustment(null, id, body); }
+    public Map<String,Object> undoInventoryAdjustment(Long ownerId, long id, Map<String,Object> body) {
         Object key = body.get("idempotencyKey");
         if (!(key instanceof String s) || s.isBlank() || s.length() > 128) bad("idempotencyKey must be 1 to 128 characters");
         // All stock writers acquire this row lock (explicitly or through UPDATE).
         // Check time after waiting for the lock, rather than using transaction-start time.
-        var item = repo.one("SELECT * FROM inventory_items WHERE id=? FOR UPDATE", id);
+        var item = repo.one("SELECT * FROM inventory_items WHERE id=? AND " + ownerWhere("account_id", ownerId) + " FOR UPDATE", id);
         var adjustment = repo.one("SELECT * FROM inventory_adjustments WHERE inventory_item_id=? AND idempotency_key=?", id, key);
-        if (adjustment.get("undoneAt") != null) return Map.of("status", "already_undone", "inventory", inventory(id));
+        if (adjustment.get("undoneAt") != null) return Map.of("status", "already_undone", "inventory", inventory(ownerId, id));
         if (adjustment.get("inventoryRevision") == null || adjustment.get("undoExpiresAt") == null) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Historical adjustment is not eligible for undo");
         }
@@ -122,18 +128,20 @@ public class PantryService {
         repo.execute("UPDATE inventory_adjustments SET undone_at=?, undo_revision=? WHERE id=?",
             OffsetDateTime.ofInstant(now, ZoneOffset.UTC), revision + 1, adjustment.get("id"));
         events.publishEvent(new PantryChanged("inventory_changed", id));
-        return Map.of("status", "undone", "inventory", inventory(id));
+        return Map.of("status", "undone", "inventory", inventory(ownerId, id));
     }
-    public void deleteInventory(long id) { inventory(id); repo.execute("DELETE FROM inventory_items WHERE id=?", id); events.publishEvent(new PantryChanged("inventory_changed", id)); }
+    public void deleteInventory(long id) { deleteInventory(null, id); }
+    public void deleteInventory(Long ownerId, long id) { inventory(ownerId, id); repo.execute("DELETE FROM inventory_items WHERE id=? AND " + ownerWhere("account_id", ownerId), id); events.publishEvent(new PantryChanged("inventory_changed", id)); }
     static boolean expiring(Map<String,Object> item) {
         if (item.get("expiresAt") == null) return false;
         var date = LocalDate.parse(item.get("expiresAt").toString());
         var today = LocalDate.now(ZoneOffset.UTC);
         return !date.isBefore(today) && !date.isAfter(today.plusDays(7));
     }
-    public List<Map<String,Object>> suggestions() {
+    public List<Map<String,Object>> suggestions() { return suggestions(null); }
+    public List<Map<String,Object>> suggestions(Long ownerId) {
         var result = new ArrayList<Map<String,Object>>();
-        for (var item : inventory()) {
+        for (var item : inventory(ownerId)) {
             double quantity = number(item, "quantity"), threshold = number(item, "minThreshold");
             String urgency = quantity == 0 ? "critical" : quantity <= threshold ? "low" : expiring(item) ? "expiring_soon" : null;
             if (urgency == null) continue;
@@ -147,8 +155,9 @@ public class PantryService {
         result.sort(Comparator.comparingInt(s -> List.of("critical", "low", "expiring_soon").indexOf(s.get("urgency"))));
         return result;
     }
-    public Map<String,Object> stats() {
-        var items = inventory();
+    public Map<String,Object> stats() { return stats(null); }
+    public Map<String,Object> stats(Long ownerId) {
+        var items = inventory(ownerId);
         Map<String,Long> categories = new TreeMap<>();
         items.forEach(i -> categories.merge(i.get("category").toString(), 1L, Long::sum));
         return Map.of("totalItems", items.size(), "outOfStockCount", items.stream().filter(i -> number(i,"quantity") == 0).count(),
@@ -156,45 +165,55 @@ public class PantryService {
             "expiringCount", items.stream().filter(PantryService::expiring).count(),
             "categoryBreakdown", categories.entrySet().stream().map(e -> Map.of("category",e.getKey(),"count",e.getValue())).toList());
     }
-    public Map<String,Object> list(long id) {
-        var list = repo.one("SELECT * FROM shopping_lists WHERE id=?", id);
-        list.put("items", repo.query("SELECT * FROM shopping_list_items WHERE shopping_list_id=? ORDER BY id", id));
+    public Map<String,Object> list(long id) { return list(null, id); }
+    public Map<String,Object> list(Long ownerId, long id) {
+        var list = repo.one("SELECT * FROM shopping_lists WHERE id=? AND " + ownerWhere("account_id", ownerId), id);
+        list.put("items", repo.query("SELECT * FROM shopping_list_items WHERE shopping_list_id=? AND " + ownerWhere("account_id", ownerId) + " ORDER BY id", id));
         return list;
     }
-    public List<Map<String,Object>> lists() {
-        var lists = repo.query("SELECT * FROM shopping_lists ORDER BY created_at");
+    public List<Map<String,Object>> lists() { return lists(null); }
+    public List<Map<String,Object>> lists(Long ownerId) {
+        var lists = repo.query("SELECT * FROM shopping_lists WHERE " + ownerWhere("account_id", ownerId) + " ORDER BY created_at");
         for (var list : lists) {
-            var items = repo.query("SELECT * FROM shopping_list_items WHERE shopping_list_id=?", id(list));
+            var items = repo.query("SELECT * FROM shopping_list_items WHERE shopping_list_id=? AND " + ownerWhere("account_id", ownerId), id(list));
             list.put("itemCount", items.size()); list.put("purchasedCount", items.stream().filter(i -> Boolean.TRUE.equals(i.get("purchased"))).count());
         }
         return lists;
     }
-    public Map<String,Object> createList(Map<String,Object> body) {
+    public Map<String,Object> createList(Map<String,Object> body) { return createList(null, body); }
+    public Map<String,Object> createList(Long ownerId, Map<String,Object> body) {
         if (!(body.get("name") instanceof String name) || name.isBlank()) bad("name is required");
-        long id = repo.insert("shopping_lists", Map.of("name", body.get("name")));
-        var list = repo.one("SELECT * FROM shopping_lists WHERE id=?", id);
+        Map<String,Object> values = new LinkedHashMap<>(); values.put("name", body.get("name")); if (ownerId != null) values.put("account_id", ownerId);
+        long id = repo.insert("shopping_lists", values);
+        var list = list(ownerId, id);
         list.put("itemCount", 0); list.put("purchasedCount", 0); return list;
     }
-    public void deleteList(long id) { list(id); repo.execute("DELETE FROM shopping_lists WHERE id=?", id); }
-    public Map<String,Object> addItem(long listId, Map<String,Object> body) {
-        list(listId); var values = fields(body, true, false);
+    public void deleteList(long id) { deleteList(null, id); }
+    public void deleteList(Long ownerId, long id) { list(ownerId, id); repo.execute("DELETE FROM shopping_lists WHERE id=? AND " + ownerWhere("account_id", ownerId), id); }
+    public Map<String,Object> addItem(long listId, Map<String,Object> body) { return addItem(null, listId, body); }
+    public Map<String,Object> addItem(Long ownerId, long listId, Map<String,Object> body) {
+        list(ownerId, listId); var values = fields(body, true, false);
         values.remove("purchased");
-        if (values.get("inventory_item_id") != null) inventory(((Number)values.get("inventory_item_id")).longValue());
+        if (values.get("inventory_item_id") != null) inventory(ownerId, ((Number)values.get("inventory_item_id")).longValue());
         values.put("shopping_list_id", listId);
+        if (ownerId != null) values.put("account_id", ownerId);
         long id = repo.insert("shopping_list_items", values); return repo.one("SELECT * FROM shopping_list_items WHERE id=?", id);
     }
-    public Map<String,Object> updateItem(long listId, long id, Map<String,Object> body) {
-        repo.one("SELECT * FROM shopping_list_items WHERE id=? AND shopping_list_id=?", id, listId);
+    public Map<String,Object> updateItem(long listId, long id, Map<String,Object> body) { return updateItem(null, listId, id, body); }
+    public Map<String,Object> updateItem(Long ownerId, long listId, long id, Map<String,Object> body) {
+        repo.one("SELECT * FROM shopping_list_items WHERE id=? AND shopping_list_id=? AND " + ownerWhere("account_id", ownerId), id, listId);
         var values = fields(body, false, false); values.keySet().retainAll(Set.of("quantity", "notes", "purchased"));
-        repo.update("shopping_list_items", id, values); return repo.one("SELECT * FROM shopping_list_items WHERE id=?", id);
+        repo.update("shopping_list_items", id, values, ownerId); return repo.one("SELECT * FROM shopping_list_items WHERE id=? AND " + ownerWhere("account_id", ownerId), id);
     }
-    public void deleteItem(long listId, long id) {
-        repo.one("SELECT * FROM shopping_list_items WHERE id=? AND shopping_list_id=?", id, listId);
-        repo.execute("DELETE FROM shopping_list_items WHERE id=?", id);
+    public void deleteItem(long listId, long id) { deleteItem(null, listId, id); }
+    public void deleteItem(Long ownerId, long listId, long id) {
+        repo.one("SELECT * FROM shopping_list_items WHERE id=? AND shopping_list_id=? AND " + ownerWhere("account_id", ownerId), id, listId);
+        repo.execute("DELETE FROM shopping_list_items WHERE id=? AND " + ownerWhere("account_id", ownerId), id);
     }
-    public Map<String,Object> generateList() { return generateList(Map.of()); }
-    public Map<String,Object> generateList(Map<String,Object> request) {
-        var suggestions = suggestions().stream().filter(s -> !s.get("urgency").equals("expiring_soon")).toList();
+    public Map<String,Object> generateList() { return generateList(null, Map.of()); }
+    public Map<String,Object> generateList(Map<String,Object> request) { return generateList(null, request); }
+    public Map<String,Object> generateList(Long ownerId, Map<String,Object> request) {
+        var suggestions = suggestions(ownerId).stream().filter(s -> !s.get("urgency").equals("expiring_soon")).toList();
         if (suggestions.isEmpty()) bad("No low-stock suggestions are available.");
         var selected = new LinkedHashMap<Long, Map<String,Object>>();
         Object requestedItems = request.get("items");
@@ -224,20 +243,21 @@ public class PantryService {
             }
         } else bad("items must be an array");
         if (selected.isEmpty()) bad("Select at least one shopping item.");
-        long listId = id(createList(Map.of("name", "Low-stock shopping list")));
+        long listId = id(createList(ownerId, Map.of("name", "Low-stock shopping list")));
         for (var suggestion : selected.values()) {
             var body = new LinkedHashMap<>(suggestion);
             body.putIfAbsent("quantity", Math.max(number(suggestion,"minThreshold") - number(suggestion,"currentQuantity"), 1));
-            body.put("notes", suggestion.get("reason")); addItem(listId, body);
+            body.put("notes", suggestion.get("reason")); addItem(ownerId, listId, body);
         }
-        return list(listId);
+        return list(ownerId, listId);
     }
-    public Map<String,Object> purchase(long listId) {
-        repo.one("SELECT * FROM shopping_lists WHERE id=? FOR UPDATE", listId);
-        var items = repo.query("SELECT * FROM shopping_list_items WHERE shopping_list_id=? AND purchased=TRUE AND restocked=FALSE AND inventory_item_id IS NOT NULL", listId);
+    public Map<String,Object> purchase(long listId) { return purchase(null, listId); }
+    public Map<String,Object> purchase(Long ownerId, long listId) {
+        repo.one("SELECT * FROM shopping_lists WHERE id=? AND " + ownerWhere("account_id", ownerId) + " FOR UPDATE", listId);
+        var items = repo.query("SELECT * FROM shopping_list_items WHERE shopping_list_id=? AND " + ownerWhere("account_id", ownerId) + " AND purchased=TRUE AND restocked=FALSE AND inventory_item_id IS NOT NULL", listId);
         for (var item : items) {
-            repo.execute("UPDATE inventory_items SET quantity=quantity+?, revision=revision+1, updated_at=CURRENT_TIMESTAMP WHERE id=?", item.get("quantity"), item.get("inventoryItemId"));
-            repo.execute("UPDATE shopping_list_items SET restocked=TRUE WHERE id=?", item.get("id"));
+            repo.execute("UPDATE inventory_items SET quantity=quantity+?, revision=revision+1, updated_at=CURRENT_TIMESTAMP WHERE id=? AND " + ownerWhere("account_id", ownerId), item.get("quantity"), item.get("inventoryItemId"));
+            repo.execute("UPDATE shopping_list_items SET restocked=TRUE WHERE id=? AND " + ownerWhere("account_id", ownerId), item.get("id"));
         }
         events.publishEvent(new PantryChanged("purchase_completed", null));
         return Map.of("purchasedCount", items.size(), "updatedInventoryItems", items.size());
