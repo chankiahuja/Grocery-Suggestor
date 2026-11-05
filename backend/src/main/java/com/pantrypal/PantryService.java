@@ -22,8 +22,6 @@ public class PantryService {
     static void bad(String reason) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, reason); }
     public List<Long> accountIds() { return repo.accountIds(); }
 
-    public List<Long> accountIds() { return repo.accountIds(); }
-
     // Explicit allowlist: client keys never become SQL identifiers.
     Map<String,Object> fields(Map<String,Object> body, boolean create, boolean inventory) {
         Map<String,Object> result = new LinkedHashMap<>();
@@ -50,6 +48,8 @@ public class PantryService {
     }
 
     private static final String INVENTORY_COLUMNS = "id,name,category,quantity,unit,min_threshold,expires_at,notes,created_at,updated_at";
+    private static final String SHOPPING_LIST_COLUMNS = "id,name,created_at,updated_at";
+    private static final String SHOPPING_LIST_ITEM_COLUMNS = "id,shopping_list_id,inventory_item_id,name,category,quantity,unit,purchased,notes";
     private String ownerWhere(String column, Long ownerId) { return ownerId == null ? column + " IS NULL" : column + "=" + ownerId; }
     public List<Map<String,Object>> inventory() { return inventory(null); }
     public List<Map<String,Object>> inventory(Long ownerId) { return repo.query("SELECT " + INVENTORY_COLUMNS + " FROM inventory_items WHERE " + ownerWhere("account_id", ownerId) + " ORDER BY name"); }
@@ -172,15 +172,15 @@ public class PantryService {
     }
     public Map<String,Object> list(long id) { return list(null, id); }
     public Map<String,Object> list(Long ownerId, long id) {
-        var list = repo.one("SELECT * FROM shopping_lists WHERE id=? AND " + ownerWhere("account_id", ownerId), id);
-        list.put("items", repo.query("SELECT * FROM shopping_list_items WHERE shopping_list_id=? AND " + ownerWhere("account_id", ownerId) + " ORDER BY id", id));
+        var list = repo.one("SELECT " + SHOPPING_LIST_COLUMNS + " FROM shopping_lists WHERE id=? AND " + ownerWhere("account_id", ownerId), id);
+        list.put("items", repo.query("SELECT " + SHOPPING_LIST_ITEM_COLUMNS + " FROM shopping_list_items WHERE shopping_list_id=? AND " + ownerWhere("account_id", ownerId) + " ORDER BY id", id));
         return list;
     }
     public List<Map<String,Object>> lists() { return lists(null); }
     public List<Map<String,Object>> lists(Long ownerId) {
-        var lists = repo.query("SELECT * FROM shopping_lists WHERE " + ownerWhere("account_id", ownerId) + " ORDER BY created_at");
+        var lists = repo.query("SELECT " + SHOPPING_LIST_COLUMNS + " FROM shopping_lists WHERE " + ownerWhere("account_id", ownerId) + " ORDER BY created_at");
         for (var list : lists) {
-            var items = repo.query("SELECT * FROM shopping_list_items WHERE shopping_list_id=? AND " + ownerWhere("account_id", ownerId), id(list));
+            var items = repo.query("SELECT purchased FROM shopping_list_items WHERE shopping_list_id=? AND " + ownerWhere("account_id", ownerId), id(list));
             list.put("itemCount", items.size()); list.put("purchasedCount", items.stream().filter(i -> Boolean.TRUE.equals(i.get("purchased"))).count());
         }
         return lists;
@@ -202,13 +202,15 @@ public class PantryService {
         if (values.get("inventory_item_id") != null) inventory(ownerId, ((Number)values.get("inventory_item_id")).longValue());
         values.put("shopping_list_id", listId);
         if (ownerId != null) values.put("account_id", ownerId);
-        long id = repo.insert("shopping_list_items", values); return repo.one("SELECT * FROM shopping_list_items WHERE id=?", id);
+        long id = repo.insert("shopping_list_items", values);
+        return repo.one("SELECT " + SHOPPING_LIST_ITEM_COLUMNS + " FROM shopping_list_items WHERE id=? AND " + ownerWhere("account_id", ownerId), id);
     }
     public Map<String,Object> updateItem(long listId, long id, Map<String,Object> body) { return updateItem(null, listId, id, body); }
     public Map<String,Object> updateItem(Long ownerId, long listId, long id, Map<String,Object> body) {
         repo.one("SELECT * FROM shopping_list_items WHERE id=? AND shopping_list_id=? AND " + ownerWhere("account_id", ownerId), id, listId);
         var values = fields(body, false, false); values.keySet().retainAll(Set.of("quantity", "notes", "purchased"));
-        repo.update("shopping_list_items", id, values, ownerId); return repo.one("SELECT * FROM shopping_list_items WHERE id=? AND " + ownerWhere("account_id", ownerId), id);
+        repo.update("shopping_list_items", id, values, ownerId);
+        return repo.one("SELECT " + SHOPPING_LIST_ITEM_COLUMNS + " FROM shopping_list_items WHERE id=? AND " + ownerWhere("account_id", ownerId), id);
     }
     public void deleteItem(long listId, long id) { deleteItem(null, listId, id); }
     public void deleteItem(Long ownerId, long listId, long id) {
