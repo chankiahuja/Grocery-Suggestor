@@ -22,9 +22,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
     ? "Shopping Lists"
     : location.startsWith("/compare-prices")
       ? "Compare Prices"
-    : location === "/inventory"
+    : location.startsWith("/inventory")
       ? "Home inventory"
       : "Overview";
+  const sectionHref =
+    section === "Shopping Lists"
+      ? "/shopping-lists"
+      : section === "Compare Prices"
+        ? "/compare-prices"
+        : section === "Home inventory"
+          ? "/inventory"
+          : "/dashboard";
   const base = import.meta.env?.BASE_URL ?? "/";
   return (
     <div className="pantry-shell min-h-[100dvh] bg-background">
@@ -92,9 +100,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </header>
       <main className="pantry-main">
         <div className="pantry-breadcrumb">
-          <span>My household</span>
+          <Link href="/dashboard">My household</Link>
           <span aria-hidden="true">/</span>
-          <span>{section}</span>
+          <Link href={sectionHref} aria-current={sectionHref === location ? "page" : undefined}>
+            {section}
+          </Link>
         </div>
         {import.meta.env?.MODE === "mock" && (
           <div className="pantry-demo">

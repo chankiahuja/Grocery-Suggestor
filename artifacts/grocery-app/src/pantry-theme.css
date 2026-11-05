@@ -126,6 +126,16 @@ body {
 .pantry-breadcrumb span:last-child {
   color: var(--pantry-muted);
 }
+.pantry-breadcrumb a {
+  color: inherit;
+  text-decoration: none;
+}
+.pantry-breadcrumb a:hover,
+.pantry-breadcrumb a:focus-visible {
+  color: var(--pantry-ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 .pantry-content {
   padding: 20px 0 30px;
 }
