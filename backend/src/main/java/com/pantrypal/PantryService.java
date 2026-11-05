@@ -22,6 +22,8 @@ public class PantryService {
     static void bad(String reason) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, reason); }
     public List<Long> accountIds() { return repo.accountIds(); }
 
+    public List<Long> accountIds() { return repo.accountIds(); }
+
     // Explicit allowlist: client keys never become SQL identifiers.
     Map<String,Object> fields(Map<String,Object> body, boolean create, boolean inventory) {
         Map<String,Object> result = new LinkedHashMap<>();
