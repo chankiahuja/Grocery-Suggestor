@@ -14,7 +14,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 public class NotificationEvents {
     private final List<SseEmitter> clients = new CopyOnWriteArrayList<>();
     private final PantryService service;
-    private volatile String previous = "";
+    private final Map<Long,String> previousByAccount = new HashMap<>();
     public NotificationEvents(PantryService service) { this.service = service; }
     @GetMapping(value="/stream", produces="text/event-stream")
     public SseEmitter subscribe() {
@@ -30,12 +30,18 @@ public class NotificationEvents {
     @TransactionalEventListener
     public void changed(PantryService.PantryChanged event) { broadcast(event.type()); }
     @Scheduled(fixedDelayString="${pantrypal.expiry-check-ms:60000}")
-    public void checkExpiry() {
-        String current = service.suggestions().toString();
-        if (!current.equals(previous)) { previous = current; broadcast("alerts_changed"); }
-        else broadcast("heartbeat");
+    public synchronized void checkExpiry() {
+        boolean changed = false;
+        var accountIds = service.accountIds();
+        previousByAccount.keySet().retainAll(accountIds);
+        for (Long accountId : accountIds) {
+            String current = service.suggestions(accountId).toString();
+            String previous = previousByAccount.put(accountId, current);
+            if (previous == null ? !current.equals("[]") : !current.equals(previous)) changed = true;
+        }
+        broadcast(changed ? "alerts_changed" : "heartbeat");
     }
-    private void broadcast(String type) {
+    void broadcast(String type) {
         for (var emitter : clients) {
             try { emitter.send(SseEmitter.event().name("pantry-event").data(Map.of("type", type))); }
             catch (IOException | IllegalStateException e) { clients.remove(emitter); emitter.complete(); }
