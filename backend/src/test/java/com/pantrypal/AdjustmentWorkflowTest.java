@@ -37,6 +37,27 @@ class AdjustmentWorkflowTest {
         return service.adjustInventory(id, key, Map.of("operation", operation, "amount", amount));
     }
 
+    @Test void accountScopedInventoryAndPurchaseEventsCarryTheirOwner() {
+        long accountId = repo.insert("accounts", Map.of(
+            "email", UUID.randomUUID() + "@example.com", "display_name", "Account owner"));
+        long itemId = PantryService.id(service.saveInventory(accountId, null, Map.of(
+            "name", "Owned item", "category", "Other", "quantity", 1, "unit", "each", "minThreshold", 1)));
+        long listId = PantryService.id(service.createList(accountId, Map.of("name", "Owned list")));
+        try {
+            clearInvocations(notifications);
+            service.adjustInventory(accountId, itemId, "owned-adjustment",
+                Map.of("operation", "consume", "amount", 1));
+            verify(notifications).changed(new PantryService.PantryChanged("inventory_changed", itemId, accountId));
+
+            clearInvocations(notifications);
+            service.purchase(accountId, listId);
+            verify(notifications).changed(new PantryService.PantryChanged("purchase_completed", null, accountId));
+        } finally {
+            service.deleteList(accountId, listId);
+            service.deleteInventory(accountId, itemId);
+        }
+    }
+
     // Calls enter separate service transactions on worker threads. The ready/start
     // barriers avoid sequential submission masquerading as a concurrency test.
     <T> List<T> race(Callable<T> first, Callable<T> second) throws Exception {

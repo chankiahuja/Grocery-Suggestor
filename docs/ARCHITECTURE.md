@@ -133,7 +133,7 @@ The frontend production build is included in the Spring classpath and executable
 
 The controller owns HTTP routing, the service owns validation and transactions, and the repository owns parameterized SQL and camelCase serialization. SQL identifiers are an internal allowlist. Flyway owns the new database schema.
 
-Inventory changes and completed purchases publish Spring application events. Transactional listeners notify browsers only after commit. A scheduled check compares stock/expiry suggestions independently for each account and emits only the existing invalidation event type; alert contents are read through the authenticated, account-scoped suggestions API. Heartbeats keep idle connections active. Browser EventSource reconnects automatically. The notification bell retains its 30-second snapshot polling as fallback.
+Inventory changes and completed purchases publish Spring application events tagged with their owning account. Transactional listeners notify only that account's connected browsers, and the SSE payload contains only the existing event type. A scheduled check compares current stock/expiry suggestions independently per account and routes alert changes and heartbeats to that account's streams. Alert contents remain available through the authenticated suggestions API. Browser EventSource reconnects automatically. The notification bell retains its 30-second snapshot polling as fallback.
 
 Rules use UTC dates: zero quantity is critical; positive quantity at/below threshold is low; expiry today through seven days ahead is expiring soon. Suggestions choose one reason per item, in that priority order. Category attention can count both stock and freshness problems for an item. Expiry-only reminders do not generate purchases.
 
