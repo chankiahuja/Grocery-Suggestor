@@ -121,36 +121,47 @@ export default function Dashboard() {
 
   return (
     <Layout>
-      <div className="space-y-8">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-          <p className="text-muted-foreground mt-1">Your pantry at a glance</p>
+      <div className="dashboard-page flex flex-col gap-8">
+        <h1 className="sr-only">Dashboard</h1>
+        <div className="dashboard-intro">
+          <span className="pantry-eyebrow">A little more in order</span>
+          <h2 className="text-3xl font-bold tracking-tight">
+            Make room for the everyday.
+          </h2>
+          <p className="text-muted-foreground mt-1">
+            A calmer home starts with the little things.
+          </p>
         </div>
 
-        <section className="pantry-hero" aria-label="A little more in order">
+        <section
+          className="pantry-hero"
+          aria-label="Your home. A little more together."
+        >
           <img
             src={`${import.meta.env?.BASE_URL ?? "/"}brand/household.png`}
             alt=""
             fetchPriority="high"
           />
           <div className="pantry-hero-copy">
-            <span className="pantry-eyebrow">A little more in order</span>
+            <span className="pantry-eyebrow">
+              Your home. A little more together.
+            </span>
             <h3>
-              A calmer kitchen.
-              <br />A little less waste.
+              Life’s little essentials.
+              <br />All in one place.
             </h3>
             <p>
-              Know what you have, remember what you need, and make room for the
-              everyday.
+              From the laundry shelf to the breakfast cupboard. A little less
+              keeping track, a little more living.
             </p>
             <Link href="/inventory">
-              Take a look in your pantry <ArrowRight className="h-4 w-4" />
+              Step into your home <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
         </section>
 
         {/* Stats Grid */}
-        <div className="pantry-stats grid grid-cols-2 lg:grid-cols-4">
+        <div className="dashboard-stats pantry-stats grid grid-cols-2 lg:grid-cols-4">
           {statsLoading ? (
             <>
               {Array.from({ length: 4 }).map((_, i) => (
@@ -196,20 +207,20 @@ export default function Dashboard() {
         </div>
 
         {/* Pantry Attention by Category */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+        <Card className="dashboard-panel dashboard-attention">
+          <CardHeader className="dashboard-panel-header">
+            <CardTitle className="dashboard-panel-title flex items-center gap-2">
               <Layers className="h-5 w-5" />
               Pantry Attention by Category
             </CardTitle>
-            <p className="text-sm text-muted-foreground">
+            <p className="dashboard-panel-description text-sm text-muted-foreground">
               Stock and freshness issues, ordered by urgency
             </p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="dashboard-panel-content">
             {inventoryLoading || inventoryFetching ? (
               <div
-                className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3"
+                className="dashboard-attention-grid grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3"
                 data-testid="pantry-attention-loading"
               >
                 {Array.from({ length: 3 }).map((_, i) => (
@@ -246,7 +257,7 @@ export default function Dashboard() {
                 </Button>
               </div>
             ) : categoryAttention.length > 0 ? (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="dashboard-attention-grid grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {categoryAttention.map((category) => {
                   const categoryTestId = `category-attention-${category.category
                     .toLowerCase()
@@ -274,7 +285,7 @@ export default function Dashboard() {
                       key={category.category}
                       href={`/inventory?category=${encodeURIComponent(category.category)}`}
                       aria-label={`View ${category.category}: ${category.attentionItems} items need attention`}
-                      className="group rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-accent/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="dashboard-attention-card group rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-accent/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       data-testid={categoryTestId}
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -301,7 +312,7 @@ export default function Dashboard() {
                           <span
                             key={metric.label}
                             className={cn(
-                              "inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium",
+                              "dashboard-attention-metric inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium",
                               metric.tone,
                               metric.count === 0 && "opacity-60",
                             )}
@@ -336,10 +347,11 @@ export default function Dashboard() {
         </Card>
 
         {/* Grocery Suggestions */}
-        <Card>
-          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-4">
-            <CardTitle>Grocery Suggestions</CardTitle>
+        <Card className="dashboard-panel dashboard-suggestions">
+          <CardHeader className="dashboard-suggestions-header flex flex-row flex-wrap items-center justify-between gap-4">
+            <CardTitle className="dashboard-panel-title">Grocery Suggestions</CardTitle>
             <Button
+              className="dashboard-generate-button"
               onClick={handleGenerateShoppingList}
               disabled={
                 suggestionsLoading ||
@@ -354,7 +366,7 @@ export default function Dashboard() {
                 : "Generate shopping list"}
             </Button>
           </CardHeader>
-          <CardContent>
+          <CardContent className="dashboard-suggestions-content">
             {suggestionsLoading ? (
               <div className="space-y-3">
                 {Array.from({ length: 3 }).map((_, i) => (
@@ -362,7 +374,7 @@ export default function Dashboard() {
                 ))}
               </div>
             ) : reviewOpen ? (
-              <div className="space-y-5" data-testid="shopping-list-preview">
+              <div className="dashboard-review space-y-5" data-testid="shopping-list-preview">
                 <div>
                   <h3 className="text-lg font-semibold">
                     Review shopping list
@@ -380,16 +392,16 @@ export default function Dashboard() {
                         .map((item) => (
                           <div
                             key={item.inventoryItemId}
-                            className="flex flex-wrap items-center gap-3 rounded-lg border border-border p-3"
+                            className="dashboard-review-item flex flex-wrap items-center gap-3 rounded-lg border border-border p-3"
                             data-testid={`preview-item-${item.inventoryItemId}`}
                           >
-                            <div className="min-w-40 flex-1">
+                            <div className="dashboard-review-name min-w-40 flex-1">
                               <p className="font-medium">{item.name}</p>
                               <p className="text-xs text-muted-foreground">
                                 {item.reason}
                               </p>
                             </div>
-                            <span className="text-xs text-muted-foreground">
+                            <span className="dashboard-review-current text-xs text-muted-foreground">
                               Current: {item.currentQuantity} {item.unit}
                             </span>
                             <Input
@@ -398,7 +410,7 @@ export default function Dashboard() {
                               step="any"
                               value={item.quantity}
                               aria-label={`${item.name} quantity`}
-                              className="w-24"
+                              className="dashboard-review-quantity w-24"
                               onChange={(event) => {
                                 const quantity = Number(event.target.value);
                                 setReviewItems((previous) =>
@@ -416,11 +428,12 @@ export default function Dashboard() {
                                 );
                               }}
                             />
-                            <span className="text-sm">{item.unit}</span>
+                            <span className="dashboard-review-unit text-sm">{item.unit}</span>
                             <Button
                               type="button"
                               variant="ghost"
                               size="sm"
+                              className="dashboard-review-remove"
                               onClick={() =>
                                 setReviewItems((previous) =>
                                   previous.filter(
@@ -464,7 +477,7 @@ export default function Dashboard() {
                 {suggestions.map((suggestion, idx) => (
                   <div
                     key={`${suggestion.name}-${idx}`}
-                    className="p-4 rounded-lg border border-border bg-card hover:bg-accent/5 transition-colors animate-slide-up"
+                    className="dashboard-suggestion p-4 rounded-lg border border-border bg-card hover:bg-accent/5 transition-colors animate-slide-up"
                     style={{ animationDelay: `${idx * 50}ms` }}
                     data-testid={`suggestion-${idx}`}
                   >
@@ -497,7 +510,7 @@ export default function Dashboard() {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-12 text-muted-foreground">
+              <div className="dashboard-empty text-center py-12 text-muted-foreground">
                 <Package className="h-12 w-12 mx-auto mb-3 opacity-50" />
                 <p>No grocery suggestions right now.</p>
                 <p className="text-sm">Your pantry is well stocked!</p>
