@@ -15,6 +15,10 @@ public class PantryRepository {
     public PantryRepository(JdbcTemplate jdbc) { this.jdbc = jdbc; }
     public int execute(String sql, Object... args) { return jdbc.update(sql, args); }
 
+    public List<Long> accountIds() {
+        return jdbc.query("SELECT id FROM accounts ORDER BY id", (rs, row) -> rs.getLong("id"));
+    }
+
     public List<Map<String,Object>> query(String sql, Object... args) {
         return jdbc.query(sql, (rs, n) -> {
             Map<String,Object> row = new LinkedHashMap<>();
