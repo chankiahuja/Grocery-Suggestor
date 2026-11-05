@@ -153,6 +153,48 @@ class AuthFlowTest {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM accounts WHERE email='new@example.com'", Integer.class)).isEqualTo(1);
     }
 
+    @Test void signupDoesNotClaimUnownedLegacyPantryData() throws Exception {
+        var browser = new Browser();
+        browser.session();
+        String suffix = UUID.randomUUID().toString();
+        String itemName = "Unclaimed legacy rice " + suffix;
+        String listName = "Unclaimed legacy list " + suffix;
+        jdbc.update("""
+            INSERT INTO inventory_items (name, category, quantity, unit, min_threshold)
+            VALUES (?, 'Grains', 2, 'kg', 1)
+            """, itemName);
+        Long itemId = jdbc.queryForObject(
+            "SELECT id FROM inventory_items WHERE name=?", Long.class, itemName);
+        jdbc.update("INSERT INTO shopping_lists (name) VALUES (?)", listName);
+        Long listId = jdbc.queryForObject(
+            "SELECT id FROM shopping_lists WHERE name=?", Long.class, listName);
+        jdbc.update("""
+            INSERT INTO shopping_list_items
+                (shopping_list_id, inventory_item_id, name, category, quantity, unit)
+            VALUES (?, ?, ?, 'Grains', 1, 'kg')
+            """, listId, itemId, itemName);
+
+        try {
+            var challenge = browser.requestCode("claim-test@example.com");
+            browser.verify("claim-test@example.com", challenge, codes.get("claim-test@example.com"), 200);
+
+            assertThat(jdbc.queryForObject(
+                "SELECT account_id FROM inventory_items WHERE id=?", Long.class, itemId)).isNull();
+            assertThat(jdbc.queryForObject(
+                "SELECT account_id FROM shopping_lists WHERE id=?", Long.class, listId)).isNull();
+            assertThat(jdbc.queryForObject(
+                "SELECT account_id FROM shopping_list_items WHERE shopping_list_id=?", Long.class, listId)).isNull();
+            assertThat(mvc.perform(get("/api/inventory").cookie(browser.cookie))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).isEqualTo("[]");
+            assertThat(mvc.perform(get("/api/shopping-lists").cookie(browser.cookie))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).isEqualTo("[]");
+        } finally {
+            jdbc.update("DELETE FROM shopping_list_items WHERE shopping_list_id=?", listId);
+            jdbc.update("DELETE FROM shopping_lists WHERE id=?", listId);
+            jdbc.update("DELETE FROM inventory_items WHERE id=?", itemId);
+        }
+    }
+
     @Test void resendHasServerCooldownAndInvalidatesEarlierChallenge() throws Exception {
         var browser = new Browser(); browser.session();
         var first = browser.requestCode("resend@example.com");

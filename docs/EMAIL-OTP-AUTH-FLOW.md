@@ -110,6 +110,6 @@ Default server limits are 20 code requests per IP per hour, 5 per email per hour
 - [V4](../backend/src/main/resources/db/migration/V4__email_authentication.sql) creates accounts, challenges, rate-limit buckets, and Spring Session tables. [V5](../backend/src/main/resources/db/migration/V5__email_challenge_intent.sql) records challenge intent and classifies pending challenges with a stored name as sign-up challenges.
 - Request and verification use a row lock on the email challenge. Code consumption and account creation occur in one transaction. The rate-limit transactions commit separately so rejected requests still count.
 - Login and sign-up share the same code-request response. The decision to create an account occurs only after code verification, using the stored challenge intent.
-- Email authentication does not add household isolation. Signed-in accounts still share pantry and shopping data until that separate work is implemented.
+- Email authentication creates and verifies accounts; pantry and shopping access is scoped to the signed-in account. Household sharing is separate. Signup does not claim unowned legacy rows; operators must verify ownership before assigning them. See the [legacy data claim procedure](./ENVIRONMENT.md#claiming-legacy-shared-pantry-data).
 
 For the API request and response schema, see [OpenAPI](../lib/api-spec/openapi.yaml). For the wider application flow, see [architecture](./ARCHITECTURE.md).
