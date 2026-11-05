@@ -22,8 +22,10 @@ public class AuthController {
     private final AuthService auth;
     private final HttpSessionSecurityContextRepository contexts;
     private final HttpSessionCsrfTokenRepository csrf;
-    public AuthController(AuthService auth, HttpSessionSecurityContextRepository contexts, HttpSessionCsrfTokenRepository csrf) {
-        this.auth = auth; this.contexts = contexts; this.csrf = csrf;
+    private final NotificationEvents notifications;
+    public AuthController(AuthService auth, HttpSessionSecurityContextRepository contexts, HttpSessionCsrfTokenRepository csrf,
+        NotificationEvents notifications) {
+        this.auth = auth; this.contexts = contexts; this.csrf = csrf; this.notifications = notifications;
     }
     @GetMapping("/session")
     public SessionState session(HttpServletRequest request, Authentication authentication) {
@@ -42,7 +44,12 @@ public class AuthController {
     public SessionState verify(@RequestBody Verification body, HttpServletRequest request, HttpServletResponse response) {
         if (body == null) throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "Enter a verification code");
         var account = auth.verify(body.email(), body.challengeId(), body.code(), request.getRemoteAddr());
-        if (request.getSession(false) != null) request.changeSessionId();
+        var existingSession = request.getSession(false);
+        if (existingSession != null) {
+            String previousSessionId = existingSession.getId();
+            request.changeSessionId();
+            notifications.disconnectSession(previousSessionId);
+        }
         var authentication = UsernamePasswordAuthenticationToken.authenticated(Long.toString(account.id()), null,
             AuthorityUtils.createAuthorityList("ROLE_USER"));
         var context = SecurityContextHolder.createEmptyContext();
@@ -55,7 +62,10 @@ public class AuthController {
     }
     @PostMapping("/logout")
     public SessionState logout(HttpServletRequest request, HttpServletResponse response, Authentication authentication) {
+        var session = request.getSession(false);
+        String sessionId = session == null ? null : session.getId();
         new SecurityContextLogoutHandler().logout(request, response, authentication);
+        notifications.disconnectSession(sessionId);
         var token = csrf.generateToken(request);
         csrf.saveToken(token, request, response);
         return new SessionState(false, null, token.getToken());

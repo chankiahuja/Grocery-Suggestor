@@ -3,20 +3,26 @@ package com.pantrypal;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.Cookie;
+import java.io.IOException;
 import java.time.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.core.Authentication;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mail.MailSendException;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyEmitter.DataWithMediaType;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter.SseEventBuilder;
 import org.springframework.web.server.ResponseStatusException;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -32,6 +38,7 @@ class AuthFlowTest {
     @Autowired AuthService auth;
     @MockitoBean OtpMailSender mail;
     @MockitoBean Clock clock;
+    @MockitoSpyBean NotificationEvents notifications;
     final AtomicLong now = new AtomicLong();
     final Map<String,String> codes = new ConcurrentHashMap<>();
     @BeforeEach void setup() {
@@ -106,6 +113,61 @@ class AuthFlowTest {
         assertThat(new Browser().session().get("authenticated").asBoolean()).isFalse();
     }
 
+    @Test void logoutStopsAnAlreadyOpenNotificationStream() throws Exception {
+        var browser = new Browser();
+        browser.session();
+        var challenge = browser.requestCode("stream-logout@example.com");
+        long accountId = browser.verify("stream-logout@example.com", challenge, codes.get("stream-logout@example.com"), 200)
+            .get("account").get("id").asLong();
+        String sessionId = jdbc.queryForObject("SELECT session_id FROM spring_session WHERE principal_name=?",
+            String.class, Long.toString(accountId));
+        Authentication authentication = mock(Authentication.class);
+        when(authentication.getName()).thenReturn(Long.toString(accountId));
+        var emitter = new RecordingEmitter();
+        notifications.subscribe(authentication, sessionId, emitter);
+
+        try {
+            browser.post("/api/auth/logout", Map.of(), 200);
+            notifications.changed(new PantryService.PantryChanged("inventory_changed", 41L, accountId));
+
+            assertThat(emitter.payloads).contains(Map.of("status", "connected"));
+            assertThat(emitter.payloads).doesNotContain(Map.of("type", "inventory_changed"));
+        } finally {
+            emitter.complete();
+        }
+    }
+
+    @Test void switchingAccountsClosesThePreviousAccountsNotificationStream() throws Exception {
+        var browser = new Browser();
+        browser.session();
+        var aliceChallenge = browser.requestCode("stream-switch-alice@example.com");
+        long aliceId = browser.verify("stream-switch-alice@example.com", aliceChallenge,
+            codes.get("stream-switch-alice@example.com"), 200).get("account").get("id").asLong();
+        String oldSessionId = jdbc.queryForObject("SELECT session_id FROM spring_session WHERE principal_name=?",
+            String.class, Long.toString(aliceId));
+        jdbc.update("INSERT INTO accounts(email, display_name) VALUES (?,?)",
+            "stream-switch-bob@example.com", "Bob");
+
+        Authentication aliceAuthentication = mock(Authentication.class);
+        when(aliceAuthentication.getName()).thenReturn(Long.toString(aliceId));
+        var emitter = new RecordingEmitter();
+        notifications.subscribe(aliceAuthentication, oldSessionId, emitter);
+
+        try {
+            var bobChallenge = browser.post("/api/auth/code",
+                Map.of("email", "stream-switch-bob@example.com", "intent", "login"), 200);
+            long bobId = browser.verify("stream-switch-bob@example.com", bobChallenge,
+                codes.get("stream-switch-bob@example.com"), 200).get("account").get("id").asLong();
+            assertThat(bobId).isNotEqualTo(aliceId);
+
+            notifications.changed(new PantryService.PantryChanged("inventory_changed", 41L, aliceId));
+
+            assertThat(emitter.payloads).doesNotContain(Map.of("type", "inventory_changed"));
+        } finally {
+            emitter.complete();
+        }
+    }
+
     @Test void csrfAndAuthenticationAreEnforcedOnApiAndLogout() throws Exception {
         mvc.perform(get("/api/healthz")).andExpect(status().isOk());
         for (String path : List.of("/api/inventory", "/api/suggestions", "/api/shopping-lists", "/api/notifications/stream")) {
@@ -121,6 +183,15 @@ class AuthFlowTest {
             .andExpect(status().isForbidden());
         browser.post("/api/inventory", Map.of("name", "Auth test", "category", "Other", "quantity", 1, "unit", "each", "minThreshold", 0), 201);
         jdbc.update("DELETE FROM inventory_items WHERE name='Auth test'");
+    }
+
+    private static class RecordingEmitter extends SseEmitter {
+        private final List<Object> payloads = new ArrayList<>();
+
+        @Override
+        public void send(SseEventBuilder builder) throws IOException {
+            for (DataWithMediaType part : builder.build()) payloads.add(part.getData());
+        }
     }
 
     @Test void demoCodeFailsAndAttemptsRemainLimitedAcrossRequests() throws Exception {

@@ -58,6 +58,30 @@ class AdjustmentWorkflowTest {
         }
     }
 
+    @Test void retryingOwnedInventoryAdjustmentReturnsTheAccountScopedItem() {
+        long accountId = repo.insert("accounts", Map.of(
+            "email", UUID.randomUUID() + "@example.com", "display_name", "Adjustment owner"));
+        long otherAccountId = repo.insert("accounts", Map.of(
+            "email", UUID.randomUUID() + "@example.com", "display_name", "Other account"));
+        long itemId = PantryService.id(service.saveInventory(accountId, null, Map.of(
+            "name", "Owned retry item", "category", "Other", "quantity", 5, "unit", "each", "minThreshold", 1)));
+        try {
+            var first = service.adjustInventory(accountId, itemId, "owned-retry",
+                Map.of("operation", "consume", "amount", 2));
+            var retry = service.adjustInventory(accountId, itemId, "owned-retry",
+                Map.of("operation", "consume", "amount", 2));
+
+            assertThat(retry).isEqualTo(first);
+            assertThat(PantryService.number(retry, "quantity")).isEqualTo(3);
+            assertThat(repo.query("SELECT id FROM inventory_adjustments WHERE inventory_item_id=?", itemId)).hasSize(1);
+            assertThatThrownBy(() -> service.adjustInventory(otherAccountId, itemId, "owned-retry",
+                Map.of("operation", "consume", "amount", 2)))
+                .isInstanceOf(ResponseStatusException.class);
+        } finally {
+            service.deleteInventory(accountId, itemId);
+        }
+    }
+
     // Calls enter separate service transactions on worker threads. The ready/start
     // barriers avoid sequential submission masquerading as a concurrency test.
     <T> List<T> race(Callable<T> first, Callable<T> second) throws Exception {

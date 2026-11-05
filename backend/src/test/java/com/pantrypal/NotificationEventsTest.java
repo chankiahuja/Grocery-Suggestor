@@ -36,6 +36,21 @@ class NotificationEventsTest {
     }
 
     @Test
+    void disconnectingOneSessionLeavesOtherSessionsForTheAccountConnected() throws IOException {
+        NotificationEvents notifications = new NotificationEvents(mock(PantryService.class));
+        var signedOut = new RecordingEmitter();
+        var stillSignedIn = new RecordingEmitter();
+        notifications.subscribe(authentication("1"), "session-a", signedOut);
+        notifications.subscribe(authentication("1"), "session-b", stillSignedIn);
+
+        notifications.disconnectSession("session-a");
+        notifications.changed(new PantryService.PantryChanged("inventory_changed", 41L, 1L));
+
+        assertThat(signedOut.payloads).doesNotContain(Map.of("type", "inventory_changed"));
+        assertThat(stillSignedIn.payloads).contains(Map.of("type", "inventory_changed"));
+    }
+
+    @Test
     void scheduledAlertChangesAndHeartbeatsStayWithinEachAccount() throws IOException {
         PantryService service = mock(PantryService.class);
         when(service.accountIds()).thenReturn(List.of(1L, 2L));
@@ -76,7 +91,8 @@ class NotificationEventsTest {
         when(authentication.getName()).thenReturn("not-an-account-id");
 
         assertThat(org.assertj.core.api.Assertions.catchThrowable(
-            () -> notifications.subscribe(authentication))).isInstanceOf(NumberFormatException.class);
+            () -> notifications.subscribe(authentication, (String) null, new RecordingEmitter())))
+            .isInstanceOf(NumberFormatException.class);
     }
 
     private Authentication authentication(String accountId) {

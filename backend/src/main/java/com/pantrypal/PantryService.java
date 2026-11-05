@@ -83,7 +83,7 @@ public class PantryService {
             if (!existing.get("operation").equals(operation) || Double.compare(number(existing, "amount"), amount) != 0) {
                 bad("Idempotency-Key was already used for a different adjustment");
             }
-            return inventory(id);
+            return inventory(ownerId, id);
         }
         double quantityBefore = number(item, "quantity");
         int changed;
