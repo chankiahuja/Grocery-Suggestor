@@ -36,7 +36,23 @@ Copy [`.env.example`](../.env.example) to `.env` to override Compose credentials
 
 For native Windows development, run your installed Mailpit executable with `--listen 127.0.0.1:8025 --smtp 127.0.0.1:1025`, then open http://localhost:8025 to read verification codes. Full-stack sign-in requires this SMTP service when the default `MAIL_HOST`/`MAIL_PORT` are used. Docker Compose runs its own Mailpit service at the same host ports and uses `mailpit:1025` inside its network; stop native Mailpit before starting Compose to avoid port conflicts. The browser-only `dev:mock` mode still uses code `123456` without sending mail or creating a server session.
 
-Normal mode issues an HttpOnly, SameSite=Lax session cookie and a CSRF token returned by `GET /api/auth/session`. Session attributes are stored through Spring Session JDBC; Flyway creates the tables. Cookies are Secure by default outside the `local` profile. Serve a deployed app over HTTPS, keep `AUTH_COOKIE_SECURE=true`, and configure SMTP credentials only through environment variables. The local account database still shares inventory between signed-in accounts until GS-15 is implemented. A missing `AUTH_OTP_SECRET` invalidates outstanding codes on backend restart, while signed-in sessions continue to work.
+Normal mode issues an HttpOnly, SameSite=Lax session cookie and a CSRF token returned by `GET /api/auth/session`. Session attributes are stored through Spring Session JDBC; Flyway creates the tables. Cookies are Secure by default outside the `local` profile. Serve a deployed app over HTTPS, keep `AUTH_COOKIE_SECURE=true`, and configure SMTP credentials only through environment variables. Pantry and shopping data is scoped to the signed-in account. A missing `AUTH_OTP_SECRET` invalidates outstanding codes on backend restart, while signed-in sessions continue to work.
+
+### Claiming legacy shared pantry data
+
+V6 assigns existing unowned inventory and shopping rows to the lowest-ID account present when it runs. If there are no accounts, legacy rows stay unowned and are hidden from all account-scoped APIs. Signup and login never claim them automatically. V6-assigned rows are not automatically reclassified later; review the target database's ownership before enabling access for multiple accounts. An operator must verify which account is entitled to any remaining unowned legacy data before assigning it; if ownership cannot be verified, leave the rows unowned.
+
+After confirming the intended account, inspect its ID (`SELECT id, email FROM accounts ORDER BY id;`) and run the following in a database transaction, replacing `123` with that verified ID:
+
+```sql
+BEGIN;
+UPDATE inventory_items SET account_id = 123 WHERE account_id IS NULL;
+UPDATE shopping_lists SET account_id = 123 WHERE account_id IS NULL;
+UPDATE shopping_list_items SET account_id = 123 WHERE account_id IS NULL;
+COMMIT;
+```
+
+This claims all remaining unowned legacy rows for one account. Back up the database first and do not run it if unowned rows need different owners.
 
 The default full-stack application uses Spring Boot's embedded server on http://localhost:8080 for React assets and `/api`, including SSE. Maven includes `artifacts/grocery-app/dist/public` as classpath static resources; build React before running Maven directly. Docker Compose builds both frontend and backend from the repository root. Use `docker build -f backend/Dockerfile .` for a standalone image build.
 
@@ -64,4 +80,4 @@ For PostgreSQL, set `$env:SPRING_PROFILES_ACTIVE = 'postgres'` and configure `DB
 - No alerts: add a pantry item with quantity zero or an expiry within seven days. The SSE stream is `/api/notifications/stream`; suggestions are the recoverable alert snapshot.
 - Browser notifications require explicit permission. In-app bell alerts work without it.
 
-Prototype limits: email accounts and sessions exist, but pantry and shopping data remain shared until GS-15 adds household authorization; Spring events and SSE are process-local and not durable. Reconnects and polling recover current stock alerts; purchase events are cache refresh signals, not a historical notification inbox.
+Prototype limits: account ownership is per account; household sharing and invitations remain separate work. Spring events and SSE are process-local and not durable. Reconnects and polling recover current stock alerts; purchase events are cache refresh signals, not a historical notification inbox.
