@@ -460,8 +460,14 @@ body {
 .dashboard-intro {
   margin-bottom: -4px;
 }
+.dashboard-intro .pantry-eyebrow {
+  display: block;
+  margin-bottom: 4px;
+}
 .dashboard-intro h2 {
   color: #354d3a;
+  font-weight: 400;
+  letter-spacing: -1px;
 }
 .dashboard-intro p {
   color: #788575;

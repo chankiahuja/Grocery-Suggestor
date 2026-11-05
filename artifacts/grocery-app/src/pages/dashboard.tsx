@@ -122,9 +122,15 @@ export default function Dashboard() {
   return (
     <Layout>
       <div className="dashboard-page flex flex-col gap-8">
+        <h1 className="sr-only">Dashboard</h1>
         <div className="dashboard-intro">
-          <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-          <p className="text-muted-foreground mt-1">Your household at a glance</p>
+          <span className="pantry-eyebrow">A little more in order</span>
+          <h2 className="text-3xl font-bold tracking-tight">
+            Make room for the everyday.
+          </h2>
+          <p className="text-muted-foreground mt-1">
+            A calmer home starts with the little things.
+          </p>
         </div>
 
         <section
