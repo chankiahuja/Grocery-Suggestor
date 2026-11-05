@@ -1,6 +1,9 @@
 import { ArrowLeft, Info, MapPin, Tags } from "lucide-react";
 import { Link, useLocation } from "wouter";
-import { useGetShoppingList } from "@workspace/api-client-react";
+import {
+  getGetShoppingListQueryKey,
+  useGetShoppingList,
+} from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -35,7 +38,10 @@ export default function ComparePrices() {
   const listId = Number(params.get("listId"));
   const hasList = Number.isInteger(listId) && listId > 0;
   const { data: list, isLoading } = useGetShoppingList(hasList ? listId : 0, {
-    query: { enabled: hasList },
+    query: {
+      enabled: hasList,
+      queryKey: getGetShoppingListQueryKey(hasList ? listId : 0),
+    },
   });
 
   const basket = list?.items.length

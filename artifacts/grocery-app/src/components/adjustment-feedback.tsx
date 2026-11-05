@@ -1,4 +1,11 @@
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   undoInventoryAdjustment,
@@ -20,6 +27,11 @@ export function AdjustmentFeedbackProvider({
   children: React.ReactNode;
 }) {
   const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
+  const dismissAdjustment = useCallback((key: string) => {
+    setAdjustments((current) =>
+      current.filter((entry) => entry.key !== key),
+    );
+  }, []);
   return (
     <FeedbackContext.Provider
       value={(adjustment) =>
@@ -36,11 +48,7 @@ export function AdjustmentFeedbackProvider({
             <AdjustmentFeedback
               key={adjustment.key}
               adjustment={adjustment}
-              onDismiss={() =>
-                setAdjustments((current) =>
-                  current.filter((entry) => entry.key !== adjustment.key),
-                )
-              }
+              onDismiss={dismissAdjustment}
             />
           ))}
         </aside>
@@ -54,7 +62,7 @@ function AdjustmentFeedback({
   onDismiss,
 }: {
   adjustment: Adjustment;
-  onDismiss: () => void;
+  onDismiss: (key: string) => void;
 }) {
   const { item, key, expiresAt } = adjustment;
   const client = useQueryClient();
@@ -67,11 +75,14 @@ function AdjustmentFeedback({
   );
   useEffect(() => {
     const timer = setTimeout(
-      () => setExpired(true),
+      () => {
+        setExpired(true);
+        onDismiss(key);
+      },
       Math.max(0, expiresAt - Date.now()),
     );
     return () => clearTimeout(timer);
-  }, [expiresAt]);
+  }, [expiresAt, key, onDismiss]);
 
   async function undo() {
     if (busy.current || terminal) return;
@@ -134,7 +145,7 @@ function AdjustmentFeedback({
           size="sm"
           variant="ghost"
           disabled={pending}
-          onClick={onDismiss}
+          onClick={() => onDismiss(key)}
           aria-label={`Dismiss feedback for ${item.name}`}
         >
           Dismiss
