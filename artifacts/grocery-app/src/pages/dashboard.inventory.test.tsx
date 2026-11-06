@@ -7,6 +7,7 @@ import {
   getGetGrocerySuggestionsQueryKey,
   getGetInventoryStatsQueryKey,
   getListInventoryItemsQueryKey,
+  getListShoppingListsQueryKey,
   type InventoryItem,
   type ShoppingListWithItems,
 } from "@workspace/api-client-react";
@@ -891,7 +892,7 @@ describe("shopping list selection and deletion", () => {
       /items purchased/,
     );
     assert.match(
-      screen.getByRole("button", { name: "Compare prices" }).textContent ?? "",
+      screen.getByRole("button", { name: "Compare prices (sample)" }).textContent ?? "",
       /sample/,
     );
     assert.ok(screen.getByTestId("shopping-list-20"));
@@ -922,6 +923,33 @@ describe("shopping list selection and deletion", () => {
         .getByRole("checkbox", { name: "Select Party supplies" })
         .getAttribute("aria-checked"),
       "true",
+    );
+    queryClient.clear();
+  });
+
+  it("does not restore deleted IDs when the later list refresh fails", async () => {
+    const { api, queryClient } = await setup();
+    const replacement = { ...api.state.lists[0], name: "Replacement list" };
+    const invalidate = queryClient.invalidateQueries.bind(queryClient);
+    queryClient.invalidateQueries = (async () => {
+      throw new Error("Refresh unavailable");
+    }) as typeof queryClient.invalidateQueries;
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Select all shopping lists" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Delete selected (2)" }));
+    fireEvent.click(await screen.findByTestId("button-confirm-delete"));
+    await waitFor(() =>
+      assert.ok(!screen.queryByTestId("dialog-delete-list-confirm")),
+    );
+    assert.equal(api.state.lists.length, 0);
+    queryClient.invalidateQueries = invalidate;
+    api.state.lists.push(replacement);
+    await queryClient.invalidateQueries({ queryKey: getListShoppingListsQueryKey() });
+    await screen.findByRole("checkbox", { name: "Select Replacement list" });
+    assert.equal(
+      screen.getByRole("checkbox", { name: "Select Replacement list" }).getAttribute("aria-checked"),
+      "false",
     );
     queryClient.clear();
   });

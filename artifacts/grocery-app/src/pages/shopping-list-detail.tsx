@@ -223,7 +223,7 @@ export default function ShoppingListDetail() {
               variant="outline"
               size="sm"
               className="mb-4"
-              aria-label="Compare prices"
+              aria-label="Compare prices (sample)"
               data-testid="button-compare-prices"
             >
               <Tags className="h-4 w-4 mr-2" />

@@ -72,17 +72,19 @@ export default function ShoppingLists() {
   const handleDeleteConfirm = async () => {
     if (!listsToDelete.length || deleting) return;
     setDeleting(true);
+    let deletedIds = new Set<number>();
+    let failedIds = listsToDelete.map((list) => list.id);
     try {
       const results = await Promise.allSettled(
         listsToDelete.map((list) => deleteList.mutateAsync({ id: list.id })),
       );
-      const deletedIds = new Set(
+      deletedIds = new Set(
         listsToDelete
           .filter((_, index) => results[index].status === "fulfilled")
           .map((list) => list.id),
       );
       const failedCount = listsToDelete.length - deletedIds.size;
-      const failedIds = listsToDelete
+      failedIds = listsToDelete
         .filter((_, index) => results[index].status === "rejected")
         .map((list) => list.id);
       setSelectedIds(
@@ -109,11 +111,15 @@ export default function ShoppingLists() {
     } catch (error) {
       setSelectedIds(
         (previous) =>
-          new Set([...previous, ...listsToDelete.map((list) => list.id)]),
+          new Set(
+            [...previous, ...failedIds].filter((id) => !deletedIds.has(id)),
+          ),
       );
       toast({
-        title: "Error",
-        description: "Failed to delete list.",
+        title: deletedIds.size ? "Could not refresh shopping lists" : "Error",
+        description: deletedIds.size
+          ? "Some lists were deleted, but the list view could not refresh. Please try again."
+          : "Failed to delete list.",
         variant: "destructive",
       });
     } finally {
@@ -140,7 +146,7 @@ export default function ShoppingLists() {
             <Link href="/compare-prices">
               <Button
                 variant="outline"
-                aria-label="Compare prices"
+                aria-label="Compare prices (sample)"
                 data-testid="button-compare-prices"
               >
                 <Tags className="mr-2 h-4 w-4" />
