@@ -1,5 +1,13 @@
 import { useState } from "react";
-import { Plus, ShoppingCart, Trash2, ChevronRight, Tags } from "lucide-react";
+import {
+  Plus,
+  ShoppingCart,
+  Trash2,
+  ChevronRight,
+  Tags,
+  RefreshCw,
+  AlertCircle,
+} from "lucide-react";
 import { Link } from "wouter";
 import {
   useListShoppingLists,
@@ -10,7 +18,6 @@ import type { ShoppingList } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import { ShoppingListDialog } from "@/components/shopping-list-dialog";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
@@ -37,7 +44,13 @@ export default function ShoppingLists() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const { data: lists, isLoading } = useListShoppingLists();
+  const {
+    data: lists,
+    isLoading,
+    isError,
+    isFetching,
+    refetch,
+  } = useListShoppingLists();
   const deleteList = useDeleteShoppingList();
   const selectedLists = lists?.filter((list) => selectedIds.has(list.id)) ?? [];
   const allSelected = !!lists?.length && selectedLists.length === lists.length;
@@ -69,9 +82,14 @@ export default function ShoppingLists() {
           .map((list) => list.id),
       );
       const failedCount = listsToDelete.length - deletedIds.size;
+      const failedIds = listsToDelete
+        .filter((_, index) => results[index].status === "rejected")
+        .map((list) => list.id);
       setSelectedIds(
         (previous) =>
-          new Set([...previous].filter((id) => !deletedIds.has(id))),
+          new Set(
+            [...previous, ...failedIds].filter((id) => !deletedIds.has(id)),
+          ),
       );
       deletedIds.forEach((id) =>
         queryClient.removeQueries({ queryKey: [`/api/shopping-lists/${id}`] }),
@@ -89,6 +107,10 @@ export default function ShoppingLists() {
         ...(failedCount ? { variant: "destructive" as const } : {}),
       });
     } catch (error) {
+      setSelectedIds(
+        (previous) =>
+          new Set([...previous, ...listsToDelete.map((list) => list.id)]),
+      );
       toast({
         title: "Error",
         description: "Failed to delete list.",
@@ -103,37 +125,56 @@ export default function ShoppingLists() {
 
   return (
     <Layout>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
+      <div className="space-y-7">
+        <div className="flex flex-wrap items-end justify-between gap-5">
           <div>
-            <h2 className="text-3xl font-bold tracking-tight">
+            <span className="pantry-eyebrow">Your shopping, in one place</span>
+            <h2 className="mt-2 text-3xl font-normal tracking-tight">
               Shopping Lists
             </h2>
-            <p className="text-muted-foreground mt-1">
-              Organize your grocery trips
+            <p className="mt-2 text-sm text-muted-foreground">
+              Plan the essentials and keep each trip moving.
             </p>
           </div>
-          <Button
-            onClick={() => setDialogOpen(true)}
-            data-testid="button-create-list"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            New List
-          </Button>
-          <Link href="/compare-prices">
-            <Button variant="outline" data-testid="button-compare-prices">
-              <Tags className="h-4 w-4 mr-2" />
-              Compare prices
+          <div className="flex flex-wrap items-center gap-3">
+            <Link href="/compare-prices">
+              <Button
+                variant="outline"
+                aria-label="Compare prices"
+                data-testid="button-compare-prices"
+              >
+                <Tags className="mr-2 h-4 w-4" />
+                Compare prices{" "}
+                <span className="ml-1 text-xs opacity-70">(sample)</span>
+              </Button>
+            </Link>
+            <Button
+              onClick={() => setDialogOpen(true)}
+              data-testid="button-create-list"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              New List
             </Button>
-          </Link>
+          </div>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>{lists?.length || 0} Lists</CardTitle>
-            {!!lists?.length && (
-              <div className="flex flex-wrap items-center justify-between gap-3 pt-3">
-                <label className="flex items-center gap-2 text-sm font-medium">
+        <section
+          aria-label="Your shopping lists"
+          className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-7"
+        >
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-border pb-5">
+            <div>
+              <p className="pantry-eyebrow">Ready when you are</p>
+              <h3 className="mt-1 text-xl font-medium">
+                Your lists{" "}
+                <span className="text-muted-foreground">
+                  ({lists?.length ?? 0})
+                </span>
+              </h3>
+            </div>
+            {!!lists?.length && !isError && (
+              <div className="flex flex-wrap items-center gap-3 sm:gap-5">
+                <label className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Checkbox
                     aria-label="Select all shopping lists"
                     checked={
@@ -157,6 +198,7 @@ export default function ShoppingLists() {
                 {selectedLists.length > 0 && (
                   <Button
                     variant="destructive"
+                    size="sm"
                     disabled={deleting}
                     onClick={() => {
                       setListsToDelete(selectedLists);
@@ -169,92 +211,128 @@ export default function ShoppingLists() {
                 )}
               </div>
             )}
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <div className="space-y-3">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <Skeleton key={i} className="h-32 w-full" />
-                ))}
-              </div>
-            ) : lists && lists.length > 0 ? (
-              <div className="space-y-3">
-                {lists.map((list, idx) => {
-                  const progress =
-                    list.itemCount > 0
-                      ? (list.purchasedCount / list.itemCount) * 100
-                      : 0;
+          </div>
+          {isLoading ? (
+            <div
+              className="grid gap-4 md:grid-cols-2"
+              role="status"
+              aria-label="Loading shopping lists"
+            >
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-48 w-full rounded-xl" />
+              ))}
+            </div>
+          ) : isError ? (
+            <div
+              className="flex flex-col items-center rounded-xl border border-border bg-background px-6 py-12 text-center"
+              role="alert"
+            >
+              <AlertCircle className="mb-4 h-8 w-8 text-destructive" />
+              <h4 className="text-lg font-medium">Could not load your lists</h4>
+              <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+                Check your connection and try again. Your lists have not been
+                changed.
+              </p>
+              <Button
+                className="mt-5"
+                variant="outline"
+                disabled={isFetching}
+                onClick={() => void refetch()}
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                {isFetching ? "Retrying..." : "Try again"}
+              </Button>
+            </div>
+          ) : lists && lists.length > 0 ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              {lists.map((list, idx) => {
+                const progress =
+                  list.itemCount > 0
+                    ? (list.purchasedCount / list.itemCount) * 100
+                    : 0;
 
-                  return (
-                    <div
-                      key={list.id}
-                      className="p-5 rounded-lg border border-border bg-card hover:shadow-md transition-all animate-slide-up group"
-                      style={{ animationDelay: `${idx * 40}ms` }}
-                      data-testid={`shopping-list-${list.id}`}
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <Checkbox
-                          className="mt-1.5"
-                          aria-label={`Select ${list.name}`}
-                          checked={selectedIds.has(list.id)}
-                          disabled={deleting}
-                          onCheckedChange={(checked) =>
-                            toggleSelection(list.id, checked === true)
-                          }
-                        />
+                return (
+                  <article
+                    key={list.id}
+                    className="group rounded-xl border border-border bg-background p-5 transition-shadow hover:shadow-md animate-slide-up"
+                    style={{ animationDelay: `${idx * 40}ms` }}
+                    data-testid={`shopping-list-${list.id}`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <Checkbox
+                        className="mt-1"
+                        aria-label={`Select ${list.name}`}
+                        checked={selectedIds.has(list.id)}
+                        disabled={deleting}
+                        onCheckedChange={(checked) =>
+                          toggleSelection(list.id, checked === true)
+                        }
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs text-muted-foreground">
+                          Created{" "}
+                          {new Date(list.createdAt).toLocaleDateString()}
+                        </p>
                         <Link
                           href={`/shopping-lists/${list.id}`}
-                          className="flex-1 min-w-0"
+                          className="mt-1 inline-flex max-w-full items-center gap-1 rounded-sm text-lg font-medium hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                         >
-                          <div className="flex items-center gap-3 mb-3">
-                            <h4 className="font-semibold text-lg group-hover:text-primary transition-colors">
-                              {list.name}
-                            </h4>
-                            <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
-                          </div>
-                          <div className="space-y-2 mb-3">
-                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                              <span className="font-mono">
-                                {list.purchasedCount} / {list.itemCount} items
-                              </span>
-                              <span>{Math.round(progress)}% complete</span>
-                            </div>
-                            <Progress value={progress} className="h-2" />
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            Created{" "}
-                            {new Date(list.createdAt).toLocaleDateString()}
-                          </p>
+                          <span className="truncate">{list.name}</span>
+                          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1" />
                         </Link>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          aria-label={`Delete ${list.name}`}
-                          disabled={deleting}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            handleDeleteClick(list);
-                          }}
-                          data-testid={`button-delete-list-${list.id}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
                       </div>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        aria-label={`Delete ${list.name}`}
+                        disabled={deleting}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleDeleteClick(list);
+                        }}
+                        data-testid={`button-delete-list-${list.id}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="text-center py-12 text-muted-foreground">
-                <ShoppingCart className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                <p>No shopping lists yet.</p>
-                <p className="text-sm">
-                  Create your first list to get started.
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                    <div className="mt-6 flex items-center justify-between gap-3 text-sm">
+                      <span className="text-muted-foreground">
+                        {list.purchasedCount} of {list.itemCount} items
+                        purchased
+                      </span>
+                      <span className="rounded-full bg-secondary px-3 py-1 text-xs font-medium text-secondary-foreground">
+                        {list.itemCount === 0
+                          ? "No items yet"
+                          : progress === 100
+                            ? "Complete"
+                            : progress > 0
+                              ? "In progress"
+                              : "Ready to shop"}
+                      </span>
+                    </div>
+                    <Progress
+                      value={progress}
+                      className="mt-3 h-2"
+                      aria-label={`${list.name}: ${Math.round(progress)}% complete`}
+                    />
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-border bg-background px-6 py-14 text-center">
+              <ShoppingCart className="mx-auto mb-4 h-10 w-10 text-primary/60" />
+              <h4 className="text-lg font-medium">No shopping lists yet.</h4>
+              <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
+                Create a list to gather everything for your next trip.
+              </p>
+              <Button className="mt-6" onClick={() => setDialogOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                New List
+              </Button>
+            </div>
+          )}
+        </section>
       </div>
 
       <ShoppingListDialog open={dialogOpen} onOpenChange={setDialogOpen} />

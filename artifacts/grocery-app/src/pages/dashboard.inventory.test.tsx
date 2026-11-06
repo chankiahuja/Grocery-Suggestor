@@ -878,6 +878,80 @@ describe("shopping list selection and deletion", () => {
     return { api, ...app };
   }
 
+  it("shows progress and clearly labels the sample comparison while preserving detail links", async () => {
+    const { queryClient } = await setup();
+    assert.ok(
+      screen
+        .getByRole("link", { name: "Weekend groceries" })
+        .getAttribute("href")
+        ?.endsWith("/shopping-lists/20"),
+    );
+    assert.match(
+      screen.getByTestId("shopping-list-20").textContent ?? "",
+      /items purchased/,
+    );
+    assert.match(
+      screen.getByRole("button", { name: "Compare prices" }).textContent ?? "",
+      /sample/,
+    );
+    assert.ok(screen.getByTestId("shopping-list-20"));
+    queryClient.clear();
+  });
+
+  it("keeps an individually failed deletion selected for bulk retry", async () => {
+    const { api, queryClient } = await setup();
+    globalThis.fetch = async (input, init) => {
+      if (
+        String(input) === "/api/shopping-lists/30" &&
+        init?.method === "DELETE"
+      ) {
+        return new Response('{"error":"Try again"}', {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return api.fetch(input, init);
+    };
+    fireEvent.click(
+      screen.getByRole("button", { name: "Delete Party supplies" }),
+    );
+    fireEvent.click(await screen.findByTestId("button-confirm-delete"));
+    await screen.findByRole("button", { name: "Delete selected (1)" });
+    assert.equal(
+      screen
+        .getByRole("checkbox", { name: "Select Party supplies" })
+        .getAttribute("aria-checked"),
+      "true",
+    );
+    queryClient.clear();
+  });
+
+  it("offers a retry when shopping lists fail to load", async () => {
+    const api = new MockPantryApi();
+    let fail = true;
+    globalThis.fetch = (input, init) => {
+      if (
+        String(input) === "/api/shopping-lists" &&
+        (init?.method ?? "GET") === "GET" &&
+        fail
+      ) {
+        return Promise.resolve(
+          new Response('{"error":"Unavailable"}', {
+            status: 500,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
+      }
+      return api.fetch(input, init);
+    };
+    const { queryClient } = renderApp("/shopping-lists");
+    await screen.findByText("Could not load your lists");
+    fail = false;
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await screen.findByRole("checkbox", { name: "Select Weekend groceries" });
+    queryClient.clear();
+  });
+
   it("selects lists without navigating, cancels, then deletes all while preserving inventory", async () => {
     const { api, queryClient } = await setup();
     const inventory = structuredClone(api.state.inventory);
