@@ -6,6 +6,9 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.core.Authentication;
 import org.springframework.session.MapSession;
@@ -153,6 +156,64 @@ class NotificationEventsTest {
         verify(sessions, never()).save(any());
     }
 
+    @Test
+    void disconnectDoesNotWaitForSessionLookupAndPreventsThePendingDelivery() throws Exception {
+        var sessions = sessions();
+        var notifications = new NotificationEvents(mock(PantryService.class), sessions);
+        var emitter = new RecordingEmitter();
+        notifications.subscribe(authentication("1"), "slow-session", emitter);
+        var lookupStarted = new CountDownLatch(1);
+        var releaseLookup = new CountDownLatch(1);
+        when(sessions.findById("slow-session")).thenAnswer(call -> {
+            lookupStarted.countDown();
+            assertThat(releaseLookup.await(10, TimeUnit.SECONDS)).isTrue();
+            return new MapSession();
+        });
+        var workers = Executors.newFixedThreadPool(2);
+        try {
+            var delivery = workers.submit(() -> notifications.changed(
+                new PantryService.PantryChanged("inventory_changed", 41L, 1L)));
+            assertThat(lookupStarted.await(5, TimeUnit.SECONDS)).isTrue();
+            workers.submit(() -> notifications.disconnectSession("slow-session")).get(2, TimeUnit.SECONDS);
+            assertThat(emitter.completed).isTrue();
+            releaseLookup.countDown();
+            delivery.get(5, TimeUnit.SECONDS);
+            assertThat(emitter.payloads).doesNotContain(Map.of("type", "inventory_changed"));
+        } finally {
+            releaseLookup.countDown();
+            workers.shutdownNow();
+            assertThat(workers.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+            notifications.disconnectSession("slow-session");
+        }
+    }
+
+    @Test
+    void disconnectDoesNotWaitForDeliveryAndDefersCompletionUntilItFinishes() throws Exception {
+        var notifications = new NotificationEvents(mock(PantryService.class), sessions());
+        var emitter = new BlockingEmitter();
+        notifications.subscribe(authentication("1"), "slow-session", emitter);
+        emitter.blockDelivery = true;
+        var workers = Executors.newFixedThreadPool(2);
+        try {
+            var delivery = workers.submit(() -> notifications.changed(
+                new PantryService.PantryChanged("inventory_changed", 41L, 1L)));
+            assertThat(emitter.deliveryStarted.await(5, TimeUnit.SECONDS)).isTrue();
+            workers.submit(() -> notifications.disconnectSession("slow-session")).get(2, TimeUnit.SECONDS);
+            assertThat(emitter.completed).isFalse();
+            notifications.changed(new PantryService.PantryChanged("purchase_completed", null, 1L));
+            emitter.releaseDelivery.countDown();
+            delivery.get(5, TimeUnit.SECONDS);
+            assertThat(emitter.completed).isTrue();
+            assertThat(emitter.completedDuringDelivery).isFalse();
+            assertThat(emitter.payloads).doesNotContain(Map.of("type", "purchase_completed"));
+        } finally {
+            emitter.releaseDelivery.countDown();
+            workers.shutdownNow();
+            assertThat(workers.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+            notifications.disconnectSession("slow-session");
+        }
+    }
+
     @SuppressWarnings("unchecked")
     private SessionRepository<MapSession> sessions() {
         SessionRepository<MapSession> sessions = mock(SessionRepository.class);
@@ -175,8 +236,8 @@ class NotificationEventsTest {
     }
 
     private static class RecordingEmitter extends SseEmitter {
-        private final List<Object> payloads = new ArrayList<>();
-        private boolean completed;
+        final List<Object> payloads = new ArrayList<>();
+        volatile boolean completed;
 
         @Override
         public void complete() {
@@ -189,6 +250,39 @@ class NotificationEventsTest {
             for (DataWithMediaType part : builder.build()) {
                 payloads.add(part.getData());
             }
+        }
+    }
+
+    private static class BlockingEmitter extends RecordingEmitter {
+        final CountDownLatch deliveryStarted = new CountDownLatch(1);
+        final CountDownLatch releaseDelivery = new CountDownLatch(1);
+        volatile boolean blockDelivery;
+        volatile boolean delivering;
+        volatile boolean completedDuringDelivery;
+
+        @Override
+        public void send(SseEventBuilder builder) throws IOException {
+            delivering = true;
+            try {
+                if (blockDelivery) {
+                    deliveryStarted.countDown();
+                    try {
+                        if (!releaseDelivery.await(10, TimeUnit.SECONDS)) throw new IOException("Delivery timed out");
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new IOException(e);
+                    }
+                }
+                super.send(builder);
+            } finally {
+                delivering = false;
+            }
+        }
+
+        @Override
+        public void complete() {
+            completedDuringDelivery |= delivering;
+            super.complete();
         }
     }
 }

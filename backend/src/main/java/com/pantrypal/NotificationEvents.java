@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BooleanSupplier;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -21,31 +22,60 @@ public class NotificationEvents {
     private static final class Subscriber {
         private final String sessionId;
         private final SseEmitter emitter;
+        // Serializes senders only; disconnect never waits on slow I/O through this lock.
+        private final ReentrantLock deliveryLock = new ReentrantLock();
         private boolean closed;
+        private boolean delivering;
 
         private Subscriber(String sessionId, SseEmitter emitter) {
             this.sessionId = sessionId;
             this.emitter = emitter;
         }
 
-        private synchronized boolean send(SseEmitter.SseEventBuilder event, BooleanSupplier sessionActive) throws IOException {
-            if (closed) return false;
-            if (!sessionActive.getAsBoolean()) {
-                close();
-                return false;
+        private boolean send(SseEmitter.SseEventBuilder event, BooleanSupplier sessionActive) throws IOException {
+            deliveryLock.lock();
+            try {
+                synchronized (this) {
+                    if (closed) return false;
+                }
+                if (!sessionActive.getAsBoolean()) {
+                    close();
+                    return false;
+                }
+                synchronized (this) {
+                    // Disconnect may have completed while the session lookup was in progress.
+                    if (closed) return false;
+                    delivering = true;
+                }
+                try {
+                    emitter.send(event);
+                } finally {
+                    boolean complete;
+                    synchronized (this) {
+                        delivering = false;
+                        complete = closed;
+                    }
+                    if (complete) emitter.complete();
+                }
+                return true;
+            } finally {
+                deliveryLock.unlock();
             }
-            emitter.send(event);
-            return true;
         }
 
-        private synchronized boolean belongsTo(String candidateSessionId) {
+        private boolean belongsTo(String candidateSessionId) {
             return Objects.equals(sessionId, candidateSessionId);
         }
 
-        private synchronized void close() {
-            if (closed) return;
-            closed = true;
-            emitter.complete();
+        private void close() {
+            boolean complete;
+            synchronized (this) {
+                if (closed) return;
+                closed = true;
+                complete = !delivering;
+            }
+            // An admitted send may finish; its sender completes the emitter instead of blocking logout.
+            if (complete) emitter.complete();
         }
     }
 
