@@ -172,6 +172,69 @@ test("old demo state accepts adjustments and persisted keys survive a storage ro
   assert.equal((await adjust(reloaded, { ...body, amount: 3 })).status, 400);
 });
 
+test("demo reviewed list preserves quantities and exclusions through reload and purchase", async () => {
+  let stored = "";
+  const api = new MockPantryApi(undefined, state => { stored = JSON.stringify(state); });
+  const response = await api.fetch("/api/suggestions/generate-list", {
+    method: "POST",
+    body: JSON.stringify({ items: [
+      { inventoryItemId: 1, quantity: 7.5 },
+      { inventoryItemId: 7, quantity: 0 },
+    ] }),
+  });
+  assert.equal(response.status, 201);
+  const list = await response.json();
+  assert.deepEqual(list.items.map((item: { inventoryItemId: number; quantity: number }) =>
+    ({ inventoryItemId: item.inventoryItemId, quantity: item.quantity })),
+    [{ inventoryItemId: 1, quantity: 7.5 }]);
+  const reloaded = new MockPantryApi(JSON.parse(stored));
+  const persisted = await (await reloaded.fetch(`/api/shopping-lists/${list.id}`)).json();
+  assert.deepEqual(persisted, list);
+  const before = reloaded.state.inventory.map(item => item.quantity);
+  assert.equal((await reloaded.fetch(`/api/shopping-lists/${list.id}/items/${list.items[0].id}`, {
+    method: "PATCH", body: JSON.stringify({ purchased: true }),
+  })).status, 200);
+  for (const expected of [1, 0]) {
+    const purchase = await reloaded.fetch(`/api/shopping-lists/${list.id}/purchase`, { method: "POST" });
+    assert.equal((await purchase.json()).updatedInventoryItems, expected);
+  }
+  assert.deepEqual(reloaded.state.inventory.map(item => item.quantity),
+    before.map((quantity, index) => index === 0 ? quantity + 7.5 : quantity));
+});
+
+test("demo reviewed list validates all selections before changing stored state", async () => {
+  const api = new MockPantryApi();
+  for (const items of [
+    {}, [], [null], [{ inventoryItemId: 1, quantity: -1 }],
+    [{ inventoryItemId: 1, quantity: "2" }],
+    [{ inventoryItemId: 1.5, quantity: 2 }],
+    [{ inventoryItemId: 1, quantity: 0 }],
+    [{ inventoryItemId: 1, quantity: 2 }, { inventoryItemId: 999, quantity: 1 }],
+    [{ inventoryItemId: 3, quantity: 1 }], // Expiry-only suggestion.
+    [{ inventoryItemId: 6, quantity: 1 }], // Well-stocked item.
+  ]) {
+    const before = JSON.stringify(api.state);
+    const response = await api.fetch("/api/suggestions/generate-list", {
+      method: "POST", body: JSON.stringify({ items }),
+    });
+    assert.equal(response.status, 400, JSON.stringify(items));
+    assert.equal(JSON.stringify(api.state), before);
+  }
+});
+
+test("demo reviewed list combines duplicate selections", async () => {
+  const api = new MockPantryApi();
+  const response = await api.fetch("/api/suggestions/generate-list", {
+    method: "POST", body: JSON.stringify({ items: [
+      { inventoryItemId: 1, quantity: 1 }, { inventoryItemId: 1, quantity: 2.5 },
+    ] }),
+  });
+  assert.equal(response.status, 201);
+  const list = await response.json();
+  assert.equal(list.items.length, 1);
+  assert.equal(list.items[0].quantity, 3.5);
+});
+
 test("demo shortage to shopping to restock is repeat-safe and persists changes", async () => {
   let saved = false;
   const api = new MockPantryApi(undefined, () => {
