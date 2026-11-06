@@ -46,7 +46,7 @@ Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", {
 });
 dom.window.HTMLElement.prototype.scrollIntoView = () => {};
 
-const { cleanup, fireEvent, render, screen, within } =
+const { cleanup, fireEvent, render, screen, waitFor, within } =
   await import("@testing-library/react");
 const { default: ComparePrices } = await import("./compare-prices");
 const originalFetch = globalThis.fetch;
@@ -57,8 +57,12 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 
-function renderCompare(path: string, api = new MockPantryApi()) {
-  globalThis.fetch = api.fetch;
+function renderCompare(
+  path: string,
+  api = new MockPantryApi(),
+  fetchImpl: typeof fetch = api.fetch,
+) {
+  globalThis.fetch = fetchImpl;
   const location = memoryLocation({ path });
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -122,16 +126,52 @@ describe("Compare Prices demo", () => {
 
   it("keeps the sample view available and offers retry when list context cannot load", async () => {
     const api = new MockPantryApi();
-    const { queryClient } = renderCompare("/compare-prices?listId=999", api);
-    await screen.findByText("List unavailable");
-    assert.ok(screen.getByRole("button", { name: "Try again" }));
-    assert.ok(screen.getByText("₹762"));
-    assert.ok(
-      screen
-        .getAllByRole("link", { name: "Back to Shopping Lists" })
-        .every((link) => link.getAttribute("href") === "/shopping-lists"),
+    let requests = 0;
+    let completedRequests = 0;
+    let releaseRetry!: () => void;
+    const retryGate = new Promise<void>((resolve) => {
+      releaseRetry = resolve;
+    });
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const isListRequest =
+        new URL(
+          input instanceof Request ? input.url : String(input),
+          "http://localhost",
+        ).pathname === "/api/shopping-lists/999";
+      if (isListRequest && ++requests === 2) await retryGate;
+      const response = await api.fetch(input, init);
+      if (isListRequest) completedRequests++;
+      return response;
+    };
+    const { queryClient } = renderCompare(
+      "/compare-prices?listId=999",
+      api,
+      fetchImpl,
     );
+    await screen.findByText("List unavailable");
+    assert.equal(requests, 1);
+    assert.equal(completedRequests, 1);
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() => {
+      assert.equal(requests, 2);
+      assert.equal(completedRequests, 1);
+    });
+    releaseRetry();
+    await waitFor(() => {
+      assert.equal(completedRequests, 2);
+      assert.equal(
+        queryClient.getQueryState(["/api/shopping-lists/999"])?.fetchStatus,
+        "idle",
+      );
+      assert.ok(screen.getByText("List unavailable"));
+      assert.ok(screen.getByRole("button", { name: "Try again" }));
+      assert.ok(screen.getByText("₹762"));
+      assert.ok(
+        screen
+          .getAllByRole("link", { name: "Back to Shopping Lists" })
+          .every((link) => link.getAttribute("href") === "/shopping-lists"),
+      );
+    });
     queryClient.clear();
   });
 });
