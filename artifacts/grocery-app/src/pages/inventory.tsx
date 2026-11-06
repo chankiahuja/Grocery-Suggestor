@@ -9,6 +9,7 @@ import {
   Filter,
   Clock,
   CircleX,
+  RefreshCw,
 } from "lucide-react";
 import {
   useListInventoryItems,
@@ -68,7 +69,7 @@ export default function Inventory() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const { data: items, isLoading } = useListInventoryItems(
+  const { data: items, isLoading, isError, isFetching, refetch } = useListInventoryItems(
     stockFilter === "low" ? { lowStock: true } : stockFilter === "out" ? { outOfStock: true } : undefined,
   );
   const { data: allItems } = useListInventoryItems();
@@ -137,38 +138,39 @@ export default function Inventory() {
 
   return (
     <Layout>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
+      <div className="inventory-page flex flex-col gap-6">
+        <div className="inventory-heading flex items-center justify-between">
           <div>
             <h2 className="text-3xl font-bold tracking-tight">Inventory</h2>
             <p className="text-muted-foreground mt-1">
-              Manage your pantry items
+              Manage the essentials your household uses.
             </p>
           </div>
-          <Button onClick={handleAdd} data-testid="button-add-item">
+          <Button className="inventory-add-button" onClick={handleAdd} data-testid="button-add-item">
             <Plus className="h-4 w-4 mr-2" />
             Add Item
           </Button>
         </div>
 
         {/* Filters */}
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex flex-col md:flex-row gap-4">
+        <Card className="inventory-filter-panel">
+          <CardContent className="inventory-filter-content p-4">
+            <div className="inventory-filter-layout flex flex-col md:flex-row gap-4">
               <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Search className="inventory-search-icon absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Search items..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="pl-10"
+                  className="inventory-search-input pl-10"
                   data-testid="input-search"
                 />
               </div>
-              <div className="flex gap-2 flex-wrap">
+              <div className="inventory-filter-chips flex gap-2 flex-wrap" aria-label="Inventory filters">
                 <Button
-                  variant={stockFilter === "low" ? "default" : "outline"}
+                  variant="outline"
                   size="sm"
+                  className={cn("inventory-filter-chip inventory-filter-chip-low", stockFilter === "low" && "is-selected")}
                   onClick={() => updateFilter("stock", stockFilter === "low" ? null : "low")}
                   data-testid="filter-low-stock"
                   aria-pressed={stockFilter === "low"}
@@ -177,8 +179,9 @@ export default function Inventory() {
                   Low Stock
                 </Button>
                 <Button
-                  variant={stockFilter === "out" ? "default" : "outline"}
+                  variant="outline"
                   size="sm"
+                  className={cn("inventory-filter-chip inventory-filter-chip-out", stockFilter === "out" && "is-selected")}
                   onClick={() => updateFilter("stock", stockFilter === "out" ? null : "out")}
                   data-testid="filter-out-of-stock"
                   aria-pressed={stockFilter === "out"}
@@ -187,8 +190,9 @@ export default function Inventory() {
                   Out of Stock
                 </Button>
                 <Button
-                  variant={stockFilter === "expiring" ? "default" : "outline"}
+                  variant="outline"
                   size="sm"
+                  className={cn("inventory-filter-chip inventory-filter-chip-expiring", stockFilter === "expiring" && "is-selected")}
                   onClick={() => updateFilter("stock", stockFilter === "expiring" ? null : "expiring")}
                   data-testid="filter-expiring-soon"
                   aria-pressed={stockFilter === "expiring"}
@@ -199,10 +203,12 @@ export default function Inventory() {
                 {categories.map((cat) => (
                   <Button
                     key={cat}
-                    variant={selectedCategory === cat ? "default" : "outline"}
+                    variant="outline"
                     size="sm"
+                    className={cn("inventory-filter-chip inventory-filter-chip-category", selectedCategory === cat && "is-selected")}
                     onClick={() => updateFilter("category", selectedCategory === cat ? null : cat)}
                     data-testid={`filter-category-${cat.toLowerCase()}`}
+                    aria-pressed={selectedCategory === cat}
                   >
                     {cat}
                   </Button>
@@ -213,78 +219,100 @@ export default function Inventory() {
         </Card>
 
         {/* Items List */}
-        <Card>
-          <CardHeader>
-            <CardTitle>{filteredItems?.length || 0} Items</CardTitle>
+        <Card className="inventory-results-panel">
+          <CardHeader className="inventory-results-header">
+            <CardTitle className="inventory-results-title">
+              {isLoading || isError
+                ? "Inventory"
+                : `${filteredItems?.length || 0} Items`}
+            </CardTitle>
+            {!isLoading && !isError && (
+              <p className="inventory-results-description">
+                {search || selectedCategory || stockFilter
+                  ? "Matching household essentials"
+                  : "Everything you keep track of, all in one place."}
+              </p>
+            )}
           </CardHeader>
-          <CardContent>
+          <CardContent className="inventory-results-content">
             {isLoading ? (
-              <div className="space-y-3">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <Skeleton key={i} className="h-24 w-full" />
+              <div className="inventory-loading-grid">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Skeleton key={i} className="inventory-loading-card" />
                 ))}
               </div>
+            ) : isError ? (
+              <div className="inventory-state inventory-error" role="alert">
+                <CircleX className="inventory-state-icon" />
+                <div>
+                  <p className="inventory-state-title">Inventory could not be loaded.</p>
+                  <p className="inventory-state-description">
+                    Check your connection and try again.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void refetch()}
+                  disabled={isFetching}
+                >
+                  <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
+                  Try again
+                </Button>
+              </div>
             ) : filteredItems && filteredItems.length > 0 ? (
-              <div className="pantry-inventory-grid">
+              <div className="pantry-inventory-grid inventory-card-grid">
                 {filteredItems.map((item, idx) => {
                   const isLowStock = item.quantity <= item.minThreshold;
                   const isOutOfStock = item.quantity === 0;
+                  const expiringSoon = isExpiringSoon(item.expiresAt);
 
                   return (
                     <div
                       key={item.id}
                       className={cn(
-                        "p-4 rounded-lg border transition-all hover:shadow-md animate-slide-up",
+                        "inventory-item-card animate-slide-up",
                         isOutOfStock
-                          ? "border-red-200 bg-red-50/50"
+                          ? "inventory-item-out"
                           : isLowStock
-                            ? "border-amber-200 bg-amber-50/50"
-                            : "border-border bg-card",
+                            ? "inventory-item-low"
+                            : expiringSoon
+                              ? "inventory-item-expiring"
+                              : "inventory-item-healthy",
                       )}
                       style={{ animationDelay: `${idx * 30}ms` }}
                       data-testid={`inventory-item-${item.id}`}
                     >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex flex-wrap items-center gap-3 mb-2">
-                            <h4 className="font-semibold text-lg">
-                              {item.name}
-                            </h4>
-                            <span className="text-xs px-2 py-1 rounded bg-muted text-muted-foreground">
+                      <div className="inventory-item-header">
+                        <div className="inventory-item-heading">
+                          <h4 className="inventory-item-name">{item.name}</h4>
+                          <div className="inventory-item-badges">
+                            <span className="inventory-category-badge">
                               {item.category}
                             </span>
                             {isOutOfStock && (
-                              <span className="text-xs px-2 py-1 rounded bg-red-100 text-red-700 font-medium">
+                              <span className="inventory-status-badge inventory-status-out">
                                 Out of Stock
                               </span>
                             )}
                             {isLowStock && !isOutOfStock && (
-                              <span className="text-xs px-2 py-1 rounded bg-amber-100 text-amber-700 font-medium">
+                              <span className="inventory-status-badge inventory-status-low">
                                 Low Stock
                               </span>
                             )}
-                          </div>
-                          <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground mb-2">
-                            <span className="font-mono font-semibold text-foreground">
-                              {item.quantity} {item.unit}
-                            </span>
-                            <span>
-                              Min: {item.minThreshold} {item.unit}
-                            </span>
-                            {item.expiresAt && (
-                              <span>
-                                Expires:{" "}
-                                {new Date(item.expiresAt).toLocaleDateString()}
+                            {expiringSoon && (
+                              <span className="inventory-status-badge inventory-status-expiring">
+                                Expiring Soon
+                              </span>
+                            )}
+                            {!isLowStock && !expiringSoon && (
+                              <span className="inventory-status-badge inventory-status-healthy">
+                                In good shape
                               </span>
                             )}
                           </div>
-                          {item.notes && (
-                            <p className="text-sm text-muted-foreground">
-                              {item.notes}
-                            </p>
-                          )}
                         </div>
-                        <div className="flex gap-2">
+                        <div className="inventory-item-actions">
                           <Button
                             variant="outline"
                             size="sm"
@@ -305,10 +333,34 @@ export default function Inventory() {
                           </Button>
                         </div>
                       </div>
-                      <div className="mt-3 flex flex-wrap gap-2">
+                      <div className="inventory-item-details">
+                        <div className="inventory-quantity">
+                          <span className="inventory-quantity-label">On hand</span>
+                          <span className="inventory-quantity-value">
+                            {item.quantity} <span>{item.unit}</span>
+                          </span>
+                        </div>
+                        <div className="inventory-item-meta">
+                          <span>
+                            Minimum: {item.minThreshold} {item.unit}
+                          </span>
+                          {item.expiresAt && (
+                            <span>
+                              <Clock aria-hidden="true" />
+                              Expires:{" "}
+                              {new Date(item.expiresAt).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {item.notes && (
+                        <p className="inventory-item-notes">{item.notes}</p>
+                      )}
+                      <div className="inventory-adjustment-actions">
                         <Button
                           variant="outline"
                           size="sm"
+                          className="inventory-adjustment-button"
                           disabled={item.quantity === 0}
                           aria-label={`Consume ${item.name}`}
                           data-testid={`button-consume-${item.id}`}
@@ -321,6 +373,7 @@ export default function Inventory() {
                         <Button
                           variant="outline"
                           size="sm"
+                          className="inventory-adjustment-button"
                           aria-label={`Restock ${item.name}`}
                           data-testid={`button-restock-${item.id}`}
                           onClick={() =>
@@ -335,10 +388,18 @@ export default function Inventory() {
                 })}
               </div>
             ) : (
-              <div className="text-center py-12 text-muted-foreground">
-                <Package className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                <p>No items found.</p>
-                <p className="text-sm">Add your first item to get started.</p>
+              <div className="inventory-state inventory-empty">
+                <Package className="inventory-state-icon" />
+                <p className="inventory-state-title">
+                  {search || selectedCategory || stockFilter
+                    ? "No items match these filters."
+                    : "No inventory items yet."}
+                </p>
+                <p className="inventory-state-description">
+                  {search || selectedCategory || stockFilter
+                    ? "Try a different search or filter."
+                    : "Add your household essentials to get started."}
+                </p>
               </div>
             )}
           </CardContent>
