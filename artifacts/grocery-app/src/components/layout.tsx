@@ -12,6 +12,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState("");
+  const isShoppingListDetail = /^\/shopping-lists\/[^/]+$/.test(location);
   const navItems = [
     { path: "/dashboard", label: "Dashboard", icon: Home },
     { path: "/inventory", label: "Inventory", icon: Package },
@@ -99,13 +100,19 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </header>
       <main className="pantry-main">
-        <div className="pantry-breadcrumb">
+        <nav aria-label="Breadcrumb" className="pantry-breadcrumb">
           <Link href="/dashboard">My household</Link>
           <span aria-hidden="true">/</span>
           <Link href={sectionHref} aria-current={sectionHref === location ? "page" : undefined}>
             {section}
           </Link>
-        </div>
+          {isShoppingListDetail && (
+            <>
+              <span aria-hidden="true">/</span>
+              <span aria-current="page">List details</span>
+            </>
+          )}
+        </nav>
         {import.meta.env?.MODE === "mock" && (
           <div className="pantry-demo">
             <span>

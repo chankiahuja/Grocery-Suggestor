@@ -74,46 +74,38 @@
   --elevate-1: rgba(0, 0, 0, 0.03);
   --elevate-2: rgba(0, 0, 0, 0.08);
 
-  /* Earthy, warm palette — farmers market meets organized kitchen */
-  --background: 42 35% 96%; /* cream */
-  --foreground: 28 18% 18%; /* warm dark brown */
-
-  --border: 38 25% 88%; /* soft tan border */
-
-  --card: 40 40% 98%; /* warmer white */
-  --card-foreground: 28 18% 18%;
-  --card-border: 38 25% 88%;
-
-  --sidebar: 40 40% 98%;
-  --sidebar-foreground: 28 18% 18%;
-  --sidebar-border: 38 25% 88%;
-  --sidebar-primary: 142 48% 42%; /* earthy green */
-  --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 42 35% 92%;
-  --sidebar-accent-foreground: 28 18% 18%;
-  --sidebar-ring: 142 48% 42%;
-
-  --popover: 40 40% 98%;
-  --popover-foreground: 28 18% 18%;
-  --popover-border: 38 25% 88%;
-
-  --primary: 142 48% 42%; /* sage green */
-  --primary-foreground: 0 0% 100%;
-
-  --secondary: 42 35% 92%; /* warm beige */
-  --secondary-foreground: 28 18% 18%;
-
-  --muted: 42 30% 94%;
-  --muted-foreground: 28 12% 42%;
-
-  --accent: 24 68% 58%; /* terracotta accent */
-  --accent-foreground: 0 0% 100%;
+  /* PantryPal's porcelain and sage palette, shared by Tailwind and app styles. */
+  --background: 103 24% 94%;
+  --foreground: 150 24% 20%;
+  --border: 110 19% 88%;
+  --card: 48 100% 99%;
+  --card-foreground: 150 24% 20%;
+  --card-border: 110 19% 88%;
+  --sidebar: 48 100% 99%;
+  --sidebar-foreground: 102 10% 20%;
+  --sidebar-border: 110 19% 88%;
+  --sidebar-primary: 146 27% 28%;
+  --sidebar-primary-foreground: 50 100% 99%;
+  --sidebar-accent: 75 29% 90%;
+  --sidebar-accent-foreground: 89 20% 29%;
+  --sidebar-ring: 146 27% 28%;
+  --popover: 48 100% 99%;
+  --popover-foreground: 150 24% 20%;
+  --popover-border: 110 19% 88%;
+  --primary: 146 27% 28%;
+  --primary-foreground: 50 100% 99%;
+  --secondary: 100 25% 91%;
+  --secondary-foreground: 146 27% 28%;
+  --muted: 60 25% 94%;
+  --muted-foreground: 130 11% 38%;
+  --accent: 100 25% 91%;
+  --accent-foreground: 146 27% 28%;
 
   --destructive: 0 72% 51%;
   --destructive-foreground: 0 0% 100%;
 
-  --input: 38 25% 82%;
-  --ring: 142 48% 42%;
+  --input: 65 20% 83%;
+  --ring: 146 27% 28%;
 
   /* Urgency colors */
   --critical: 0 72% 51%; /* red */
@@ -126,24 +118,19 @@
   --chart-4: 160 38% 48%;
   --chart-5: 28 45% 52%;
 
-  --app-font-sans: "DM Sans", system-ui, sans-serif;
+  --app-font-sans: "Helvetica Neue", Arial, sans-serif;
   --app-font-serif: Georgia, serif;
-  --app-font-mono: "Space Mono", monospace;
-  --radius: 0.5rem;
+  --app-font-mono: "Helvetica Neue", Arial, sans-serif;
+  --radius: 0.85rem;
 
   --shadow-2xs: 0px 1px 2px 0px rgba(0, 0, 0, 0.05);
   --shadow-xs: 0px 1px 3px 0px rgba(0, 0, 0, 0.08);
-  --shadow-sm:
-    0px 2px 4px -1px rgba(0, 0, 0, 0.06), 0px 1px 2px -1px rgba(0, 0, 0, 0.04);
-  --shadow:
-    0px 4px 6px -1px rgba(0, 0, 0, 0.08), 0px 2px 4px -1px rgba(0, 0, 0, 0.04);
-  --shadow-md:
-    0px 6px 12px -2px rgba(0, 0, 0, 0.1), 0px 3px 6px -2px rgba(0, 0, 0, 0.05);
-  --shadow-lg:
-    0px 12px 24px -4px rgba(0, 0, 0, 0.12),
-    0px 6px 12px -4px rgba(0, 0, 0, 0.06);
-  --shadow-xl: 0px 20px 32px -8px rgba(0, 0, 0, 0.14);
-  --shadow-2xl: 0px 28px 48px -12px rgba(0, 0, 0, 0.16);
+  --shadow-sm: 0 2px 8px rgba(49, 80, 59, 0.05);
+  --shadow: 0 4px 15px rgba(49, 80, 59, 0.06);
+  --shadow-md: 0 8px 24px rgba(49, 80, 59, 0.07);
+  --shadow-lg: 0 12px 32px rgba(49, 80, 59, 0.09);
+  --shadow-xl: 0 20px 40px rgba(49, 80, 59, 0.11);
+  --shadow-2xl: 0 28px 48px rgba(49, 80, 59, 0.13);
 
   --tracking-normal: 0em;
   --spacing: 0.25rem;

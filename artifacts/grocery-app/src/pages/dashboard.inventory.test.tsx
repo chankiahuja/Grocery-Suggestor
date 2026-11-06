@@ -62,7 +62,7 @@ Object.defineProperties(globalThis, {
 
 dom.window.HTMLElement.prototype.scrollIntoView = () => {};
 
-const { act, cleanup, fireEvent, render, screen, waitFor } =
+const { act, cleanup, fireEvent, render, screen, waitFor, within } =
   await import("@testing-library/react");
 const { useToast } = await import("../hooks/use-toast");
 const [
@@ -879,6 +879,34 @@ describe("shopping list selection and deletion", () => {
     await screen.findByRole("checkbox", { name: "Select Weekend groceries" });
     return { api, ...app };
   }
+
+  it("marks the active navigation and returns from list details through breadcrumbs", async () => {
+    const { queryClient } = await setup();
+    try {
+      const mainNav = screen.getByRole("navigation", { name: "Main navigation" });
+      const breadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" });
+      assert.equal(
+        within(mainNav).getByRole("link", { name: "Shopping Lists" }).getAttribute("aria-current"),
+        "page",
+      );
+      assert.equal(
+        within(breadcrumb).getByRole("link", { name: "Shopping Lists" }).getAttribute("aria-current"),
+        "page",
+      );
+
+      fireEvent.click(screen.getByRole("link", { name: "Weekend groceries" }));
+      await screen.findByRole("checkbox", { name: "Purchased Milk" });
+      const detailBreadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" });
+      assert.equal(
+        within(detailBreadcrumb).getByText("List details").getAttribute("aria-current"),
+        "page",
+      );
+      fireEvent.click(within(detailBreadcrumb).getByRole("link", { name: "Shopping Lists" }));
+      await screen.findByRole("checkbox", { name: "Select Weekend groceries" });
+    } finally {
+      queryClient.clear();
+    }
+  });
 
   it("shows progress and clearly labels the sample comparison while preserving detail links", async () => {
     const { queryClient } = await setup();

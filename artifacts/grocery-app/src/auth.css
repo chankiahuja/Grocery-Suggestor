@@ -341,12 +341,6 @@
   margin-top: 4px;
   line-height: 1.6;
 }
-.pantry-sign-in {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--pantry-green);
-  white-space: nowrap;
-}
 @media (min-width: 1500px) {
   .auth-story {
     min-height: calc(100svh - 44px);
