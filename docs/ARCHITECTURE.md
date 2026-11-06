@@ -127,6 +127,8 @@ The `/login` and `/signup` routes use server-side email OTP in the full-stack ru
 
 The application overview above shows this runtime. Optional Vite development on port 5173 serves React with hot reload and proxies `/api`, including SSE, to Spring Boot on port 8080. The browser demo adapter is an alternative runtime using localStorage and does not contact Spring or a database.
 
+Notification streams recheck their Spring Session record before sending the ready message or any event. Expired or deleted sessions close their streams; the scheduled notification check also removes idle expired streams at the configured expiry-check interval. These lookups do not refresh the session's last-access time. Logout and session rotation mark the affected stream closed without waiting for session lookup or delivery. Session lookup and emitter operations run outside the subscriber state monitor. A send already admitted may finish; its sender then completes the emitter. Waiting senders recheck closure before looking up the session or starting delivery.
+
 The frontend production build is included in the Spring classpath and executable JAR by Maven resources. `pnpm start` builds it before launching Spring; the Docker multi-stage build does both. Explicit client routes forward to `index.html`, while API endpoints and missing asset requests retain their normal HTTP behavior. Optional Vite development on :5173 proxies `/api` to Spring for hot reload.
 
 [OpenAPI](../lib/api-spec/openapi.yaml) describes the existing REST contract. Keep generated React hooks compatible. The additive SSE endpoint uses `pantry-event` events with `{ "type": "inventory_changed" | "purchase_completed" | "alerts_changed" | "heartbeat" }`; `ready` confirms connection.

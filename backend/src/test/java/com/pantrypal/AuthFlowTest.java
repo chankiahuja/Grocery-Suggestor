@@ -137,6 +137,50 @@ class AuthFlowTest {
         }
     }
 
+    @Test void expiredSessionStopsReceivingEventsWhileAnotherSessionStaysConnected() throws Exception {
+        var browser = new Browser();
+        browser.session();
+        String email = "stream-expiry@example.com";
+        var challenge = browser.requestCode(email);
+        long accountId = browser.verify(email, challenge, codes.get(email), 200)
+            .get("account").get("id").asLong();
+        String expiredSessionId = jdbc.queryForObject("SELECT session_id FROM spring_session WHERE principal_name=?",
+            String.class, Long.toString(accountId));
+        var otherBrowser = new Browser();
+        otherBrowser.session();
+        now.addAndGet(31_000);
+        var otherChallenge = otherBrowser.requestCode(email);
+        otherBrowser.verify(email, otherChallenge, codes.get(email), 200);
+        String activeSessionId = jdbc.queryForObject(
+            "SELECT session_id FROM spring_session WHERE principal_name=? AND session_id<>?",
+            String.class, Long.toString(accountId), expiredSessionId);
+        Authentication authentication = mock(Authentication.class);
+        when(authentication.getName()).thenReturn(Long.toString(accountId));
+        var expired = new RecordingEmitter();
+        var active = new RecordingEmitter();
+        notifications.subscribe(authentication, expiredSessionId, expired);
+        notifications.subscribe(authentication, activeSessionId, active);
+
+        try {
+            jdbc.update("UPDATE spring_session SET last_access_time=0, expiry_time=0 WHERE session_id=?", expiredSessionId);
+            mvc.perform(get("/api/inventory").cookie(browser.cookie)).andExpect(status().isUnauthorized());
+            notifications.changed(new PantryService.PantryChanged("inventory_changed", 41L, accountId));
+            notifications.changed(new PantryService.PantryChanged("purchase_completed", null, accountId));
+
+            assertThat(expired.payloads).contains(Map.of("status", "connected"));
+            assertThat(expired.payloads).doesNotContain(
+                Map.of("type", "inventory_changed"), Map.of("type", "purchase_completed"));
+            assertThat(expired.completed).isTrue();
+            assertThat(active.payloads).contains(
+                Map.of("type", "inventory_changed"), Map.of("type", "purchase_completed"));
+            assertThat(active.completed).isFalse();
+            mvc.perform(get("/api/inventory").cookie(otherBrowser.cookie)).andExpect(status().isOk());
+        } finally {
+            notifications.disconnectSession(expiredSessionId);
+            notifications.disconnectSession(activeSessionId);
+        }
+    }
+
     @Test void switchingAccountsClosesThePreviousAccountsNotificationStream() throws Exception {
         var browser = new Browser();
         browser.session();
@@ -187,6 +231,13 @@ class AuthFlowTest {
 
     private static class RecordingEmitter extends SseEmitter {
         private final List<Object> payloads = new ArrayList<>();
+        private boolean completed;
+
+        @Override
+        public void complete() {
+            completed = true;
+            super.complete();
+        }
 
         @Override
         public void send(SseEventBuilder builder) throws IOException {
