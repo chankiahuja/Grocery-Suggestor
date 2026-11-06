@@ -69,6 +69,17 @@ export default function Inventory() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
+  const isItemExpired = (expiresAt?: string | null) => {
+    if (!expiresAt) return false;
+
+    const [year, month, day] = expiresAt.slice(0, 10).split("-").map(Number);
+    const expirationDate = new Date(year, month - 1, day);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    return expirationDate < today;
+  };
+
   const { data: items, isLoading, isError, isFetching, refetch } = useListInventoryItems(
     stockFilter === "low" ? { lowStock: true } : stockFilter === "out" ? { outOfStock: true } : undefined,
   );
@@ -241,7 +252,7 @@ export default function Inventory() {
                   <Skeleton key={i} className="inventory-loading-card" />
                 ))}
               </div>
-            ) : isError ? (
+            ) : isError && !items ? (
               <div className="inventory-state inventory-error" role="alert">
                 <CircleX className="inventory-state-icon" />
                 <div>
@@ -260,147 +271,176 @@ export default function Inventory() {
                   Try again
                 </Button>
               </div>
-            ) : filteredItems && filteredItems.length > 0 ? (
-              <div className="pantry-inventory-grid inventory-card-grid">
-                {filteredItems.map((item, idx) => {
-                  const isLowStock = item.quantity <= item.minThreshold;
-                  const isOutOfStock = item.quantity === 0;
-                  const expiringSoon = isExpiringSoon(item.expiresAt);
-
-                  return (
-                    <div
-                      key={item.id}
-                      className={cn(
-                        "inventory-item-card animate-slide-up",
-                        isOutOfStock
-                          ? "inventory-item-out"
-                          : isLowStock
-                            ? "inventory-item-low"
-                            : expiringSoon
-                              ? "inventory-item-expiring"
-                              : "inventory-item-healthy",
-                      )}
-                      style={{ animationDelay: `${idx * 30}ms` }}
-                      data-testid={`inventory-item-${item.id}`}
+            ) : (
+              <>
+                {isError && items && items.length > 0 && (
+                  <div className="inventory-warning" role="status">
+                    <RefreshCw className="inventory-state-icon" />
+                    <div>
+                      <p className="inventory-state-title">Showing cached inventory.</p>
+                      <p className="inventory-state-description">
+                        A refresh failed, so the latest saved items are still visible.
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void refetch()}
+                      disabled={isFetching}
                     >
-                      <div className="inventory-item-header">
-                        <div className="inventory-item-heading">
-                          <h4 className="inventory-item-name">{item.name}</h4>
-                          <div className="inventory-item-badges">
-                            <span className="inventory-category-badge">
-                              {item.category}
-                            </span>
-                            {isOutOfStock && (
-                              <span className="inventory-status-badge inventory-status-out">
-                                Out of Stock
+                      Refresh
+                    </Button>
+                  </div>
+                )}
+                {filteredItems && filteredItems.length > 0 ? (
+                  <div className="pantry-inventory-grid inventory-card-grid">
+                    {filteredItems.map((item, idx) => {
+                      const isLowStock = item.quantity <= item.minThreshold;
+                      const isOutOfStock = item.quantity === 0;
+                      const isExpired = isItemExpired(item.expiresAt);
+                      const expiringSoon = isExpiringSoon(item.expiresAt);
+
+                      return (
+                        <div
+                          key={item.id}
+                          className={cn(
+                            "inventory-item-card animate-slide-up",
+                            isOutOfStock
+                              ? "inventory-item-out"
+                              : isLowStock
+                                ? "inventory-item-low"
+                                : isExpired || expiringSoon
+                                  ? "inventory-item-expiring"
+                                  : "inventory-item-healthy",
+                          )}
+                          style={{ animationDelay: `${idx * 30}ms` }}
+                          data-testid={`inventory-item-${item.id}`}
+                        >
+                          <div className="inventory-item-header">
+                            <div className="inventory-item-heading">
+                              <h4 className="inventory-item-name">{item.name}</h4>
+                              <div className="inventory-item-badges">
+                                <span className="inventory-category-badge">
+                                  {item.category}
+                                </span>
+                                {isOutOfStock && (
+                                  <span className="inventory-status-badge inventory-status-out">
+                                    Out of Stock
+                                  </span>
+                                )}
+                                {isLowStock && !isOutOfStock && (
+                                  <span className="inventory-status-badge inventory-status-low">
+                                    Low Stock
+                                  </span>
+                                )}
+                                {isExpired && !isLowStock && !isOutOfStock && (
+                                  <span className="inventory-status-badge inventory-status-expiring">
+                                    Expired
+                                  </span>
+                                )}
+                                {expiringSoon && !isExpired && !isLowStock && !isOutOfStock && (
+                                  <span className="inventory-status-badge inventory-status-expiring">
+                                    Expiring Soon
+                                  </span>
+                                )}
+                                {!isOutOfStock && !isLowStock && !isExpired && !expiringSoon && (
+                                  <span className="inventory-status-badge inventory-status-healthy">
+                                    In good shape
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="inventory-item-actions">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleEdit(item)}
+                                aria-label={`Edit ${item.name}`}
+                                data-testid={`button-edit-${item.id}`}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDeleteClick(item)}
+                                aria-label={`Delete ${item.name}`}
+                                data-testid={`button-delete-${item.id}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="inventory-item-details">
+                            <div className="inventory-quantity">
+                              <span className="inventory-quantity-label">On hand</span>
+                              <span className="inventory-quantity-value">
+                                {item.quantity} <span>{item.unit}</span>
                               </span>
-                            )}
-                            {isLowStock && !isOutOfStock && (
-                              <span className="inventory-status-badge inventory-status-low">
-                                Low Stock
+                            </div>
+                            <div className="inventory-item-meta">
+                              <span>
+                                Minimum: {item.minThreshold} {item.unit}
                               </span>
-                            )}
-                            {expiringSoon && (
-                              <span className="inventory-status-badge inventory-status-expiring">
-                                Expiring Soon
-                              </span>
-                            )}
-                            {!isLowStock && !expiringSoon && (
-                              <span className="inventory-status-badge inventory-status-healthy">
-                                In good shape
-                              </span>
-                            )}
+                              {item.expiresAt && (
+                                <span>
+                                  <Clock aria-hidden="true" />
+                                  Expires:{" "}
+                                  {new Date(item.expiresAt).toLocaleDateString()}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {item.notes && (
+                            <p className="inventory-item-notes">{item.notes}</p>
+                          )}
+                          <div className="inventory-adjustment-actions">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="inventory-adjustment-button"
+                              disabled={item.quantity === 0}
+                              aria-label={`Consume ${item.name}`}
+                              data-testid={`button-consume-${item.id}`}
+                              onClick={() =>
+                                setAdjustment({ item, operation: "consume" })
+                              }
+                            >
+                              Consume
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="inventory-adjustment-button"
+                              aria-label={`Restock ${item.name}`}
+                              data-testid={`button-restock-${item.id}`}
+                              onClick={() =>
+                                setAdjustment({ item, operation: "restock" })
+                              }
+                            >
+                              Restock
+                            </Button>
                           </div>
                         </div>
-                        <div className="inventory-item-actions">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleEdit(item)}
-                            aria-label={`Edit ${item.name}`}
-                            data-testid={`button-edit-${item.id}`}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleDeleteClick(item)}
-                            aria-label={`Delete ${item.name}`}
-                            data-testid={`button-delete-${item.id}`}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="inventory-item-details">
-                        <div className="inventory-quantity">
-                          <span className="inventory-quantity-label">On hand</span>
-                          <span className="inventory-quantity-value">
-                            {item.quantity} <span>{item.unit}</span>
-                          </span>
-                        </div>
-                        <div className="inventory-item-meta">
-                          <span>
-                            Minimum: {item.minThreshold} {item.unit}
-                          </span>
-                          {item.expiresAt && (
-                            <span>
-                              <Clock aria-hidden="true" />
-                              Expires:{" "}
-                              {new Date(item.expiresAt).toLocaleDateString()}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      {item.notes && (
-                        <p className="inventory-item-notes">{item.notes}</p>
-                      )}
-                      <div className="inventory-adjustment-actions">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="inventory-adjustment-button"
-                          disabled={item.quantity === 0}
-                          aria-label={`Consume ${item.name}`}
-                          data-testid={`button-consume-${item.id}`}
-                          onClick={() =>
-                            setAdjustment({ item, operation: "consume" })
-                          }
-                        >
-                          Consume
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="inventory-adjustment-button"
-                          aria-label={`Restock ${item.name}`}
-                          data-testid={`button-restock-${item.id}`}
-                          onClick={() =>
-                            setAdjustment({ item, operation: "restock" })
-                          }
-                        >
-                          Restock
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="inventory-state inventory-empty">
-                <Package className="inventory-state-icon" />
-                <p className="inventory-state-title">
-                  {search || selectedCategory || stockFilter
-                    ? "No items match these filters."
-                    : "No inventory items yet."}
-                </p>
-                <p className="inventory-state-description">
-                  {search || selectedCategory || stockFilter
-                    ? "Try a different search or filter."
-                    : "Add your household essentials to get started."}
-                </p>
-              </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="inventory-state inventory-empty">
+                    <Package className="inventory-state-icon" />
+                    <p className="inventory-state-title">
+                      {search || selectedCategory || stockFilter
+                        ? "No items match these filters."
+                        : "No inventory items yet."}
+                    </p>
+                    <p className="inventory-state-description">
+                      {search || selectedCategory || stockFilter
+                        ? "Try a different search or filter."
+                        : "Add your household essentials to get started."}
+                    </p>
+                  </div>
+                )}
+              </>
             )}
           </CardContent>
         </Card>

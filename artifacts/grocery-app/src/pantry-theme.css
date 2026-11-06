@@ -732,7 +732,7 @@ body {
   color: #967647;
 }
 .inventory-quantity-value > span {
-  color: #778475;
+  color: #465d4d;
   font-size: 11px;
   font-weight: 400;
   letter-spacing: 0;
@@ -742,7 +742,7 @@ body {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 5px 12px;
-  color: #778475;
+  color: #465d4d;
   font-size: 10px;
 }
 .inventory-item-meta > span {
@@ -822,6 +822,31 @@ body {
   color: #778475;
   font-size: 11px;
 }
+.inventory-warning {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #ecd6a4;
+  border-radius: 12px;
+  background: #fffaf1;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+}
+.inventory-warning .inventory-state-icon {
+  width: 22px;
+  height: 22px;
+  color: #945d1c;
+}
+.inventory-warning .inventory-state-title {
+  font-size: 12px;
+  color: #7b5d2f;
+}
+.inventory-warning .inventory-state-description {
+  color: #856b3a;
+}
+.inventory-warning button {
+  margin-left: auto;
+}
 .inventory-error button {
   margin-top: 4px;
 }
@@ -891,6 +916,7 @@ body {
   .inventory-item-card,
   .inventory-filter-chip {
     transition: none;
+    animation: none;
   }
   .inventory-item-card:hover {
     transform: none;
