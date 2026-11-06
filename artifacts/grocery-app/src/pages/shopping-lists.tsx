@@ -96,9 +96,10 @@ export default function ShoppingLists() {
       deletedIds.forEach((id) =>
         queryClient.removeQueries({ queryKey: [`/api/shopping-lists/${id}`] }),
       );
-      await queryClient.invalidateQueries({
-        queryKey: getListShoppingListsQueryKey(),
-      });
+      await queryClient.invalidateQueries(
+        { queryKey: getListShoppingListsQueryKey() },
+        { throwOnError: true },
+      );
       toast({
         title: failedCount
           ? "Some lists could not be deleted"

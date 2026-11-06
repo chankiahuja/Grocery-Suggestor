@@ -64,6 +64,7 @@ dom.window.HTMLElement.prototype.scrollIntoView = () => {};
 
 const { act, cleanup, fireEvent, render, screen, waitFor } =
   await import("@testing-library/react");
+const { useToast } = await import("../hooks/use-toast");
 const [
   { default: Dashboard },
   { default: Inventory },
@@ -930,20 +931,35 @@ describe("shopping list selection and deletion", () => {
   it("does not restore deleted IDs when the later list refresh fails", async () => {
     const { api, queryClient } = await setup();
     const replacement = { ...api.state.lists[0], name: "Replacement list" };
-    const invalidate = queryClient.invalidateQueries.bind(queryClient);
-    queryClient.invalidateQueries = (async () => {
-      throw new Error("Refresh unavailable");
-    }) as typeof queryClient.invalidateQueries;
+    let failRefresh = true;
+    globalThis.fetch = (input, init) => {
+      if (
+        String(input) === "/api/shopping-lists" &&
+        (init?.method ?? "GET") === "GET" &&
+        failRefresh
+      ) {
+        return Promise.resolve(
+          new Response('{"error":"Refresh unavailable"}', {
+            status: 500,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
+      }
+      return api.fetch(input, init);
+    };
+    function ToastTitles() {
+      const { toasts } = useToast();
+      return <div>{toasts.map((toast) => <span key={toast.id}>{toast.title}</span>)}</div>;
+    }
+    render(<ToastTitles />);
     fireEvent.click(
       screen.getByRole("checkbox", { name: "Select all shopping lists" }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Delete selected (2)" }));
     fireEvent.click(await screen.findByTestId("button-confirm-delete"));
-    await waitFor(() =>
-      assert.ok(!screen.queryByTestId("dialog-delete-list-confirm")),
-    );
+    await screen.findByText("Could not refresh shopping lists");
     assert.equal(api.state.lists.length, 0);
-    queryClient.invalidateQueries = invalidate;
+    failRefresh = false;
     api.state.lists.push(replacement);
     await queryClient.invalidateQueries({ queryKey: getListShoppingListsQueryKey() });
     await screen.findByRole("checkbox", { name: "Select Replacement list" });
