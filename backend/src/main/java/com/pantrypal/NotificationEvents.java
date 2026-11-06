@@ -4,9 +4,12 @@ import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.BooleanSupplier;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.core.Authentication;
+import org.springframework.session.Session;
+import org.springframework.session.SessionRepository;
 import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -25,8 +28,14 @@ public class NotificationEvents {
             this.emitter = emitter;
         }
 
-        private synchronized void send(SseEmitter.SseEventBuilder event) throws IOException {
-            if (!closed) emitter.send(event);
+        private synchronized boolean send(SseEmitter.SseEventBuilder event, BooleanSupplier sessionActive) throws IOException {
+            if (closed) return false;
+            if (!sessionActive.getAsBoolean()) {
+                close();
+                return false;
+            }
+            emitter.send(event);
+            return true;
         }
 
         private synchronized boolean belongsTo(String candidateSessionId) {
@@ -42,15 +51,16 @@ public class NotificationEvents {
 
     private final Map<Long,CopyOnWriteArrayList<Subscriber>> clients = new ConcurrentHashMap<>();
     private final PantryService service;
+    private final SessionRepository<? extends Session> sessions;
     private final Map<Long,String> previousByAccount = new HashMap<>();
-    public NotificationEvents(PantryService service) { this.service = service; }
+    public NotificationEvents(PantryService service, SessionRepository<? extends Session> sessions) {
+        this.service = service;
+        this.sessions = sessions;
+    }
     @GetMapping(value="/stream", produces="text/event-stream")
     public SseEmitter subscribe(Authentication authentication, HttpServletRequest request) {
         var session = request.getSession(false);
         return subscribe(authentication, session == null ? null : session.getId(), new SseEmitter(0L));
-    }
-    SseEmitter subscribe(Authentication authentication, SseEmitter emitter) {
-        return subscribe(authentication, null, emitter);
     }
     SseEmitter subscribe(Authentication authentication, String sessionId, SseEmitter emitter) {
         long accountId = Long.parseLong(authentication.getName());
@@ -63,7 +73,7 @@ public class NotificationEvents {
         emitter.onCompletion(() -> removeClient(accountId, subscriber));
         emitter.onTimeout(() -> removeClient(accountId, subscriber));
         emitter.onError(error -> removeClient(accountId, subscriber));
-        try { subscriber.send(SseEmitter.event().name("ready").data(Map.of("status", "connected"))); }
+        try { send(accountId, subscriber, SseEmitter.event().name("ready").data(Map.of("status", "connected"))); }
         catch (IOException e) { subscriber.close(); removeClient(accountId, subscriber); }
         return emitter;
     }
@@ -84,6 +94,14 @@ public class NotificationEvents {
     }
     @Scheduled(fixedDelayString="${pantrypal.expiry-check-ms:60000}")
     public synchronized void checkExpiry() {
+        clients.forEach((accountId, accountClients) -> {
+            for (var subscriber : accountClients) {
+                if (!sessionActive(subscriber.sessionId)) {
+                    subscriber.close();
+                    removeClient(accountId, subscriber);
+                }
+            }
+        });
         var accountIds = service.accountIds();
         previousByAccount.keySet().retainAll(accountIds);
         for (Long accountId : accountIds) {
@@ -101,12 +119,20 @@ public class NotificationEvents {
         var accountClients = clients.get(accountId);
         if (accountClients == null) return;
         for (var subscriber : accountClients) {
-            try { subscriber.send(SseEmitter.event().name("pantry-event").data(Map.of("type", type))); }
+            try { send(accountId, subscriber, SseEmitter.event().name("pantry-event").data(Map.of("type", type))); }
             catch (IOException | IllegalStateException e) {
                 subscriber.close();
                 removeClient(accountId, subscriber);
             }
         }
+    }
+    private boolean sessionActive(String sessionId) {
+        if (sessionId == null) return false;
+        var session = sessions.findById(sessionId);
+        return session != null && !session.isExpired();
+    }
+    private void send(Long accountId, Subscriber subscriber, SseEmitter.SseEventBuilder event) throws IOException {
+        if (!subscriber.send(event, () -> sessionActive(subscriber.sessionId))) removeClient(accountId, subscriber);
     }
     private void removeClient(Long accountId, Subscriber subscriber) {
         clients.computeIfPresent(accountId, (ignored, accountClients) -> {
