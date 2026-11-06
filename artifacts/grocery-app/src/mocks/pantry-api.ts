@@ -189,6 +189,38 @@ export class MockPantryApi {
             { error: "No low-stock suggestions are available." },
             400,
           );
+        const selected = new Map<GrocerySuggestion["inventoryItemId"], GrocerySuggestion & { quantity: number }>();
+        if (body.items == null) {
+          for (const suggestion of stock) {
+            selected.set(suggestion.inventoryItemId, {
+              ...suggestion,
+              quantity: Math.max(suggestion.minThreshold - suggestion.currentQuantity, 1),
+            });
+          }
+        } else {
+          if (!Array.isArray(body.items))
+            return this.json({ error: "items must be an array" }, 400);
+          for (const item of body.items) {
+            if (
+              !item ||
+              !Number.isSafeInteger(item.inventoryItemId) ||
+              item.inventoryItemId <= 0 ||
+              typeof item.quantity !== "number" ||
+              !Number.isFinite(item.quantity) ||
+              item.quantity < 0
+            ) return this.json({ error: "Invalid generated item" }, 400);
+            const suggestion = stock.find((s) => s.inventoryItemId === item.inventoryItemId);
+            if (!suggestion)
+              return this.json({ error: "Selected item is no longer a low-stock suggestion" }, 400);
+            if (item.quantity === 0) continue;
+            const quantity = (selected.get(item.inventoryItemId)?.quantity ?? 0) + item.quantity;
+            if (!Number.isFinite(quantity))
+              return this.json({ error: "Invalid generated item" }, 400);
+            selected.set(item.inventoryItemId, { ...suggestion, quantity });
+          }
+        }
+        if (!selected.size)
+          return this.json({ error: "Select at least one shopping item." }, 400);
         const list: ShoppingListWithItems = {
           id: this.state.nextId++,
           name: "Low-stock shopping list",
@@ -196,13 +228,13 @@ export class MockPantryApi {
           updatedAt: now,
           items: [],
         };
-        list.items = stock.map((s) => ({
+        list.items = [...selected.values()].map((s) => ({
           id: this.state.nextId++,
           shoppingListId: list.id,
           inventoryItemId: s.inventoryItemId,
           name: s.name,
           category: s.category,
-          quantity: Math.max(s.minThreshold - s.currentQuantity, 1),
+          quantity: s.quantity,
           unit: s.unit,
           notes: s.reason,
           purchased: false,
