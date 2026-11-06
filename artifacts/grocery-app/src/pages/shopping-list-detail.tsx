@@ -219,9 +219,16 @@ export default function ShoppingListDetail() {
             Back to Lists
           </Button>
           <Link href={`/compare-prices?listId=${listId}`}>
-            <Button variant="outline" size="sm" className="mb-4" data-testid="button-compare-prices">
+            <Button
+              variant="outline"
+              size="sm"
+              className="mb-4"
+              aria-label="Compare prices (sample)"
+              data-testid="button-compare-prices"
+            >
               <Tags className="h-4 w-4 mr-2" />
-              Compare prices
+              Compare prices{" "}
+              <span className="ml-1 text-xs opacity-70">(sample)</span>
             </Button>
           </Link>
           <div className="flex flex-wrap items-center justify-between gap-4">

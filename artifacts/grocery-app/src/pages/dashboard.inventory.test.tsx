@@ -7,6 +7,7 @@ import {
   getGetGrocerySuggestionsQueryKey,
   getGetInventoryStatsQueryKey,
   getListInventoryItemsQueryKey,
+  getListShoppingListsQueryKey,
   type InventoryItem,
   type ShoppingListWithItems,
 } from "@workspace/api-client-react";
@@ -63,6 +64,7 @@ dom.window.HTMLElement.prototype.scrollIntoView = () => {};
 
 const { act, cleanup, fireEvent, render, screen, waitFor } =
   await import("@testing-library/react");
+const { useToast } = await import("../hooks/use-toast");
 const [
   { default: Dashboard },
   { default: Inventory },
@@ -877,6 +879,122 @@ describe("shopping list selection and deletion", () => {
     await screen.findByRole("checkbox", { name: "Select Weekend groceries" });
     return { api, ...app };
   }
+
+  it("shows progress and clearly labels the sample comparison while preserving detail links", async () => {
+    const { queryClient } = await setup();
+    assert.ok(
+      screen
+        .getByRole("link", { name: "Weekend groceries" })
+        .getAttribute("href")
+        ?.endsWith("/shopping-lists/20"),
+    );
+    assert.match(
+      screen.getByTestId("shopping-list-20").textContent ?? "",
+      /items purchased/,
+    );
+    assert.match(
+      screen.getByRole("button", { name: "Compare prices (sample)" }).textContent ?? "",
+      /sample/,
+    );
+    assert.ok(screen.getByTestId("shopping-list-20"));
+    queryClient.clear();
+  });
+
+  it("keeps an individually failed deletion selected for bulk retry", async () => {
+    const { api, queryClient } = await setup();
+    globalThis.fetch = async (input, init) => {
+      if (
+        String(input) === "/api/shopping-lists/30" &&
+        init?.method === "DELETE"
+      ) {
+        return new Response('{"error":"Try again"}', {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return api.fetch(input, init);
+    };
+    fireEvent.click(
+      screen.getByRole("button", { name: "Delete Party supplies" }),
+    );
+    fireEvent.click(await screen.findByTestId("button-confirm-delete"));
+    await screen.findByRole("button", { name: "Delete selected (1)" });
+    assert.equal(
+      screen
+        .getByRole("checkbox", { name: "Select Party supplies" })
+        .getAttribute("aria-checked"),
+      "true",
+    );
+    queryClient.clear();
+  });
+
+  it("does not restore deleted IDs when the later list refresh fails", async () => {
+    const { api, queryClient } = await setup();
+    const replacement = { ...api.state.lists[0], name: "Replacement list" };
+    let failRefresh = true;
+    globalThis.fetch = (input, init) => {
+      if (
+        String(input) === "/api/shopping-lists" &&
+        (init?.method ?? "GET") === "GET" &&
+        failRefresh
+      ) {
+        return Promise.resolve(
+          new Response('{"error":"Refresh unavailable"}', {
+            status: 500,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
+      }
+      return api.fetch(input, init);
+    };
+    function ToastTitles() {
+      const { toasts } = useToast();
+      return <div>{toasts.map((toast) => <span key={toast.id}>{toast.title}</span>)}</div>;
+    }
+    render(<ToastTitles />);
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Select all shopping lists" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Delete selected (2)" }));
+    fireEvent.click(await screen.findByTestId("button-confirm-delete"));
+    await screen.findByText("Could not refresh shopping lists");
+    assert.equal(api.state.lists.length, 0);
+    failRefresh = false;
+    api.state.lists.push(replacement);
+    await queryClient.invalidateQueries({ queryKey: getListShoppingListsQueryKey() });
+    await screen.findByRole("checkbox", { name: "Select Replacement list" });
+    assert.equal(
+      screen.getByRole("checkbox", { name: "Select Replacement list" }).getAttribute("aria-checked"),
+      "false",
+    );
+    queryClient.clear();
+  });
+
+  it("offers a retry when shopping lists fail to load", async () => {
+    const api = new MockPantryApi();
+    let fail = true;
+    globalThis.fetch = (input, init) => {
+      if (
+        String(input) === "/api/shopping-lists" &&
+        (init?.method ?? "GET") === "GET" &&
+        fail
+      ) {
+        return Promise.resolve(
+          new Response('{"error":"Unavailable"}', {
+            status: 500,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
+      }
+      return api.fetch(input, init);
+    };
+    const { queryClient } = renderApp("/shopping-lists");
+    await screen.findByText("Could not load your lists");
+    fail = false;
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await screen.findByRole("checkbox", { name: "Select Weekend groceries" });
+    queryClient.clear();
+  });
 
   it("selects lists without navigating, cancels, then deletes all while preserving inventory", async () => {
     const { api, queryClient } = await setup();
