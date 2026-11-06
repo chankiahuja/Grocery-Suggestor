@@ -104,6 +104,17 @@ export function NotificationCenter() {
     return () => document.removeEventListener("mousedown", handle);
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return;
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      buttonRef.current?.focus();
+    }
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [open]);
+
   // Group by urgency order
   const criticals = suggestions.filter((s) => s.urgency === "critical");
   const lows = suggestions.filter((s) => s.urgency === "low");
@@ -127,11 +138,13 @@ export function NotificationCenter() {
             : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
         )}
         aria-label="Notifications"
+        aria-expanded={open}
+        aria-controls={open ? "pantry-notification-panel" : undefined}
         data-testid="notification-bell"
       >
         <Bell className="h-5 w-5" />
         {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-white leading-none">
+          <span aria-hidden="true" className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-white leading-none">
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
@@ -140,7 +153,10 @@ export function NotificationCenter() {
       {/* Panel */}
       {open && (
         <div
+          id="pantry-notification-panel"
           ref={panelRef}
+          role="region"
+          aria-label="Notifications"
           className="absolute right-0 top-full mt-3 z-50 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-card shadow-xl"
           data-testid="notification-panel"
         >
@@ -159,7 +175,12 @@ export function NotificationCenter() {
               )}
             </div>
             <button
-              onClick={() => setOpen(false)}
+              type="button"
+              aria-label="Close notifications"
+              onClick={() => {
+                setOpen(false);
+                buttonRef.current?.focus();
+              }}
               className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded"
             >
               <X className="h-4 w-4" />

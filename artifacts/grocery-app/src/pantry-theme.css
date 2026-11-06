@@ -107,6 +107,7 @@ body {
   display: flex;
   align-items: center;
   gap: 22px;
+  flex-shrink: 0;
 }
 .pantry-household {
   display: flex;
@@ -585,10 +586,32 @@ body {
   flex-wrap: wrap;
   gap: 9px;
 }
+@media (max-width: 1120px) {
+  .pantry-header-inner {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0 16px;
+    padding: 12px 24px 0;
+  }
+  .pantry-brand {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .pantry-header-actions {
+    grid-column: 2;
+    grid-row: 1;
+    gap: 12px;
+  }
+  .pantry-navigation {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-content: space-between;
+    min-width: 0;
+  }
+}
 @media (max-width: 960px) {
   .pantry-header-inner {
-    padding: 0 24px;
-    gap: 15px;
+    padding-inline: 24px;
   }
   .pantry-brand img {
     width: 180px;
@@ -605,8 +628,6 @@ body {
 }
 @media (max-width: 640px) {
   .pantry-header-inner {
-    flex-wrap: wrap;
-    gap: 0;
     padding: 14px 20px 0;
   }
   .pantry-brand {
@@ -620,10 +641,7 @@ body {
     margin-left: auto;
   }
   .pantry-navigation {
-    order: 3;
     width: 100%;
-    overflow-x: auto;
-    justify-content: space-between;
     margin-top: 8px;
   }
   .pantry-nav-link {
@@ -690,6 +708,22 @@ body {
   }
   .compare-back-link {
     white-space: normal;
+  }
+}
+@media (max-width: 480px) {
+  .pantry-navigation {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 8px;
+  }
+  .pantry-nav-link {
+    justify-content: center;
+    min-width: 0;
+    padding: 10px 4px;
+  }
+  .pantry-nav-link.is-active::after {
+    left: 4px;
+    right: 4px;
   }
 }
 @media (min-width: 641px) and (max-width: 1120px) {
@@ -1528,5 +1562,28 @@ body {
   }
   .dashboard-attention-card:hover {
     transform: none;
+  }
+}
+
+:is(a, button, input, select, textarea, [role="checkbox"]):focus-visible {
+  outline: 2px solid var(--pantry-green);
+  outline-offset: 3px;
+}
+
+body:has(.pantry-adjustment-feedback) .pantry-main {
+  padding-bottom: min(45dvh, 26rem);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:focus-within {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
   }
 }

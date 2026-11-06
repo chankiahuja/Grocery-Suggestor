@@ -897,6 +897,10 @@ describe("shopping list selection and deletion", () => {
       /sample/,
     );
     assert.ok(screen.getByTestId("shopping-list-20"));
+    fireEvent.click(screen.getByRole("link", { name: "Weekend groceries" }));
+    assert.ok(await screen.findByRole("checkbox", { name: "Purchased Milk" }));
+    assert.ok(screen.getByRole("button", { name: "Remove Milk from Weekend groceries" }));
+    assert.ok(screen.getByRole("progressbar", { name: "Weekend groceries: 0% complete" }));
     queryClient.clear();
   });
 

@@ -85,6 +85,29 @@ function renderApp(path: string) {
 }
 
 describe("quick inventory adjustments", () => {
+  it("names notification controls and returns focus to the bell on Escape or close", async () => {
+    const api = new MockPantryApi();
+    globalThis.fetch = api.fetch;
+    const { queryClient } = renderApp("/inventory");
+    try {
+      const bell = await screen.findByTestId("notification-bell");
+      fireEvent.click(bell);
+      assert.equal(bell.getAttribute("aria-expanded"), "true");
+      assert.ok(screen.getByRole("region", { name: "Notifications" }));
+      assert.ok(screen.getByRole("button", { name: "Close notifications" }));
+      fireEvent.keyDown(document, { key: "Escape" });
+      assert.equal(bell.getAttribute("aria-expanded"), "false");
+      assert.equal(document.activeElement, bell);
+
+      fireEvent.click(bell);
+      fireEvent.click(screen.getByRole("button", { name: "Close notifications" }));
+      assert.equal(bell.getAttribute("aria-expanded"), "false");
+      assert.equal(document.activeElement, bell);
+    } finally {
+      queryClient.clear();
+    }
+  });
+
   it("refreshes the visible notification snapshot and item detail after restock and Undo without SSE", async () => {
     const api = new MockPantryApi();
     globalThis.fetch = api.fetch;

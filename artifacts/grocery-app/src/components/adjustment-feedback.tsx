@@ -42,7 +42,7 @@ export function AdjustmentFeedbackProvider({
       {adjustments.length > 0 && (
         <aside
           aria-label="Inventory adjustment feedback"
-          className="fixed bottom-4 right-4 z-50 max-h-[50vh] w-[min(24rem,calc(100vw-2rem))] space-y-2 overflow-y-auto"
+          className="pantry-adjustment-feedback pointer-events-none fixed bottom-4 right-4 z-50 max-h-[40dvh] w-[min(24rem,calc(100vw-2rem))] space-y-2 overflow-y-auto"
         >
           {adjustments.map((adjustment) => (
             <AdjustmentFeedback
@@ -129,7 +129,7 @@ function AdjustmentFeedback({
   }
 
   return (
-    <div className="rounded-lg border bg-card p-4 shadow-lg">
+    <div className="pointer-events-auto rounded-lg border bg-card p-4 shadow-lg">
       <p role="status" className="text-sm">
         {expired && !terminal && !pending
           ? `${item.name}: the Undo window has expired.`

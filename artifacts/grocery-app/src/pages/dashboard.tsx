@@ -434,6 +434,7 @@ export default function Dashboard() {
                               variant="ghost"
                               size="sm"
                               className="dashboard-review-remove"
+                              aria-label={`Remove ${item.name} from shopping list review`}
                               onClick={() =>
                                 setReviewItems((previous) =>
                                   previous.filter(
