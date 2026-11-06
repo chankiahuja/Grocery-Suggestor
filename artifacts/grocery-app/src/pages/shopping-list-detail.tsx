@@ -271,7 +271,11 @@ export default function ShoppingListDetail() {
                   <span>Progress</span>
                   <span className="font-mono">{Math.round(progress)}%</span>
                 </div>
-                <Progress value={progress} className="h-3" />
+                <Progress
+                  value={progress}
+                  className="h-3"
+                  aria-label={`${list.name}: ${Math.round(progress)}% complete`}
+                />
               </div>
             </CardContent>
           </Card>
@@ -311,6 +315,7 @@ export default function ShoppingListDetail() {
                       >
                         <div className="flex items-start gap-4">
                           <Checkbox
+                            aria-label={`Purchased ${item.name}`}
                             checked={item.purchased}
                             onCheckedChange={() => handleTogglePurchased(item)}
                             className="mt-1 animate-check-pulse"
@@ -353,6 +358,7 @@ export default function ShoppingListDetail() {
                           <Button
                             variant="outline"
                             size="sm"
+                            aria-label={`Remove ${item.name} from ${list.name}`}
                             onClick={() => handleDeleteClick(item)}
                             data-testid={`button-delete-item-${item.id}`}
                           >
