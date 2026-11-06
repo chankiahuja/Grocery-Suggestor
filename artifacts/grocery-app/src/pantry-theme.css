@@ -1,39 +1,14 @@
 /* Adapted from the supplied Pantry Pal design. Assets are owned by this app. */
 :root {
-  --background: 103 24% 94%;
-  --foreground: 150 24% 20%;
-  --card: 48 100% 99%;
-  --card-foreground: 150 24% 20%;
-  --card-border: 110 19% 88%;
-  --border: 110 19% 88%;
-  --popover: 48 100% 99%;
-  --popover-foreground: 150 24% 20%;
-  --primary: 146 27% 28%;
-  --primary-foreground: 50 100% 99%;
-  --ring: 146 27% 28%;
-  --secondary: 100 25% 91%;
-  --secondary-foreground: 146 27% 28%;
-  --muted: 60 25% 94%;
-  --muted-foreground: 130 11% 38%;
-  --accent: 100 25% 91%;
-  --accent-foreground: 146 27% 28%;
-  --input: 65 20% 83%;
-  --sidebar: 48 100% 99%;
-  --sidebar-foreground: 102 10% 20%;
-  --sidebar-accent: 75 29% 90%;
-  --sidebar-accent-foreground: 89 20% 29%;
-  --app-font-sans: "Helvetica Neue", Arial, sans-serif;
-  --app-font-mono: "Helvetica Neue", Arial, sans-serif;
-  --radius: 0.85rem;
-  --pantry-paper: #eff4ed;
-  --pantry-surface: #fffef9;
-  --pantry-ink: #263e32;
+  --pantry-paper: hsl(var(--background));
+  --pantry-surface: hsl(var(--card));
+  --pantry-ink: hsl(var(--foreground));
   --pantry-muted: #586c5d;
-  --pantry-green: #355c46;
+  --pantry-green: hsl(var(--primary));
   --pantry-green-hover: #294d39;
-  --pantry-line: #dce6da;
-  grid-column: 3;
-  grid-row: 2;
+  --pantry-line: hsl(var(--border));
+  --pantry-card-radius: 16px;
+  --pantry-card-shadow: var(--shadow);
 }
 .dashboard-review-remove {
   grid-column: 1 / -1;
@@ -53,7 +28,8 @@ body {
 }
 .pantry-header {
   background: var(--pantry-surface);
-  border-bottom: 1px solid hsl(var(--border));
+  border-bottom: 1px solid var(--pantry-line);
+  box-shadow: 0 5px 18px rgba(49, 80, 59, 0.035);
 }
 .pantry-header-inner {
   max-width: 1370px;
@@ -86,13 +62,18 @@ body {
   color: var(--pantry-muted);
   font-size: 13px;
   white-space: nowrap;
+  border-radius: 10px 10px 0 0;
+  transition: background-color 150ms ease, color 150ms ease;
 }
-.pantry-nav-link:hover {
+.pantry-nav-link:hover,
+.pantry-nav-link:focus-visible {
+  background: hsl(var(--sidebar-accent) / 0.55);
   color: var(--pantry-green);
 }
 .pantry-nav-link.is-active {
   color: var(--pantry-green);
   font-weight: 600;
+  background: hsl(var(--sidebar-accent) / 0.68);
 }
 .pantry-nav-link.is-active::after {
   content: "";
@@ -109,6 +90,20 @@ body {
   gap: 22px;
   flex-shrink: 0;
 }
+.pantry-sign-in {
+  padding: 8px 3px;
+  color: var(--pantry-green);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+}
+.pantry-sign-in:hover {
+  color: var(--pantry-green-hover);
+  text-decoration-color: currentColor;
+}
 .pantry-household {
   display: flex;
   gap: 8px;
@@ -116,6 +111,31 @@ body {
   color: var(--pantry-muted);
   font-size: 12px;
   white-space: nowrap;
+  padding: 8px 11px;
+  border: 1px solid var(--pantry-line);
+  border-radius: 999px;
+  background: hsl(var(--secondary) / 0.45);
+}
+.pantry-household svg {
+  color: var(--pantry-green);
+}
+.pantry-notification-trigger {
+  border: 1px solid var(--pantry-line);
+  background: var(--pantry-surface);
+}
+.pantry-notification-trigger:hover,
+.pantry-notification-trigger[aria-expanded="true"] {
+  background: hsl(var(--sidebar-accent));
+  color: var(--pantry-green);
+}
+.pantry-notification-panel {
+  border-color: var(--pantry-line);
+  background: var(--pantry-surface);
+  box-shadow: var(--shadow-lg);
+}
+.pantry-card {
+  border-radius: var(--pantry-card-radius);
+  box-shadow: var(--pantry-card-shadow);
 }
 .pantry-main {
   max-width: 1320px;
@@ -130,18 +150,22 @@ body {
   font-size: 11px;
   color: var(--pantry-muted);
 }
-.pantry-breadcrumb span:last-child {
-  color: var(--pantry-muted);
-}
 .pantry-breadcrumb a {
-  color: inherit;
-  text-decoration: none;
+  color: var(--pantry-green);
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+  transition: color 150ms ease, text-decoration-color 150ms ease;
 }
 .pantry-breadcrumb a:hover,
 .pantry-breadcrumb a:focus-visible {
+  color: var(--pantry-green-hover);
+  text-decoration-color: currentColor;
+}
+.pantry-breadcrumb [aria-current="page"] {
   color: var(--pantry-ink);
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  font-weight: 600;
+  text-decoration-color: currentColor;
 }
 .pantry-content {
   padding: 20px 0 30px;
@@ -156,8 +180,8 @@ body {
 }
 .pantry-content [data-testid^="shopping-list-"] {
   background: var(--pantry-surface);
-  border-radius: 14px;
-  box-shadow: 0 4px 15px #424c2803;
+  border-radius: var(--pantry-card-radius);
+  box-shadow: var(--pantry-card-shadow);
 }
 .pantry-demo {
   display: flex;
@@ -221,10 +245,10 @@ body {
   display: grid;
   grid-template-columns: minmax(0, 1.6fr) minmax(260px, 1fr);
   overflow: hidden;
-  border: 1px solid #dae5d3;
-  border-radius: 18px;
-  background: #fffef9;
-  box-shadow: 0 10px 26px #36503708;
+  border: 1px solid var(--pantry-line);
+  border-radius: var(--pantry-card-radius);
+  background: var(--pantry-surface);
+  box-shadow: var(--pantry-card-shadow);
 }
 .compare-summary-main {
   padding: 29px 33px;
@@ -336,9 +360,9 @@ body {
 .compare-store {
   min-height: 250px;
   border-color: var(--pantry-line);
-  border-radius: 16px;
+  border-radius: var(--pantry-card-radius);
   background: var(--pantry-surface);
-  box-shadow: 0 8px 22px #36503705;
+  box-shadow: var(--pantry-card-shadow);
 }
 .compare-store-content {
   display: flex;
@@ -394,8 +418,9 @@ body {
 }
 .compare-detail-card {
   border-color: var(--pantry-line);
-  border-radius: 18px;
+  border-radius: var(--pantry-card-radius);
   background: var(--pantry-surface);
+  box-shadow: var(--pantry-card-shadow);
 }
 .compare-detail-content {
   padding: 27px 30px;
@@ -865,10 +890,10 @@ body {
   min-width: 0;
   flex-direction: column;
   gap: 14px;
-  border: 1px solid #e3e9df;
+  border: 1px solid var(--pantry-line);
   border-left-width: 3px;
-  border-radius: 13px;
-  background: #fffefa;
+  border-radius: var(--pantry-card-radius);
+  background: var(--pantry-surface);
   padding: 17px 18px;
   transition:
     border-color 150ms ease,
@@ -1321,10 +1346,10 @@ body {
 }
 .dashboard-panel {
   overflow: hidden;
-  border-color: #e0e7dc;
-  border-radius: 16px;
-  background: #fffef9;
-  box-shadow: 0 9px 26px #344c3108;
+  border-color: var(--pantry-line);
+  border-radius: var(--pantry-card-radius);
+  background: var(--pantry-surface);
+  box-shadow: var(--pantry-card-shadow);
 }
 .dashboard-panel-header {
   gap: 8px;

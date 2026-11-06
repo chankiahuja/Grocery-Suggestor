@@ -132,7 +132,7 @@ export function NotificationCenter() {
         ref={buttonRef}
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "relative flex items-center justify-center w-9 h-9 rounded-lg transition-colors",
+          "pantry-notification-trigger relative flex items-center justify-center w-9 h-9 rounded-lg transition-colors",
           open
             ? "bg-sidebar-accent text-sidebar-accent-foreground"
             : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
@@ -157,7 +157,7 @@ export function NotificationCenter() {
           ref={panelRef}
           role="region"
           aria-label="Notifications"
-          className="absolute right-0 top-full mt-3 z-50 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-card shadow-xl"
+          className="pantry-notification-panel absolute right-0 top-full mt-3 z-50 w-80 max-w-[calc(100vw-2rem)] rounded-xl border"
           data-testid="notification-panel"
         >
           {/* Header */}
