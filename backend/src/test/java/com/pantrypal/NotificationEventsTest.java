@@ -9,20 +9,31 @@ import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.security.core.Authentication;
 import org.springframework.session.MapSession;
 import org.springframework.session.SessionRepository;
+import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
 class NotificationEventsTest {
-    @Test
-    void initialSessionLookupFailureClosesAndRemovesSubscriberWithoutSendingReady() {
+    private static Stream<RuntimeException> sessionLookupFailures() {
+        return Stream.of(
+            new DataAccessResourceFailureException("Session store unavailable"),
+            new CannotCreateTransactionException("Could not open session transaction"));
+    }
+
+    @ParameterizedTest
+    @MethodSource("sessionLookupFailures")
+    void initialSessionLookupFailureClosesAndRemovesSubscriberWithoutSendingReady(RuntimeException failure) {
         var sessions = sessions();
-        when(sessions.findById("unavailable")).thenThrow(new DataAccessResourceFailureException("Session store unavailable"));
+        when(sessions.findById("unavailable")).thenThrow(failure);
         PantryService service = mock(PantryService.class);
         when(service.accountIds()).thenReturn(List.of());
         var notifications = new NotificationEvents(service, sessions);
@@ -40,8 +51,9 @@ class NotificationEventsTest {
         assertThat(emitter.payloads).isEmpty();
     }
 
-    @Test
-    void broadcastSkipsFailedSessionLookupContinuesOtherSubscribersAndRecovers() {
+    @ParameterizedTest
+    @MethodSource("sessionLookupFailures")
+    void broadcastSkipsFailedSessionLookupContinuesOtherSubscribersAndRecovers(RuntimeException failure) {
         var sessions = sessions();
         var notifications = new NotificationEvents(mock(PantryService.class), sessions);
         var unavailable = new RecordingEmitter();
@@ -51,7 +63,7 @@ class NotificationEventsTest {
         notifications.subscribe(authentication("1"), "healthy", healthy);
         notifications.subscribe(authentication("2"), "other-account", otherAccount);
         var readyPayloads = List.copyOf(unavailable.payloads);
-        when(sessions.findById("unavailable")).thenThrow(new DataAccessResourceFailureException("Session store unavailable"));
+        when(sessions.findById("unavailable")).thenThrow(failure);
 
         notifications.changed(new PantryService.PantryChanged("inventory_changed", 41L, 1L));
         assertThat(unavailable.payloads).containsExactlyElementsOf(readyPayloads);
@@ -67,8 +79,9 @@ class NotificationEventsTest {
         assertThat(unavailable.payloads).doesNotContain(Map.of("type", "inventory_changed"));
     }
 
-    @Test
-    void expiryCheckContinuesCleanupAndBroadcastsAfterSessionLookupFailure() {
+    @ParameterizedTest
+    @MethodSource("sessionLookupFailures")
+    void expiryCheckContinuesCleanupAndBroadcastsAfterSessionLookupFailure(RuntimeException failure) {
         var sessions = sessions();
         PantryService service = mock(PantryService.class);
         when(service.accountIds()).thenReturn(List.of(1L, 2L));
@@ -82,7 +95,7 @@ class NotificationEventsTest {
         notifications.subscribe(authentication("1"), "deleted", deleted);
         notifications.subscribe(authentication("1"), "healthy", healthy);
         notifications.subscribe(authentication("2"), "other-account", otherAccount);
-        when(sessions.findById("unavailable")).thenThrow(new DataAccessResourceFailureException("Session store unavailable"));
+        when(sessions.findById("unavailable")).thenThrow(failure);
         when(sessions.findById("deleted")).thenReturn(null);
 
         notifications.checkExpiry();
@@ -98,8 +111,9 @@ class NotificationEventsTest {
         assertThat(unavailable.payloads).contains(Map.of("type", "heartbeat"));
     }
 
-    @Test
-    void scheduledBroadcastRevalidatesSessionsAndIsolatesALookupFailureAfterTheExpirySweep() {
+    @ParameterizedTest
+    @MethodSource("sessionLookupFailures")
+    void scheduledBroadcastRevalidatesSessionsAndIsolatesALookupFailureAfterTheExpirySweep(RuntimeException failure) {
         var sessions = sessions();
         PantryService service = mock(PantryService.class);
         when(service.accountIds()).thenReturn(List.of(1L));
@@ -110,7 +124,7 @@ class NotificationEventsTest {
         notifications.subscribe(authentication("1"), "unavailable", unavailable);
         notifications.subscribe(authentication("1"), "healthy", healthy);
         when(sessions.findById("unavailable")).thenReturn(new MapSession())
-            .thenThrow(new DataAccessResourceFailureException("Session store unavailable"));
+            .thenThrow(failure);
 
         notifications.checkExpiry();
         assertThat(unavailable.payloads).doesNotContain(Map.of("type", "alerts_changed"));
