@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.time.Instant;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.ArrayDeque;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
@@ -23,6 +24,75 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
 class NotificationEventsTest {
+    @Test
+    void committedSignalsEnqueueWithoutSessionLookupAndRevalidateBeforeDelivery() {
+        var sessions = sessions();
+        var queued = new ArrayDeque<Runnable>();
+        var notifications = new NotificationEvents(mock(PantryService.class), sessions, queued::add);
+        var alice = new RecordingEmitter();
+        var bob = new RecordingEmitter();
+        notifications.subscribe(authentication("1"), "alice", alice);
+        notifications.subscribe(authentication("2"), "bob", bob);
+        clearInvocations((Object) sessions);
+
+        notifications.changed(new PantryService.PantryChanged("inventory_changed", 41L, 1L));
+        assertThat(queued).hasSize(1);
+        verifyNoInteractions(sessions);
+        assertThat(alice.payloads).doesNotContain(Map.of("type", "inventory_changed"));
+        queued.remove().run();
+        assertThat(alice.payloads).contains(Map.of("type", "inventory_changed"));
+        assertThat(bob.payloads).doesNotContain(Map.of("type", "inventory_changed"));
+
+        notifications.changed(new PantryService.PantryChanged("purchase_completed", null, 1L));
+        when(sessions.findById("alice")).thenReturn(null);
+        queued.remove().run();
+        assertThat(alice.completed).isTrue();
+        assertThat(alice.payloads).doesNotContain(Map.of("type", "purchase_completed"));
+    }
+
+    @Test
+    void logoutPreventsDeliveryOfAnAlreadyQueuedSignal() {
+        var queued = new ArrayDeque<Runnable>();
+        var notifications = new NotificationEvents(mock(PantryService.class), sessions(), queued::add);
+        var emitter = new RecordingEmitter();
+        notifications.subscribe(authentication("1"), "revoked", emitter);
+        notifications.changed(new PantryService.PantryChanged("inventory_changed", 41L, 1L));
+        notifications.disconnectSession("revoked");
+        queued.remove().run();
+        assertThat(emitter.completed).isTrue();
+        assertThat(emitter.payloads).doesNotContain(Map.of("type", "inventory_changed"));
+    }
+
+    @Test
+    void saturatedDeliveryQueueDoesNotBlockOrRunOnThePublisherThread() throws Exception {
+        var executor = new NotificationDeliveryConfig().notificationDeliveryExecutor();
+        executor.initialize();
+        var started = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        try {
+            executor.execute(() -> {
+                started.countDown();
+                try { release.await(); }
+                catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            });
+            assertThat(started.await(5, TimeUnit.SECONDS)).isTrue();
+            for (int i = 0; i < 128; i++) executor.execute(() -> {});
+            assertThat(executor.getThreadPoolExecutor().getQueue()).hasSize(128);
+            var sessions = sessions();
+            var notifications = new NotificationEvents(mock(PantryService.class), sessions, executor);
+            var emitter = new RecordingEmitter();
+            notifications.subscribe(authentication("1"), "active", emitter);
+            clearInvocations((Object) sessions);
+            notifications.changed(new PantryService.PantryChanged("inventory_changed", 41L, 1L));
+            verifyNoInteractions(sessions);
+            assertThat(executor.getThreadPoolExecutor().getQueue()).hasSize(128);
+            assertThat(emitter.payloads).doesNotContain(Map.of("type", "inventory_changed"));
+        } finally {
+            release.countDown();
+            executor.shutdown();
+        }
+    }
+
     private static Stream<RuntimeException> sessionLookupFailures() {
         return Stream.of(
             new DataAccessResourceFailureException("Session store unavailable"),

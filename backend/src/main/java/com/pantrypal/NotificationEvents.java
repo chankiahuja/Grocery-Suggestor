@@ -4,9 +4,15 @@ import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BooleanSupplier;
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.dao.DataAccessException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.core.Authentication;
@@ -21,6 +27,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 @RestController
 @RequestMapping("/api/notifications")
 public class NotificationEvents {
+    private static final Logger log = LoggerFactory.getLogger(NotificationEvents.class);
     private static final class Subscriber {
         private final String sessionId;
         private final SseEmitter emitter;
@@ -84,10 +91,18 @@ public class NotificationEvents {
     private final Map<Long,CopyOnWriteArrayList<Subscriber>> clients = new ConcurrentHashMap<>();
     private final PantryService service;
     private final SessionRepository<? extends Session> sessions;
+    private final Executor deliveryExecutor;
     private final Map<Long,String> previousByAccount = new HashMap<>();
-    public NotificationEvents(PantryService service, SessionRepository<? extends Session> sessions) {
+    @Autowired
+    public NotificationEvents(PantryService service, SessionRepository<? extends Session> sessions,
+        @Qualifier("notificationDeliveryExecutor") Executor deliveryExecutor) {
         this.service = service;
         this.sessions = sessions;
+        this.deliveryExecutor = deliveryExecutor;
+    }
+    // Direct delivery keeps repository/emitter unit tests deterministic without starting workers.
+    NotificationEvents(PantryService service, SessionRepository<? extends Session> sessions) {
+        this(service, sessions, Runnable::run);
     }
     @GetMapping(value="/stream", produces="text/event-stream")
     public SseEmitter subscribe(Authentication authentication, HttpServletRequest request) {
@@ -122,7 +137,14 @@ public class NotificationEvents {
     }
     @TransactionalEventListener
     public void changed(PantryService.PantryChanged event) {
-        if (event.accountId() != null) broadcast(event.accountId(), event.type());
+        if (event.accountId() == null) return;
+        try {
+            // AFTER_COMMIT still runs before transaction connection cleanup. Enqueue only here.
+            deliveryExecutor.execute(() -> broadcast(event.accountId(), event.type()));
+        } catch (RejectedExecutionException e) {
+            // These are best-effort refresh signals; HTTP responses and snapshot polling recover state.
+            log.warn("Notification delivery queue unavailable; skipping refresh signal");
+        }
     }
     @Scheduled(fixedDelayString="${pantrypal.expiry-check-ms:60000}")
     public synchronized void checkExpiry() {
