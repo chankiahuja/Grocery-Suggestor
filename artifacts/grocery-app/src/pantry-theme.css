@@ -90,19 +90,131 @@ body {
   gap: 22px;
   flex-shrink: 0;
 }
-.pantry-sign-in {
-  padding: 8px 3px;
+.pantry-account-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  max-width: 210px;
+  padding: 5px 9px 5px 5px;
+  border: 1px solid var(--pantry-line);
+  border-radius: 999px;
+  background: var(--pantry-surface);
   color: var(--pantry-green);
   font-size: 12px;
   font-weight: 600;
-  white-space: nowrap;
-  text-decoration: underline;
-  text-decoration-color: transparent;
-  text-underline-offset: 3px;
 }
-.pantry-sign-in:hover {
-  color: var(--pantry-green-hover);
-  text-decoration-color: currentColor;
+.pantry-account-trigger:hover,
+.pantry-account-trigger[data-state="open"] {
+  background: hsl(var(--secondary));
+}
+.pantry-account-trigger:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.pantry-account-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: hsl(var(--secondary));
+  color: var(--pantry-green);
+  font-size: 12px;
+  font-weight: 700;
+}
+.pantry-account-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pantry-account-chevron {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+.pantry-account-menu {
+  width: 280px;
+  max-width: calc(100vw - 24px);
+  padding: 8px;
+  border-radius: 16px;
+  color: var(--pantry-ink);
+  background: var(--pantry-surface);
+}
+.pantry-account-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 8px;
+}
+.pantry-account-avatar-large {
+  width: 40px;
+  height: 40px;
+  font-size: 14px;
+}
+.pantry-account-summary-text {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.pantry-account-summary-text > span {
+  font-size: 12px;
+  color: var(--pantry-muted);
+}
+.pantry-account-menu-item {
+  min-height: 44px;
+  padding: 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.pantry-account-logout {
+  color: hsl(var(--destructive));
+}
+.pantry-account-dialog {
+  border-radius: 16px;
+}
+.pantry-account-details {
+  display: grid;
+  gap: 16px;
+  padding-block: 8px;
+}
+.pantry-account-details dt {
+  color: var(--pantry-muted);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.pantry-account-details dd {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.pantry-logout-error {
+  max-width: 220px;
+  color: hsl(var(--destructive));
+  font-size: 12px;
+}
+@media (max-width: 640px) {
+  .pantry-account-trigger {
+    width: 44px;
+    padding: 5px;
+  }
+  .pantry-account-name,
+  .pantry-account-chevron {
+    display: none;
+  }
+  .pantry-logout-error {
+    position: absolute;
+    top: 70px;
+    right: 20px;
+    z-index: 50;
+    padding: 10px;
+    border: 1px solid var(--pantry-line);
+    border-radius: 8px;
+    background: var(--pantry-surface);
+  }
 }
 .pantry-household {
   display: flex;
@@ -611,7 +723,7 @@ body {
   flex-wrap: wrap;
   gap: 9px;
 }
-@media (max-width: 1120px) {
+@media (max-width: 1280px) {
   .pantry-header-inner {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;

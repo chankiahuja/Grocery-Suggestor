@@ -274,7 +274,7 @@ function AuthScreen({ demo }: { demo?: boolean }) {
               >
                 {signup && (
                   <div className="auth-field">
-                    <label htmlFor="auth-name">Your name</label>
+                    <label htmlFor="auth-name">Your name <span className="auth-required-mark" aria-hidden="true">*</span></label>
                     <div className="auth-input-wrap">
                       <input
                         ref={nameInput}

@@ -1,9 +1,9 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { Redirect, useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
-import { getAuthSession, logoutSession, setCsrfToken, setUnauthorizedHandler, type AuthSession } from "@workspace/api-client-react";
+import { getAuthSession, logoutSession, setCsrfToken, setUnauthorizedHandler, type AuthAccount, type AuthSession } from "@workspace/api-client-react";
 
-const PreviewAccess = createContext({ demo: false, complete: () => {}, signedIn: (_session: AuthSession) => {}, logout: async () => {} });
+const PreviewAccess = createContext({ demo: false, account: null as AuthAccount | null, complete: () => {}, signedIn: (_session: AuthSession) => {}, logout: async () => {} });
 export const useSessionAccess = () => useContext(PreviewAccess);
 export const useCompletePreview = () => useContext(PreviewAccess).complete;
 export const useLogoutPreview = () => useContext(PreviewAccess).logout;
@@ -13,12 +13,14 @@ export function LoginGate({ children, preview = import.meta.env?.MODE === "mock"
   const client = useQueryClient();
   const [ready, setReady] = useState(false);
   const [completed, setCompleted] = useState(false);
+  const [account, setAccount] = useState<AuthAccount | null>(null);
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
   useEffect(() => {
     let active = true;
     setReady(false);
     setError("");
+    setAccount(null);
     if (preview) {
       if (location !== "/" && location !== "/login" && location !== "/signup") {
         navigate("/login", { replace: true });
@@ -27,6 +29,7 @@ export function LoginGate({ children, preview = import.meta.env?.MODE === "mock"
       return;
     }
     setUnauthorizedHandler(() => {
+      setAccount(null);
       setCompleted(false);
       setReady(false);
       client.clear();
@@ -37,6 +40,7 @@ export function LoginGate({ children, preview = import.meta.env?.MODE === "mock"
       if (!active) return;
       setCsrfToken(session.csrfToken);
       setCompleted(session.authenticated);
+      setAccount(session.authenticated ? session.account : null);
       setReady(true);
     }).catch(() => { if (active) setError("Unable to check your session. Check the connection and try again."); });
     return () => { active = false; setUnauthorizedHandler(null); };
@@ -52,11 +56,13 @@ export function LoginGate({ children, preview = import.meta.env?.MODE === "mock"
     <PreviewAccess.Provider
       value={{
         demo: preview,
+        account,
         complete: () => { if (preview) setCompleted(true); },
-        signedIn: session => { setCsrfToken(session.csrfToken); client.clear(); setCompleted(session.authenticated); },
+        signedIn: session => { setCsrfToken(session.csrfToken); client.clear(); setCompleted(session.authenticated); setAccount(session.authenticated ? session.account : null); },
         logout: async () => {
           if (!preview) { const session = await logoutSession(); setCsrfToken(session.csrfToken); }
           setCompleted(false);
+          setAccount(null);
           client.clear();
         },
       }}

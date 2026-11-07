@@ -565,7 +565,7 @@ describe("logout", () => {
       </QueryClientProvider>,
     );
     await screen.findByRole("heading", { name: "Welcome home." });
-    assert.equal(screen.queryByRole("button", { name: "Logout" }), null);
+    assert.equal(screen.queryByRole("button", { name: /Account menu for/ }), null);
     fireEvent.change(screen.getByLabelText("Mobile number"), {
       target: { value: "9876543210" },
     });
@@ -578,9 +578,17 @@ describe("logout", () => {
     fireEvent.click(screen.getByRole("button", { name: "Verify & continue" }));
     await screen.findByRole("heading", { name: "Dashboard" });
     assert.equal(screen.queryByRole("link", { name: "Sign in" }), null);
-    assert.ok(screen.getByRole("button", { name: "Logout" }));
+    const accountTrigger = screen.getByRole("button", { name: "Account menu for Demo account" });
+    fireEvent.keyDown(accountTrigger, { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Account details" }));
+    const accountDialog = await screen.findByRole("dialog", { name: "Account details" });
+    assert.ok(within(accountDialog).getByText("Demo account"));
+    assert.ok(within(accountDialog).getByText("This is a demo preview, not a signed-in account."));
+    fireEvent.keyDown(accountDialog, { key: "Escape" });
+    await waitFor(() => assert.ok(screen.queryByRole("dialog") === null));
     await openInventory();
-    fireEvent.click(screen.getByRole("button", { name: "Logout" }));
+    fireEvent.keyDown(screen.getByRole("button", { name: /Account menu for/ }), { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Log out" }));
     await screen.findByRole("heading", { name: "Welcome home." });
     assert.equal(queryClient.getQueryCache().getAll().length, 0);
     for (const path of ["/dashboard", "/inventory", "/shopping-lists"]) {
@@ -588,7 +596,7 @@ describe("logout", () => {
         location.navigate(path);
       });
       await screen.findByRole("heading", { name: "Welcome home." });
-      assert.equal(screen.queryByRole("button", { name: "Logout" }), null);
+      assert.equal(screen.queryByRole("button", { name: /Account menu for/ }), null);
     }
   });
 });
@@ -652,7 +660,8 @@ describe("mobile sign-in and sign-up preview", () => {
     await screen.findByRole("heading", { name: "Dashboard" });
     assert.equal(screen.getByRole("link", { name: "Step into your home" }).getAttribute("href"), "/inventory");
     assert.equal(screen.queryByLabelText("Verification code"), null);
-    fireEvent.click(screen.getByRole("button", { name: "Logout" }));
+    fireEvent.keyDown(screen.getByRole("button", { name: /Account menu for/ }), { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Log out" }));
     assert.equal(
       ((await screen.findByLabelText("Mobile number")) as HTMLInputElement).value,
       "",
@@ -663,7 +672,7 @@ describe("mobile sign-in and sign-up preview", () => {
     const { queryClient } = renderApp("/login");
     fireEvent.click(screen.getByRole("link", { name: "Create account" }));
     await screen.findByRole("heading", { name: "A little more together." });
-    fireEvent.change(screen.getByLabelText("Your name"), {
+    fireEvent.change(screen.getByRole("textbox", { name: "Your name" }), {
       target: { value: "Riya Preview" },
     });
     fireEvent.change(screen.getByLabelText("Mobile number"), {
@@ -703,7 +712,7 @@ describe("create account name", () => {
       throw new Error("Account preview must not transmit names");
     };
     const { queryClient } = renderApp("/signup");
-    await screen.findByLabelText("Your name");
+    await screen.findByRole("textbox", { name: "Your name" });
     fireEvent.change(screen.getByLabelText("Mobile number"), {
       target: { value: "9876543210" },
     });
@@ -711,16 +720,16 @@ describe("create account name", () => {
       screen.getByRole("button", { name: "Get verification code" }),
     );
     await screen.findByText("Enter your name.");
-    assert.equal(document.activeElement, screen.getByLabelText("Your name"));
+    assert.equal(document.activeElement, screen.getByRole("textbox", { name: "Your name" }));
     assert.equal(screen.queryByLabelText("Verification code"), null);
-    fireEvent.change(screen.getByLabelText("Your name"), {
+    fireEvent.change(screen.getByRole("textbox", { name: "Your name" }), {
       target: { value: "   " },
     });
     fireEvent.click(
       screen.getByRole("button", { name: "Get verification code" }),
     );
     await screen.findByText("Enter your name.");
-    fireEvent.change(screen.getByLabelText("Your name"), {
+    fireEvent.change(screen.getByRole("textbox", { name: "Your name" }), {
       target: { value: "Riya Preview" },
     });
     fireEvent.click(
@@ -730,14 +739,14 @@ describe("create account name", () => {
     assert.equal(screen.queryByText("Riya Preview"), null);
     fireEvent.click(screen.getByRole("button", { name: "Change number" }));
     assert.equal(
-      (screen.getByLabelText("Your name") as HTMLInputElement).value,
+      (screen.getByRole("textbox", { name: "Your name" }) as HTMLInputElement).value,
       "Riya Preview",
     );
     fireEvent.click(screen.getByRole("link", { name: "Sign in" }));
-    assert.equal(screen.queryByLabelText("Your name"), null);
+    assert.equal(screen.queryByRole("textbox", { name: "Your name" }), null);
     fireEvent.click(screen.getByRole("link", { name: "Create account" }));
     assert.equal(
-      (screen.getByLabelText("Your name") as HTMLInputElement).value,
+      (screen.getByRole("textbox", { name: "Your name" }) as HTMLInputElement).value,
       "",
     );
   });
@@ -766,7 +775,7 @@ describe("email OTP preview", () => {
       await screen.findByRole("heading", { name: "Welcome home." });
       if (signup) {
         fireEvent.click(screen.getByRole("link", { name: "Create account" }));
-        fireEvent.change(screen.getByLabelText("Your name"), {
+        fireEvent.change(screen.getByRole("textbox", { name: "Your name" }), {
           target: { value: "Riya Preview" },
         });
       }
@@ -857,15 +866,16 @@ describe("email OTP preview", () => {
         assert.equal(screen.getByRole("link", { name: "Step into your home" }).getAttribute("href"), "/inventory");
         assert.equal(screen.queryByText("you@example.com"), null);
         assert.equal(screen.queryByText("Riya Preview"), null);
-        assert.equal(screen.queryByLabelText("Your name"), null);
+        assert.equal(screen.queryByRole("textbox", { name: "Your name" }), null);
         if (signup) {
           await openInventory();
           assert.equal(screen.queryByText("Riya Preview"), null);
-          fireEvent.click(screen.getByRole("button", { name: "Logout" }));
+          fireEvent.keyDown(screen.getByRole("button", { name: /Account menu for/ }), { key: "ArrowDown" });
+          fireEvent.click(await screen.findByRole("menuitem", { name: "Log out" }));
           await screen.findByRole("heading", { name: "Welcome home." });
           fireEvent.click(screen.getByRole("link", { name: "Create account" }));
           assert.equal(
-            (screen.getByLabelText("Your name") as HTMLInputElement).value,
+            (screen.getByRole("textbox", { name: "Your name" }) as HTMLInputElement).value,
             "",
           );
         }

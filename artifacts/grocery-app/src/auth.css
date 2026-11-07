@@ -188,6 +188,9 @@
   font-weight: 600;
   margin-bottom: 8px;
 }
+.auth-required-mark {
+  color: hsl(var(--destructive));
+}
 .auth-input-wrap {
   position: relative;
   display: flex;
