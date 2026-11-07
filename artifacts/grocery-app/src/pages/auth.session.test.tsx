@@ -16,7 +16,7 @@ const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query
 const { Router } = await import("wouter");
 const { memoryLocation } = await import("wouter/memory-location");
 const { setCsrfToken } = await import("@workspace/api-client-react");
-const { act, cleanup, fireEvent, render, screen, waitFor } = await import("@testing-library/react");
+const { act, cleanup, fireEvent, render, screen, waitFor, within } = await import("@testing-library/react");
 const { AppRoutes } = await import("../App");
 const originalFetch = globalThis.fetch;
 const clients = new Set<InstanceType<typeof QueryClient>>();
@@ -37,6 +37,9 @@ class AuthApi {
   codeFailure = 0;
   codeGate: Promise<void> | null = null;
   loseVerifyResponse = false;
+  account = { id: 1, email: "user@example.com", name: "User" as string | null };
+  logoutFailure = false;
+  logoutGate: Promise<void> | null = null;
   readonly fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const path = new URL(String(input), "http://localhost").pathname;
     const method = (init?.method || "GET").toUpperCase();
@@ -45,7 +48,7 @@ class AuthApi {
     this.requests.push({ path, method, csrf, body });
     const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json" } });
     if (path === "/api/auth/session" && method === "GET")
-      return json({ authenticated: this.authenticated, account: this.authenticated ? { id: 1, email: "user@example.com", name: "User" } : null, csrfToken: this.csrf });
+      return json({ authenticated: this.authenticated, account: this.authenticated ? this.account : null, csrfToken: this.csrf });
     if (path.startsWith("/api/auth/") && csrf !== this.csrf) return json({ error: "CSRF missing" }, 403);
     if (path === "/api/auth/code") {
       if (this.codeGate) await this.codeGate;
@@ -56,9 +59,11 @@ class AuthApi {
       if (body.code !== "654321") return json({ error: "Invalid code" }, 400);
       this.authenticated = true; this.csrf = "signed-in-token";
       if (this.loseVerifyResponse) throw new TypeError("Verification response lost after commit");
-      return json({ authenticated: true, account: { id: 1, email: "user@example.com", name: "User" }, csrfToken: this.csrf });
+      return json({ authenticated: true, account: this.account, csrfToken: this.csrf });
     }
     if (path === "/api/auth/logout") {
+      if (this.logoutGate) await this.logoutGate;
+      if (this.logoutFailure) return json({ error: "Logout unavailable" }, 500);
       this.authenticated = false; this.csrf = "new-anonymous-token";
       return json({ authenticated: false, account: null, csrfToken: this.csrf });
     }
@@ -81,6 +86,69 @@ async function mount(path: string, api: AuthApi) {
 }
 
 describe("real email authentication", { concurrency: false }, () => {
+  it("restores the account name, opens account details and supports keyboard dismissal", async () => {
+    const api = new AuthApi();
+    api.authenticated = true;
+    api.account.name = "Riya Sharma";
+    await mount("/dashboard", api);
+    const trigger = await screen.findByRole("button", { name: "Account menu for Riya Sharma" });
+    assert.ok(trigger.textContent?.includes("RS"));
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    const menu = await screen.findByRole("menu");
+    assert.ok(within(menu).getByText("user@example.com"));
+    fireEvent.keyDown(menu, { key: "Escape" });
+    await waitFor(() => assert.ok(screen.queryByRole("menu") === null));
+    await waitFor(() => assert.ok(document.activeElement === trigger));
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Account details" }));
+    const dialog = await screen.findByRole("dialog", { name: "Account details" });
+    assert.ok(within(dialog).getByText("Riya Sharma"));
+    assert.ok(within(dialog).getByText("user@example.com"));
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    await waitFor(() => assert.ok(screen.queryByRole("dialog") === null));
+    await waitFor(() => assert.ok(document.activeElement === trigger));
+  });
+
+  it("uses the email as a name fallback and removes account controls on session expiry", async () => {
+    const api = new AuthApi();
+    api.authenticated = true;
+    api.account.name = null;
+    const app = await mount("/inventory", api);
+    await screen.findByRole("button", { name: "Account menu for user" });
+    api.authenticated = false;
+    await act(async () => { await app.client.refetchQueries(); });
+    await screen.findByRole("heading", { name: "Welcome home." });
+    assert.ok(screen.queryByRole("button", { name: /Account menu for/ }) === null);
+    assert.ok(screen.queryByText("user@example.com") === null);
+  });
+
+  it("keeps the session after a failed logout and prevents duplicate pending logout", async () => {
+    const api = new AuthApi();
+    api.authenticated = true;
+    api.logoutFailure = true;
+    await mount("/dashboard", api);
+    fireEvent.keyDown(screen.getByRole("button", { name: /Account menu for/ }), { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Log out" }));
+    await screen.findByRole("alert");
+    assert.equal(api.authenticated, true);
+    assert.ok(screen.getByRole("button", { name: "Account menu for User" }));
+    api.logoutFailure = false;
+    let release!: () => void;
+    api.logoutGate = new Promise(resolve => { release = resolve; });
+    try {
+      fireEvent.keyDown(screen.getByRole("button", { name: /Account menu for/ }), { key: "ArrowDown" });
+      fireEvent.click(await screen.findByRole("menuitem", { name: "Log out" }));
+      const trigger = screen.getByRole("button", { name: /Account menu for/ }) as HTMLButtonElement;
+      assert.ok(trigger.disabled);
+      fireEvent.keyDown(trigger, { key: "ArrowDown" });
+      assert.equal(api.requests.filter(request => request.path === "/api/auth/logout").length, 2);
+      release();
+      await screen.findByRole("heading", { name: "Welcome home." });
+      assert.equal(api.authenticated, false);
+      assert.ok(screen.queryByRole("button", { name: /Account menu for/ }) === null);
+    } finally { release(); }
+  });
+
   it("recovers a session when verification succeeds but its response is lost", async () => {
     const api = new AuthApi(); api.loseVerifyResponse = true;
     await mount("/login", api);
@@ -90,6 +158,7 @@ describe("real email authentication", { concurrency: false }, () => {
     fireEvent.change(await screen.findByLabelText("Verification code"), { target: { value: "654321" } });
     fireEvent.click(screen.getByRole("button", { name: "Verify & continue" }));
     await screen.findByRole("heading", { name: "Dashboard" });
+    assert.ok(screen.getByRole("button", { name: "Account menu for User" }));
     assert.equal(api.requests.filter(request => request.path === "/api/auth/verify").length, 1);
     assert.equal(api.requests.filter(request => request.path === "/api/auth/session").length, 2);
   });
@@ -138,7 +207,8 @@ describe("real email authentication", { concurrency: false }, () => {
     } finally { first.unmount(); }
     const refreshed = await mount("/inventory", api);
     await screen.findByRole("heading", { name: "Inventory" });
-    fireEvent.click(screen.getByRole("button", { name: "Logout" }));
+    fireEvent.keyDown(screen.getByRole("button", { name: /Account menu for/ }), { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Log out" }));
     await screen.findByRole("heading", { name: "Welcome home." });
     assert.equal(api.requests.find(request => request.path === "/api/auth/logout")?.csrf, "signed-in-token");
     assert.equal(api.authenticated, false);
