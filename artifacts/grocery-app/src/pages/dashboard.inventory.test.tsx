@@ -3,17 +3,7 @@ import { afterEach, describe, it } from "node:test";
 import React from "react";
 import { MockPantryApi } from "../mocks/pantry-api";
 import { JSDOM } from "jsdom";
-import {
-  getGetGrocerySuggestionsQueryKey,
-  getGetInventoryStatsQueryKey,
-  getListInventoryItemsQueryKey,
-  getListShoppingListsQueryKey,
-  type InventoryItem,
-  type ShoppingListWithItems,
-} from "@workspace/api-client-react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Route, Router, Switch } from "wouter";
-import { memoryLocation } from "wouter/memory-location";
+import type { InventoryItem, ShoppingListWithItems } from "@workspace/api-client-react";
 
 const dom = new JSDOM("<!doctype html><html><body></body></html>", {
   url: "http://localhost/",
@@ -33,6 +23,10 @@ Object.defineProperties(globalThis, {
   removeEventListener: {
     configurable: true,
     value: dom.window.removeEventListener.bind(dom.window),
+  },
+  dispatchEvent: {
+    configurable: true,
+    value: dom.window.dispatchEvent.bind(dom.window),
   },
   HTMLElement: { configurable: true, value: dom.window.HTMLElement },
   HTMLInputElement: { configurable: true, value: dom.window.HTMLInputElement },
@@ -62,6 +56,16 @@ Object.defineProperties(globalThis, {
 
 dom.window.HTMLElement.prototype.scrollIntoView = () => {};
 
+// Initialize browser-sensitive dependencies only after JSDOM is installed.
+const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
+const { Route, Router, Switch } = await import("wouter");
+const { memoryLocation } = await import("wouter/memory-location");
+const {
+  getGetGrocerySuggestionsQueryKey,
+  getGetInventoryStatsQueryKey,
+  getListInventoryItemsQueryKey,
+  getListShoppingListsQueryKey,
+} = await import("@workspace/api-client-react");
 const { act, cleanup, fireEvent, render, screen, waitFor, within } =
   await import("@testing-library/react");
 const { useToast } = await import("../hooks/use-toast");
@@ -81,6 +85,18 @@ const [
   import("../App"),
 ]);
 const originalFetch = globalThis.fetch;
+const clients = new Set<InstanceType<typeof QueryClient>>();
+function createQueryClient(options?: ConstructorParameters<typeof QueryClient>[0]) {
+  const client = new QueryClient({
+    ...options,
+    defaultOptions: {
+      queries: { retry: false, gcTime: Infinity, ...options?.defaultOptions?.queries },
+      mutations: { retry: false, gcTime: Infinity, ...options?.defaultOptions?.mutations },
+    },
+  });
+  clients.add(client);
+  return client;
+}
 const timestamp = "2026-10-26T12:00:00.000Z";
 
 function dashboardItem(
@@ -411,7 +427,7 @@ class GroceryApiMock {
 
 function renderApp(path = "/dashboard") {
   const location = memoryLocation({ path });
-  const queryClient = new QueryClient({
+  const queryClient = createQueryClient({
     defaultOptions: {
       queries: { retry: false, staleTime: 0 },
       mutations: { retry: false },
@@ -453,26 +469,31 @@ async function openDashboard() {
 
 afterEach(() => {
   cleanup();
+  // Clear caches after unmounting: clearing active queries can trigger refetches.
+  for (const client of clients) client.clear();
+  clients.clear();
   globalThis.fetch = originalFetch;
   window.history.replaceState({}, "", "/");
 });
 
-describe("login landing routes", () => {
-  for (const path of [
-    "/",
-    "/login",
-    "/signup",
-    "/dashboard",
-    "/inventory",
-    "/shopping-lists/12",
-    "/unknown/deep/page?from=bookmark",
-  ]) {
-    it(`opens login first for ${path}`, async () => {
+describe("public and protected routes", () => {
+  for (const [path, heading] of [
+    ["/", /Your home\.\s*A little more in order\./],
+    ["/login", "Welcome home."],
+    ["/signup", "A little more together."],
+    ["/dashboard", "Welcome home."],
+    ["/inventory", "Welcome home."],
+    ["/shopping-lists/12", "Welcome home."],
+    ["/unknown/deep/page?from=bookmark", "Welcome home."],
+  ] satisfies [string, string | RegExp][]) {
+    it(`shows the expected public page for ${path}`, async () => {
+      let requests = 0;
       globalThis.fetch = async () => {
+        requests++;
         throw new Error("Landing must not request pantry data");
       };
       const location = memoryLocation({ path });
-      const queryClient = new QueryClient();
+      const queryClient = createQueryClient();
       render(
         <QueryClientProvider client={queryClient}>
           <Router hook={location.hook}>
@@ -480,10 +501,10 @@ describe("login landing routes", () => {
           </Router>
         </QueryClientProvider>,
       );
-      await screen.findByRole("heading", { name: "Welcome home." });
+      await screen.findByRole("heading", { name: heading });
       assert.equal(screen.queryByRole("heading", { name: "Dashboard" }), null);
       assert.equal(screen.queryByRole("link", { name: "Inventory" }), null);
-      queryClient.clear();
+      assert.equal(requests, 0);
     });
   }
 
@@ -491,7 +512,7 @@ describe("login landing routes", () => {
     const api = new MockPantryApi();
     globalThis.fetch = api.fetch;
     const location = memoryLocation({ path: "/inventory" });
-    const queryClient = new QueryClient({
+    const queryClient = createQueryClient({
       defaultOptions: { queries: { retry: false } },
     });
     const mount = () =>
@@ -503,6 +524,7 @@ describe("login landing routes", () => {
         </QueryClientProvider>,
       );
     const view = mount();
+
     await screen.findByRole("heading", { name: "Welcome home." });
     fireEvent.change(screen.getByLabelText("Mobile number"), {
       target: { value: "9876543210" },
@@ -514,17 +536,17 @@ describe("login landing routes", () => {
       target: { value: "123456" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Verify & continue" }));
+
     await screen.findByRole("heading", { name: "Dashboard" });
-    assert.equal(
-      screen.queryByRole("link", { name: "Step into your home" }),
-      null,
-    );
+
+    assert.equal(screen.getByRole("link", { name: "Step into your home" }).getAttribute("href"), "/inventory");
     await openInventory();
+
     await openDashboard();
+
     view.unmount();
     mount();
     await screen.findByRole("heading", { name: "Welcome home." });
-    queryClient.clear();
   });
 });
 
@@ -532,7 +554,7 @@ describe("logout", () => {
   it("clears preview access and blocks navigation back to app screens", async () => {
     globalThis.fetch = new MockPantryApi().fetch;
     const location = memoryLocation({ path: "/login" });
-    const queryClient = new QueryClient({
+    const queryClient = createQueryClient({
       defaultOptions: { queries: { retry: false } },
     });
     render(
@@ -568,7 +590,6 @@ describe("logout", () => {
       await screen.findByRole("heading", { name: "Welcome home." });
       assert.equal(screen.queryByRole("button", { name: "Logout" }), null);
     }
-    queryClient.clear();
   });
 });
 
@@ -629,17 +650,13 @@ describe("mobile sign-in and sign-up preview", () => {
     globalThis.fetch = new MockPantryApi().fetch;
     fireEvent.click(screen.getByRole("button", { name: "Verify & continue" }));
     await screen.findByRole("heading", { name: "Dashboard" });
-    assert.equal(
-      screen.queryByRole("link", { name: "Step into your home" }),
-      null,
-    );
+    assert.equal(screen.getByRole("link", { name: "Step into your home" }).getAttribute("href"), "/inventory");
     assert.equal(screen.queryByLabelText("Verification code"), null);
     fireEvent.click(screen.getByRole("button", { name: "Logout" }));
     assert.equal(
       ((await screen.findByLabelText("Mobile number")) as HTMLInputElement).value,
       "",
     );
-    queryClient.clear();
   });
 
   it("switches to signup and enables resend after the cooldown", async () => {
@@ -676,7 +693,6 @@ describe("mobile sign-in and sign-up preview", () => {
       );
     } finally {
       Date.now = realNow;
-      queryClient.clear();
     }
   });
 });
@@ -724,7 +740,6 @@ describe("create account name", () => {
       (screen.getByLabelText("Your name") as HTMLInputElement).value,
       "",
     );
-    queryClient.clear();
   });
 });
 
@@ -738,7 +753,7 @@ describe("email OTP preview", () => {
         return api.fetch(input, init);
       };
       const location = memoryLocation({ path: "/login" });
-      const queryClient = new QueryClient({
+      const queryClient = createQueryClient({
         defaultOptions: { queries: { retry: false } },
       });
       render(
@@ -839,10 +854,7 @@ describe("email OTP preview", () => {
           screen.getByRole("button", { name: "Verify & continue" }),
         );
         await screen.findByRole("heading", { name: "Dashboard" });
-        assert.equal(
-          screen.queryByRole("link", { name: "Step into your home" }),
-          null,
-        );
+        assert.equal(screen.getByRole("link", { name: "Step into your home" }).getAttribute("href"), "/inventory");
         assert.equal(screen.queryByText("you@example.com"), null);
         assert.equal(screen.queryByText("Riya Preview"), null);
         assert.equal(screen.queryByLabelText("Your name"), null);
@@ -850,6 +862,7 @@ describe("email OTP preview", () => {
           await openInventory();
           assert.equal(screen.queryByText("Riya Preview"), null);
           fireEvent.click(screen.getByRole("button", { name: "Logout" }));
+          await screen.findByRole("heading", { name: "Welcome home." });
           fireEvent.click(screen.getByRole("link", { name: "Create account" }));
           assert.equal(
             (screen.getByLabelText("Your name") as HTMLInputElement).value,
@@ -858,7 +871,6 @@ describe("email OTP preview", () => {
         }
       } finally {
         Date.now = realNow;
-        queryClient.clear();
       }
     });
   }
@@ -882,30 +894,26 @@ describe("shopping list selection and deletion", () => {
 
   it("marks the active navigation and returns from list details through breadcrumbs", async () => {
     const { queryClient } = await setup();
-    try {
-      const mainNav = screen.getByRole("navigation", { name: "Main navigation" });
-      const breadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" });
-      assert.equal(
-        within(mainNav).getByRole("link", { name: "Shopping Lists" }).getAttribute("aria-current"),
-        "page",
-      );
-      assert.equal(
-        within(breadcrumb).getByRole("link", { name: "Shopping Lists" }).getAttribute("aria-current"),
-        "page",
-      );
+    const mainNav = screen.getByRole("navigation", { name: "Main navigation" });
+    const breadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" });
+    assert.equal(
+      within(mainNav).getByRole("link", { name: "Shopping Lists" }).getAttribute("aria-current"),
+      "page",
+    );
+    assert.equal(
+      within(breadcrumb).getByRole("link", { name: "Shopping Lists" }).getAttribute("aria-current"),
+      "page",
+    );
 
-      fireEvent.click(screen.getByRole("link", { name: "Weekend groceries" }));
-      await screen.findByRole("checkbox", { name: "Purchased Milk" });
-      const detailBreadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" });
-      assert.equal(
-        within(detailBreadcrumb).getByText("List details").getAttribute("aria-current"),
-        "page",
-      );
-      fireEvent.click(within(detailBreadcrumb).getByRole("link", { name: "Shopping Lists" }));
-      await screen.findByRole("checkbox", { name: "Select Weekend groceries" });
-    } finally {
-      queryClient.clear();
-    }
+    fireEvent.click(screen.getByRole("link", { name: "Weekend groceries" }));
+    await screen.findByRole("checkbox", { name: "Purchased Milk" });
+    const detailBreadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" });
+    assert.equal(
+      within(detailBreadcrumb).getByText("List details").getAttribute("aria-current"),
+      "page",
+    );
+    fireEvent.click(within(detailBreadcrumb).getByRole("link", { name: "Shopping Lists" }));
+    await screen.findByRole("checkbox", { name: "Select Weekend groceries" });
   });
 
   it("shows progress and clearly labels the sample comparison while preserving detail links", async () => {
@@ -929,7 +937,6 @@ describe("shopping list selection and deletion", () => {
     assert.ok(await screen.findByRole("checkbox", { name: "Purchased Milk" }));
     assert.ok(screen.getByRole("button", { name: "Remove Milk from Weekend groceries" }));
     assert.ok(screen.getByRole("progressbar", { name: "Weekend groceries: 0% complete" }));
-    queryClient.clear();
   });
 
   it("keeps an individually failed deletion selected for bulk retry", async () => {
@@ -957,7 +964,6 @@ describe("shopping list selection and deletion", () => {
         .getAttribute("aria-checked"),
       "true",
     );
-    queryClient.clear();
   });
 
   it("does not restore deleted IDs when the later list refresh fails", async () => {
@@ -999,7 +1005,6 @@ describe("shopping list selection and deletion", () => {
       screen.getByRole("checkbox", { name: "Select Replacement list" }).getAttribute("aria-checked"),
       "false",
     );
-    queryClient.clear();
   });
 
   it("offers a retry when shopping lists fail to load", async () => {
@@ -1025,7 +1030,6 @@ describe("shopping list selection and deletion", () => {
     fail = false;
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     await screen.findByRole("checkbox", { name: "Select Weekend groceries" });
-    queryClient.clear();
   });
 
   it("selects lists without navigating, cancels, then deletes all while preserving inventory", async () => {
@@ -1066,7 +1070,6 @@ describe("shopping list selection and deletion", () => {
       screen.queryByRole("button", { name: /Delete selected/ }),
       null,
     );
-    queryClient.clear();
   });
 
   it("keeps failed lists selected and allows retry; individual deletion still works", async () => {
@@ -1110,7 +1113,6 @@ describe("shopping list selection and deletion", () => {
     );
     fireEvent.click(await screen.findByTestId("button-confirm-delete"));
     await screen.findByText("No shopping lists yet.");
-    queryClient.clear();
   });
 });
 
@@ -1244,7 +1246,6 @@ describe("dashboard inventory attention refresh", () => {
 
     assert.equal(screen.queryByTestId("category-attention-canned-goods"), null);
     assert.equal(screen.queryByText("Your pantry is in good shape."), null);
-    queryClient.clear();
   });
 
   it("shows the good-shape message and no cards for healthy-only categories", async () => {
@@ -1259,8 +1260,6 @@ describe("dashboard inventory attention refresh", () => {
     await screen.findByText("Your pantry is in good shape.");
     assert.equal(screen.queryByTestId("category-attention-pantry"), null);
     assert.equal(screen.queryByTestId("category-attention-breakfast"), null);
-
-    queryClient.clear();
   });
 
   it("generates a linked shopping list from low-stock suggestions and restocks it", async () => {
@@ -1298,8 +1297,6 @@ describe("dashboard inventory attention refresh", () => {
     fireEvent.click(screen.getByTestId("button-complete-purchase"));
     await waitFor(() => assert.equal(api.items[0]?.quantity, 2));
     assert.equal(api.items[1]?.quantity, 1);
-
-    queryClient.clear();
   });
 
   it("hides cached category cards while inventory is being refreshed", async () => {
@@ -1323,7 +1320,6 @@ describe("dashboard inventory attention refresh", () => {
       queryKey: getListInventoryItemsQueryKey(),
     });
     await refresh;
-    queryClient.clear();
   });
 
   it("hides cached category cards when inventory refresh fails", async () => {
@@ -1348,7 +1344,6 @@ describe("dashboard inventory attention refresh", () => {
       screen.getByText("Pantry attention could not be loaded.").textContent,
       "Pantry attention could not be loaded.",
     );
-    queryClient.clear();
   });
 
   it("refreshes category counts after create, edit, shopping-list restock, and delete flows", async () => {
@@ -1441,8 +1436,6 @@ describe("dashboard inventory attention refresh", () => {
       screen.getByTestId("stat-total-items").textContent?.includes("0"),
       true,
     );
-
-    queryClient.clear();
   });
 });
 
@@ -1451,44 +1444,40 @@ describe("stock count navigation", () => {
     const api = new MockPantryApi();
     globalThis.fetch = api.fetch;
     const { queryClient } = renderApp();
-    try {
-      await screen.findByTestId("stat-low-stock");
-      assert.equal(screen.getByRole("link", { name: "View Total Items in inventory" }).getAttribute("href"), "/inventory");
-      assert.equal(screen.getByRole("link", { name: "View Expiring Soon in inventory" }).getAttribute("href"), "/inventory?stock=expiring");
+    await screen.findByTestId("stat-low-stock");
+    assert.equal(screen.getByRole("link", { name: "View Total Items in inventory" }).getAttribute("href"), "/inventory");
+    assert.equal(screen.getByRole("link", { name: "View Expiring Soon in inventory" }).getAttribute("href"), "/inventory?stock=expiring");
 
-      fireEvent.click(screen.getByRole("link", { name: "View Low Stock in inventory" }));
-      await waitFor(() => assert.equal(screen.getByRole("button", { name: "Low Stock" }).getAttribute("aria-pressed"), "true"));
-      await screen.findByText("4 Items");
-      assert.equal(screen.queryByTestId("inventory-item-1"), null);
+    fireEvent.click(screen.getByRole("link", { name: "View Low Stock in inventory" }));
+    await waitFor(() => assert.equal(screen.getByRole("button", { name: "Low Stock" }).getAttribute("aria-pressed"), "true"));
+    await screen.findByText("4 Items");
+    assert.equal(screen.queryByTestId("inventory-item-1"), null);
 
-      await openDashboard();
-      fireEvent.click(screen.getByRole("link", { name: "View Out of Stock in inventory" }));
-      await waitFor(() => assert.equal(screen.getByRole("button", { name: "Out of Stock" }).getAttribute("aria-pressed"), "true"));
-      await screen.findByText("2 Items");
-      assert.ok(screen.getByTestId("inventory-item-1"));
-      assert.ok(screen.getByTestId("inventory-item-9"));
-    } finally { queryClient.clear(); }
+    await openDashboard();
+    fireEvent.click(screen.getByRole("link", { name: "View Out of Stock in inventory" }));
+    await waitFor(() => assert.equal(screen.getByRole("button", { name: "Out of Stock" }).getAttribute("aria-pressed"), "true"));
+    await screen.findByText("2 Items");
+    assert.ok(screen.getByTestId("inventory-item-1"));
+    assert.ok(screen.getByTestId("inventory-item-9"));
   });
   it("restores stock and category from a direct URL and preserves category when switching stock", async () => {
     const api = new MockPantryApi();
     globalThis.fetch = api.fetch;
     const { queryClient } = renderApp("/inventory?stock=out&category=Dairy");
-    try {
-      await screen.findByText("1 Items");
-      assert.equal(screen.getByRole("button", { name: "Out of Stock" }).getAttribute("aria-pressed"), "true");
-      assert.ok(screen.getByTestId("inventory-item-1"));
-      fireEvent.click(screen.getByRole("button", { name: "Low Stock" }));
-      await waitFor(() => assert.equal(screen.getByRole("button", { name: "Low Stock" }).getAttribute("aria-pressed"), "true"));
-      await screen.findByText("1 Items");
-      assert.ok(screen.getByTestId("inventory-item-2"));
-      assert.equal(screen.queryByTestId("inventory-item-1"), null);
-      fireEvent.click(screen.getByRole("button", { name: "Produce" }));
-      await waitFor(() => assert.ok(screen.getByTestId("inventory-item-5")));
-      fireEvent.click(screen.getByRole("button", { name: "Out of Stock" }));
-      await screen.findByText("0 Items");
-      fireEvent.click(screen.getByRole("button", { name: "Produce" }));
-      await screen.findByText("2 Items");
-    } finally { queryClient.clear(); }
+    await screen.findByText("1 Items");
+    assert.equal(screen.getByRole("button", { name: "Out of Stock" }).getAttribute("aria-pressed"), "true");
+    assert.ok(screen.getByTestId("inventory-item-1"));
+    fireEvent.click(screen.getByRole("button", { name: "Low Stock" }));
+    await waitFor(() => assert.equal(screen.getByRole("button", { name: "Low Stock" }).getAttribute("aria-pressed"), "true"));
+    await screen.findByText("1 Items");
+    assert.ok(screen.getByTestId("inventory-item-2"));
+    assert.equal(screen.queryByTestId("inventory-item-1"), null);
+    fireEvent.click(screen.getByRole("button", { name: "Produce" }));
+    await waitFor(() => assert.ok(screen.getByTestId("inventory-item-5")));
+    fireEvent.click(screen.getByRole("button", { name: "Out of Stock" }));
+    await screen.findByText("0 Items");
+    fireEvent.click(screen.getByRole("button", { name: "Produce" }));
+    await screen.findByText("2 Items");
   });
 });
 
@@ -1535,8 +1524,6 @@ describe("inventory quantity validation", () => {
     changeInput("input-item-quantity", "2.5");
     fireEvent.click(screen.getByTestId("button-save-item"));
     await waitFor(() => assert.equal(api.items[0]?.quantity, 2.5));
-
-    queryClient.clear();
   });
 });
 
@@ -1612,7 +1599,5 @@ describe("inventory optional field clearing", () => {
       (screen.getByTestId("input-item-notes") as HTMLTextAreaElement).value,
       "",
     );
-
-    queryClient.clear();
   });
 });
