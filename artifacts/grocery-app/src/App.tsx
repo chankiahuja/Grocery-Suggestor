@@ -1,33 +1,40 @@
+import { lazy } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import NotFound from "@/pages/not-found";
-import Dashboard from "@/pages/dashboard";
-import Inventory from "@/pages/inventory";
-import ShoppingLists from "@/pages/shopping-lists";
-import ShoppingListDetail from "@/pages/shopping-list-detail";
-import ComparePrices from "@/pages/compare-prices";
-import Auth from "@/pages/auth";
-import Landing from "@/pages/landing";
-import { Route, Switch, Redirect, Router as WouterRouter } from "wouter";
+import { Route, Switch, Router as WouterRouter } from "wouter";
 import { LoginGate } from "@/lib/preview-access";
 import { AdjustmentFeedbackProvider } from "@/components/adjustment-feedback";
+import { RouteLoadingBoundary } from "@/components/route-loading-boundary";
+
+const NotFound = lazy(() => import("@/pages/not-found"));
+const Dashboard = lazy(() => import("@/pages/dashboard"));
+const Inventory = lazy(() => import("@/pages/inventory"));
+const ShoppingLists = lazy(() => import("@/pages/shopping-lists"));
+const ShoppingListDetail = lazy(() => import("@/pages/shopping-list-detail"));
+const ComparePrices = lazy(() => import("@/pages/compare-prices"));
+const Auth = lazy(() => import("@/pages/auth"));
+const Landing = lazy(() => import("@/pages/landing"));
 
 const queryClient = new QueryClient();
 
 export function AppRoutes({ preview }: { preview?: boolean } = {}) {
   return (
-    <LoginGate preview={preview}><Switch>
-      <Route path="/login" component={Auth} />
-      <Route path="/signup" component={Auth} />
-      <Route path="/" component={Landing} />
-      <Route path="/dashboard" component={Dashboard} />
-      <Route path="/inventory" component={Inventory} />
-      <Route path="/shopping-lists" component={ShoppingLists} />
-      <Route path="/shopping-lists/:id" component={ShoppingListDetail} />
-      <Route path="/compare-prices" component={ComparePrices} />
-      <Route component={NotFound} />
-    </Switch></LoginGate>
+    <LoginGate preview={preview}>
+      <RouteLoadingBoundary>
+        <Switch>
+          <Route path="/login" component={Auth} />
+          <Route path="/signup" component={Auth} />
+          <Route path="/" component={Landing} />
+          <Route path="/dashboard" component={Dashboard} />
+          <Route path="/inventory" component={Inventory} />
+          <Route path="/shopping-lists" component={ShoppingLists} />
+          <Route path="/shopping-lists/:id" component={ShoppingListDetail} />
+          <Route path="/compare-prices" component={ComparePrices} />
+          <Route component={NotFound} />
+        </Switch>
+      </RouteLoadingBoundary>
+    </LoginGate>
   );
 }
 

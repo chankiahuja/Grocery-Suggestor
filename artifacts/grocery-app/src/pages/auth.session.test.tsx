@@ -18,6 +18,7 @@ const { memoryLocation } = await import("wouter/memory-location");
 const { setCsrfToken } = await import("@workspace/api-client-react");
 const { act, cleanup, fireEvent, render, screen, waitFor, within } = await import("@testing-library/react");
 const { AppRoutes } = await import("../App");
+const { RouteLoadingBoundary } = await import("../components/route-loading-boundary");
 const originalFetch = globalThis.fetch;
 const clients = new Set<InstanceType<typeof QueryClient>>();
 afterEach(() => {
@@ -84,6 +85,37 @@ async function mount(path: string, api: AuthApi) {
   });
   return { ...view, client, location };
 }
+
+describe("route loading", { concurrency: false }, () => {
+  it("shows a loading status until a deferred page is ready", async () => {
+    let complete!: (page: { default: () => React.JSX.Element }) => void;
+    const DeferredPage = React.lazy(() => new Promise<{ default: () => React.JSX.Element }>(resolve => { complete = resolve; }));
+    const location = memoryLocation({ path: "/inventory" });
+    render(<Router hook={location.hook}><RouteLoadingBoundary><DeferredPage /></RouteLoadingBoundary></Router>);
+    assert.equal(screen.getByRole("status").textContent, "Loading page…");
+    await act(async () => { complete({ default: () => <h1>Inventory ready</h1> }); });
+    await screen.findByRole("heading", { name: "Inventory ready" });
+    assert.equal(screen.queryByRole("status"), null);
+  });
+
+  it("offers reload after a failed page load and allows navigation to another page", async () => {
+    const originalError = console.error;
+    console.error = () => {}; // React reports the intentionally rejected import to the console.
+    try {
+      const FailedPage = React.lazy(() => Promise.reject(new Error("Chunk unavailable")));
+      const location = memoryLocation({ path: "/inventory" });
+      const view = render(<Router hook={location.hook}><RouteLoadingBoundary><FailedPage /></RouteLoadingBoundary></Router>);
+      await screen.findByRole("alert");
+      assert.ok(screen.getByRole("button", { name: "Reload page" }));
+      view.rerender(<Router hook={location.hook}><RouteLoadingBoundary><h1>Shopping lists ready</h1></RouteLoadingBoundary></Router>);
+      act(() => location.navigate("/shopping-lists"));
+      await screen.findByRole("heading", { name: "Shopping lists ready" });
+      assert.equal(screen.queryByRole("alert"), null);
+    } finally {
+      console.error = originalError;
+    }
+  });
+});
 
 describe("real email authentication", { concurrency: false }, () => {
   it("restores the account name, opens account details and supports keyboard dismissal", async () => {
