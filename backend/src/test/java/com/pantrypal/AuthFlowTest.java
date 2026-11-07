@@ -20,12 +20,11 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
-import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyEmitter.DataWithMediaType;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter.SseEventBuilder;
 import org.springframework.web.server.ResponseStatusException;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
+import static org.awaitility.Awaitility.await;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -170,9 +169,11 @@ class AuthFlowTest {
             assertThat(expired.payloads).contains(Map.of("status", "connected"));
             assertThat(expired.payloads).doesNotContain(
                 Map.of("type", "inventory_changed"), Map.of("type", "purchase_completed"));
-            assertThat(expired.completed).isTrue();
-            assertThat(active.payloads).contains(
-                Map.of("type", "inventory_changed"), Map.of("type", "purchase_completed"));
+            await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+                assertThat(expired.completed).isTrue();
+                assertThat(active.payloads).contains(
+                    Map.of("type", "inventory_changed"), Map.of("type", "purchase_completed"));
+            });
             assertThat(active.completed).isFalse();
             mvc.perform(get("/api/inventory").cookie(otherBrowser.cookie)).andExpect(status().isOk());
         } finally {
@@ -230,8 +231,8 @@ class AuthFlowTest {
     }
 
     private static class RecordingEmitter extends SseEmitter {
-        private final List<Object> payloads = new ArrayList<>();
-        private boolean completed;
+        private final List<Object> payloads = new CopyOnWriteArrayList<>();
+        private volatile boolean completed;
 
         @Override
         public void complete() {
