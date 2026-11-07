@@ -7,6 +7,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BooleanSupplier;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.dao.DataAccessException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.core.Authentication;
 import org.springframework.session.Session;
@@ -104,7 +105,7 @@ public class NotificationEvents {
         emitter.onTimeout(() -> removeClient(accountId, subscriber));
         emitter.onError(error -> removeClient(accountId, subscriber));
         try { send(accountId, subscriber, SseEmitter.event().name("ready").data(Map.of("status", "connected"))); }
-        catch (IOException e) { subscriber.close(); removeClient(accountId, subscriber); }
+        catch (IOException | DataAccessException e) { subscriber.close(); removeClient(accountId, subscriber); }
         return emitter;
     }
     public void disconnectSession(String sessionId) {
@@ -126,9 +127,13 @@ public class NotificationEvents {
     public synchronized void checkExpiry() {
         clients.forEach((accountId, accountClients) -> {
             for (var subscriber : accountClients) {
-                if (!sessionActive(subscriber.sessionId)) {
-                    subscriber.close();
-                    removeClient(accountId, subscriber);
+                try {
+                    if (!sessionActive(subscriber.sessionId)) {
+                        subscriber.close();
+                        removeClient(accountId, subscriber);
+                    }
+                } catch (DataAccessException e) {
+                    // A failed lookup does not establish expiry. Later sends must validate again.
                 }
             }
         });
@@ -150,6 +155,9 @@ public class NotificationEvents {
         if (accountClients == null) return;
         for (var subscriber : accountClients) {
             try { send(accountId, subscriber, SseEmitter.event().name("pantry-event").data(Map.of("type", type))); }
+            catch (DataAccessException e) {
+                // Send nothing for an unvalidated session; retain the stream for a later retry.
+            }
             catch (IOException | IllegalStateException e) {
                 subscriber.close();
                 removeClient(accountId, subscriber);
