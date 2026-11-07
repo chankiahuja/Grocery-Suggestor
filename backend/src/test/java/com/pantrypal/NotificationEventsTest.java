@@ -9,17 +9,129 @@ import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.security.core.Authentication;
 import org.springframework.session.MapSession;
 import org.springframework.session.SessionRepository;
+import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter.SseEventBuilder;
-import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyEmitter.DataWithMediaType;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
 class NotificationEventsTest {
+    private static Stream<RuntimeException> sessionLookupFailures() {
+        return Stream.of(
+            new DataAccessResourceFailureException("Session store unavailable"),
+            new CannotCreateTransactionException("Could not open session transaction"));
+    }
+
+    @ParameterizedTest
+    @MethodSource("sessionLookupFailures")
+    void initialSessionLookupFailureClosesAndRemovesSubscriberWithoutSendingReady(RuntimeException failure) {
+        var sessions = sessions();
+        when(sessions.findById("unavailable")).thenThrow(failure);
+        PantryService service = mock(PantryService.class);
+        when(service.accountIds()).thenReturn(List.of());
+        var notifications = new NotificationEvents(service, sessions);
+        var emitter = new RecordingEmitter();
+
+        assertThat(notifications.subscribe(authentication("1"), "unavailable", emitter)).isSameAs(emitter);
+        assertThat(emitter.completed).isTrue();
+        assertThat(emitter.payloads).isEmpty();
+
+        // A closed subscriber must also leave the registry, even before another broadcast.
+        doReturn(new MapSession()).when(sessions).findById("unavailable");
+        notifications.checkExpiry();
+        notifications.changed(new PantryService.PantryChanged("inventory_changed", 41L, 1L));
+        verify(sessions, times(1)).findById("unavailable");
+        assertThat(emitter.payloads).isEmpty();
+    }
+
+    @ParameterizedTest
+    @MethodSource("sessionLookupFailures")
+    void broadcastSkipsFailedSessionLookupContinuesOtherSubscribersAndRecovers(RuntimeException failure) {
+        var sessions = sessions();
+        var notifications = new NotificationEvents(mock(PantryService.class), sessions);
+        var unavailable = new RecordingEmitter();
+        var healthy = new RecordingEmitter();
+        var otherAccount = new RecordingEmitter();
+        notifications.subscribe(authentication("1"), "unavailable", unavailable);
+        notifications.subscribe(authentication("1"), "healthy", healthy);
+        notifications.subscribe(authentication("2"), "other-account", otherAccount);
+        var readyPayloads = List.copyOf(unavailable.payloads);
+        when(sessions.findById("unavailable")).thenThrow(failure);
+
+        notifications.changed(new PantryService.PantryChanged("inventory_changed", 41L, 1L));
+        assertThat(unavailable.payloads).containsExactlyElementsOf(readyPayloads);
+        assertThat(unavailable.completed).isFalse();
+        assertThat(healthy.payloads).contains(Map.of("type", "inventory_changed"));
+        assertThat(otherAccount.payloads).doesNotContain(Map.of("type", "inventory_changed"));
+
+        notifications.changed(new PantryService.PantryChanged("purchase_completed", null, 2L));
+        assertThat(otherAccount.payloads).contains(Map.of("type", "purchase_completed"));
+        doReturn(new MapSession()).when(sessions).findById("unavailable");
+        notifications.changed(new PantryService.PantryChanged("purchase_completed", null, 1L));
+        assertThat(unavailable.payloads).contains(Map.of("type", "purchase_completed"));
+        assertThat(unavailable.payloads).doesNotContain(Map.of("type", "inventory_changed"));
+    }
+
+    @ParameterizedTest
+    @MethodSource("sessionLookupFailures")
+    void expiryCheckContinuesCleanupAndBroadcastsAfterSessionLookupFailure(RuntimeException failure) {
+        var sessions = sessions();
+        PantryService service = mock(PantryService.class);
+        when(service.accountIds()).thenReturn(List.of(1L, 2L));
+        when(service.suggestions(anyLong())).thenReturn(List.of());
+        var notifications = new NotificationEvents(service, sessions);
+        var unavailable = new RecordingEmitter();
+        var deleted = new RecordingEmitter();
+        var healthy = new RecordingEmitter();
+        var otherAccount = new RecordingEmitter();
+        notifications.subscribe(authentication("1"), "unavailable", unavailable);
+        notifications.subscribe(authentication("1"), "deleted", deleted);
+        notifications.subscribe(authentication("1"), "healthy", healthy);
+        notifications.subscribe(authentication("2"), "other-account", otherAccount);
+        when(sessions.findById("unavailable")).thenThrow(failure);
+        when(sessions.findById("deleted")).thenReturn(null);
+
+        notifications.checkExpiry();
+        assertThat(unavailable.completed).isFalse();
+        assertThat(unavailable.payloads).doesNotContain(Map.of("type", "heartbeat"));
+        assertThat(deleted.completed).isTrue();
+        assertThat(deleted.payloads).doesNotContain(Map.of("type", "heartbeat"));
+        assertThat(healthy.payloads).contains(Map.of("type", "heartbeat"));
+        assertThat(otherAccount.payloads).contains(Map.of("type", "heartbeat"));
+
+        doReturn(new MapSession()).when(sessions).findById("unavailable");
+        notifications.checkExpiry();
+        assertThat(unavailable.payloads).contains(Map.of("type", "heartbeat"));
+    }
+
+    @ParameterizedTest
+    @MethodSource("sessionLookupFailures")
+    void scheduledBroadcastRevalidatesSessionsAndIsolatesALookupFailureAfterTheExpirySweep(RuntimeException failure) {
+        var sessions = sessions();
+        PantryService service = mock(PantryService.class);
+        when(service.accountIds()).thenReturn(List.of(1L));
+        when(service.suggestions(1L)).thenReturn(List.of(Map.of("name", "Milk", "urgency", "critical")));
+        var notifications = new NotificationEvents(service, sessions);
+        var unavailable = new RecordingEmitter();
+        var healthy = new RecordingEmitter();
+        notifications.subscribe(authentication("1"), "unavailable", unavailable);
+        notifications.subscribe(authentication("1"), "healthy", healthy);
+        when(sessions.findById("unavailable")).thenReturn(new MapSession())
+            .thenThrow(failure);
+
+        notifications.checkExpiry();
+        assertThat(unavailable.payloads).doesNotContain(Map.of("type", "alerts_changed"));
+        assertThat(healthy.payloads).contains(Map.of("type", "alerts_changed"));
+        assertThat(unavailable.completed).isFalse();
+    }
+
     @Test
     void inventoryAndPurchaseEventsOnlyReachTheirAccount() throws IOException {
         PantryService service = mock(PantryService.class);
