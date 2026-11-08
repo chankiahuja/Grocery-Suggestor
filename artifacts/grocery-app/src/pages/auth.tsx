@@ -11,6 +11,7 @@ import {
   emailError,
   otpError,
 } from "@/lib/demo-auth";
+import { PHONE_COUNTRIES } from "@/lib/phone-countries";
 
 export default function Auth() { return <AuthScreen />; }
 export function PreviewAuth() { return <AuthScreen demo />; }
@@ -25,6 +26,10 @@ function AuthScreen({ demo }: { demo?: boolean }) {
   const [method, setMethod] = useState<"mobile" | "email">(preview ? "mobile" : "email");
   const isEmail = method === "email";
   const [identifier, setIdentifier] = useState("");
+  const [countryRegion, setCountryRegion] = useState("IN");
+  const country = PHONE_COUNTRIES.find((entry) => entry.region === countryRegion)
+    ?? { region: "IN", name: "India", dialCode: "+91" };
+  const countryCode = country.dialCode;
   const [fullName, setFullName] = useState("");
   const [nameError, setNameError] = useState("");
   const [otp, setOtp] = useState("");
@@ -56,7 +61,7 @@ function AuthScreen({ demo }: { demo?: boolean }) {
     setResendAt(0);
   }
   function identifierError(value: string) {
-    const message = isEmail ? emailError(value) : mobileError(value);
+    const message = isEmail ? emailError(value) : mobileError(value, countryCode);
     if (!message && isEmail && identifierInput.current?.validity.typeMismatch) {
       return "Enter a valid email address, such as you@example.com.";
     }
@@ -336,9 +341,28 @@ function AuthScreen({ demo }: { demo?: boolean }) {
                     {isEmail ? "Email address" : "Mobile number"}
                   </label>
                   <div
-                    className={`auth-input-wrap${isEmail ? "" : " auth-has-prefix"}`}
+                    className={`auth-input-wrap${isEmail ? "" : " auth-phone-field"}`}
                   >
-                    {!isEmail && <span className="auth-prefix">+91</span>}
+                    {!isEmail && (
+                      <select
+                        id="auth-country-code"
+                        className="auth-country-code"
+                        aria-label="Country code"
+                        aria-describedby="auth-mobile-hint"
+                        disabled={pending}
+                        value={countryRegion}
+                        onChange={(event) => {
+                          setCountryRegion(event.target.value);
+                          setError("");
+                        }}
+                      >
+                        {PHONE_COUNTRIES.map((country) => (
+                          <option key={country.region} value={country.region}>
+                            {country.name} ({country.dialCode})
+                          </option>
+                        ))}
+                      </select>
+                    )}
                     <input
                       ref={identifierInput}
                       id="auth-mobile"
@@ -362,7 +386,9 @@ function AuthScreen({ demo }: { demo?: boolean }) {
                   <p className="auth-hint" id="auth-mobile-hint">
                     {isEmail
                       ? "We'll use a one-time code to confirm your email."
-                      : "India · Enter your 10-digit mobile number."}
+                      : countryCode === "+91"
+                        ? "India (+91) · Enter your 10-digit mobile number."
+                        : `${country.name} (${countryCode}) · Enter the number without its country code or spaces.`}
                   </p>
                   <p className="auth-error" id="auth-error" aria-live="polite">
                     {error}
@@ -391,7 +417,7 @@ function AuthScreen({ demo }: { demo?: boolean }) {
                 <span>
                   {isEmail
                     ? identifier
-                    : `+91 ${identifier.slice(0, 5)} ${identifier.slice(5)}`}
+                    : `${countryCode} ${identifier}`}
                 </span>
                 <button
                   className="auth-text-button"
