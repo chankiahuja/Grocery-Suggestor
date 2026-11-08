@@ -13,7 +13,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mail.MailException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
@@ -24,16 +25,18 @@ public class AuthService {
     private final AuthRateLimiter limits;
     private final OtpMailSender mail;
     private final Clock clock;
+    private final TransactionTemplate tx;
     private final SecureRandom random = new SecureRandom();
     private final byte[] secret;
     private final long lifetimeSeconds, cooldownSeconds;
     private final int maxAttempts;
-    public AuthService(JdbcTemplate jdbc, AuthRateLimiter limits, OtpMailSender mail, Clock clock,
+    public AuthService(JdbcTemplate jdbc, AuthRateLimiter limits, OtpMailSender mail, Clock clock, PlatformTransactionManager manager,
         @Value("${pantrypal.auth.otp-secret:}") String secret,
         @Value("${pantrypal.auth.otp-lifetime-seconds:300}") long lifetimeSeconds,
         @Value("${pantrypal.auth.resend-cooldown-seconds:30}") long cooldownSeconds,
         @Value("${pantrypal.auth.max-attempts:5}") int maxAttempts) {
         this.jdbc = jdbc; this.limits = limits; this.mail = mail; this.clock = clock;
+        this.tx = new TransactionTemplate(manager);
         this.secret = secret.isBlank() ? random.generateSeed(32) : secret.getBytes(StandardCharsets.UTF_8);
         if (this.secret.length < 32 || lifetimeSeconds <= 0 || cooldownSeconds <= 0 || maxAttempts <= 0) {
             throw new IllegalArgumentException("Auth secret must have at least 32 bytes and limits must be positive");
@@ -54,7 +57,6 @@ public class AuthService {
         } catch (Exception error) { throw new IllegalStateException(error); }
     }
 
-    @Transactional(noRollbackFor=ResponseStatusException.class)
     public Challenge requestCode(String rawEmail, String intent, String name, String ip) {
         String email = email(rawEmail);
         if (!List.of("login", "signup").contains(intent == null ? "" : intent)) {
@@ -67,21 +69,28 @@ public class AuthService {
         limits.claim("request-ip", ip, 20, 0);
         limits.claim("request-email", email, 5, cooldownSeconds * 1000);
         limits.ensureChallenge(email);
-        jdbc.queryForMap("SELECT email FROM email_challenges WHERE email=? FOR UPDATE", email);
         String id = UUID.randomUUID().toString(), code;
         do { code = String.format(Locale.ROOT, "%06d", random.nextInt(1_000_000)); } while (code.equals("123456"));
         long now = clock.millis(), expires = now + lifetimeSeconds * 1000;
-        jdbc.update("UPDATE email_challenges SET challenge_id=?,code_hash=?,intent=?,display_name=?,expires_at=?,attempts=0,used=FALSE WHERE email=?",
-            id, hash(id, code), intent, "signup".equals(intent) ? displayName : null, expires, email);
+        String codeHash = hash(id, code);
+        // Reserve an unusable challenge, then release the connection before SMTP.
+        tx.executeWithoutResult(status -> {
+            jdbc.queryForMap("SELECT email FROM email_challenges WHERE email=? FOR UPDATE", email);
+            jdbc.update("UPDATE email_challenges SET challenge_id=?,code_hash=?,intent=?,display_name=?,expires_at=?,attempts=0,used=TRUE WHERE email=?",
+                id, codeHash, intent, "signup".equals(intent) ? displayName : null, expires, email);
+        });
         try { mail.send(email, code, lifetimeSeconds); }
         catch (MailException error) {
-            jdbc.update("UPDATE email_challenges SET code_hash=NULL,used=TRUE WHERE email=?", email);
+            // A delayed failure must not invalidate a newer resend.
+            tx.executeWithoutResult(status -> jdbc.update(
+                "UPDATE email_challenges SET code_hash=NULL,used=TRUE WHERE email=? AND challenge_id=?", email, id));
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Email could not be sent. Please try again shortly.");
         }
+        tx.executeWithoutResult(status -> jdbc.update(
+            "UPDATE email_challenges SET used=FALSE WHERE email=? AND challenge_id=? AND code_hash=?", email, id, codeHash));
         return new Challenge(id, Instant.ofEpochMilli(expires).toString(), Instant.ofEpochMilli(now + cooldownSeconds * 1000).toString());
     }
 
-    @Transactional(noRollbackFor=ResponseStatusException.class)
     public Account verify(String rawEmail, String challengeId, String code, String ip) {
         String email = email(rawEmail);
         limits.claim("verify-ip", ip, 60, 0);
@@ -89,6 +98,17 @@ public class AuthService {
         if (challengeId == null || challengeId.length() != 36 || code == null || !code.matches("[0-9]{6}")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Enter a valid six-digit verification code");
         }
+        // Expected rejections must commit attempt counts and consumed challenges.
+        // Throw them after commit; unexpected database failures still roll back.
+        var result = tx.execute(status -> {
+            try { return new VerificationResult(verifyChallenge(email, challengeId, code), null); }
+            catch (ResponseStatusException rejection) { return new VerificationResult(null, rejection); }
+        });
+        if (result.rejection() != null) throw result.rejection();
+        return result.account();
+    }
+    private record VerificationResult(Account account, ResponseStatusException rejection) {}
+    private Account verifyChallenge(String email, String challengeId, String code) {
         var rows = jdbc.queryForList("SELECT * FROM email_challenges WHERE email=? FOR UPDATE", email);
         if (rows.isEmpty()) throw invalid();
         var row = rows.get(0);
