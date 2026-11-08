@@ -3,6 +3,7 @@ import type {
   ShoppingListWithItems,
   GrocerySuggestion,
 } from "@workspace/api-client-react";
+import { isExpired, isExpiringSoon } from "../lib/category-attention";
 
 export const MOCK_STORAGE_KEY = "pantrypal-demo-v1";
 type State = {
@@ -107,13 +108,7 @@ export class MockPantryApi {
     });
   }
   private expiring(item: InventoryItem) {
-    const today = new Date().toISOString().slice(0, 10);
-    const last = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
-    return (
-      item.expiresAt != null &&
-      item.expiresAt >= today &&
-      item.expiresAt <= last
-    );
+    return isExpiringSoon(item.expiresAt);
   }
   private suggestions(): GrocerySuggestion[] {
     return this.state.inventory
@@ -126,9 +121,10 @@ export class MockPantryApi {
               : this.expiring(item)
                 ? "expiring_soon"
                 : null;
-        return urgency
-          ? [
-              {
+        const urgencies: GrocerySuggestion["urgency"][] = [];
+        if (item.quantity > 0 && isExpired(item.expiresAt)) urgencies.push("expired");
+        if (urgency) urgencies.push(urgency);
+        return urgencies.map((urgency) => ({
                 inventoryItemId: item.id,
                 name: item.name,
                 category: item.category,
@@ -141,15 +137,13 @@ export class MockPantryApi {
                     ? "Out of stock"
                     : urgency === "low"
                       ? `${item.quantity} ${item.unit} left (minimum is ${item.minThreshold} ${item.unit})`
-                      : `Expires on ${item.expiresAt}`,
-              },
-            ]
-          : [];
+                      : `${urgency === "expired" ? "Expired" : "Expires"} on ${item.expiresAt}`,
+              }));
       })
       .sort(
         (a, b) =>
-          ["critical", "low", "expiring_soon"].indexOf(a.urgency) -
-          ["critical", "low", "expiring_soon"].indexOf(b.urgency),
+          ["expired", "critical", "low", "expiring_soon"].indexOf(a.urgency) -
+          ["expired", "critical", "low", "expiring_soon"].indexOf(b.urgency),
       );
   }
   readonly fetch = async (
@@ -183,7 +177,7 @@ export class MockPantryApi {
       const suggestions = this.suggestions();
       if (method === "GET" && parts.length === 1) return this.json(suggestions);
       if (method === "POST" && parts[1] === "generate-list") {
-        const stock = suggestions.filter((s) => s.urgency !== "expiring_soon");
+        const stock = suggestions.filter((s) => s.urgency === "critical" || s.urgency === "low");
         if (!stock.length)
           return this.json(
             { error: "No low-stock suggestions are available." },
@@ -253,6 +247,7 @@ export class MockPantryApi {
           ).length,
           outOfStockCount: items.filter((i) => i.quantity === 0).length,
           expiringCount: items.filter((i) => this.expiring(i)).length,
+          expiredCount: items.filter((i) => i.quantity > 0 && isExpired(i.expiresAt)).length,
           categoryBreakdown: [...new Set(items.map((i) => i.category))].map(
             (category) => ({
               category,

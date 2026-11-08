@@ -70,7 +70,7 @@ flowchart TD
     Eligible -->|Yes| Restore["Restore prior quantity once, transactionally"]
     Eligible -->|No| Rejected["Explain expiry or conflict; keep newer stock"]
 
-    Dashboard --> Suggestions["Suggestions: out of stock, low stock or expiring soon"]
+    Dashboard --> Suggestions["Attention: expired, out of stock, low stock or expiring soon"]
     Suggestions --> Review["Review shopping quantities; exclude expiry-only reminders"]
     Review --> Confirm{"Confirm selected items?"}
     Confirm -->|No| Dashboard
@@ -145,7 +145,11 @@ Inventory changes and completed purchases publish Spring application events tagg
 
 The SSE payload contains only the existing event type. A scheduled check compares current stock/expiry suggestions independently per account and routes alert changes and heartbeats to that account's streams. Alert contents remain available through the authenticated suggestions API. Browser EventSource reconnects automatically. The notification bell retains its 30-second snapshot polling as fallback.
 
-Rules use UTC dates: zero quantity is critical; positive quantity at/below threshold is low; expiry today through seven days ahead is expiring soon. Suggestions choose one reason per item, in that priority order. Category attention can count both stock and freshness problems for an item. Expiry-only reminders do not generate purchases.
+Rules use UTC dates: zero quantity is critical; positive quantity at/below threshold is low; expiry today through seven days ahead is expiring soon. Positive-quantity items dated before today also receive a distinct `expired` alert, including items that already have a low-stock alert. The existing stock-before-upcoming-expiry priority remains unchanged. Expired alerts sort first. Category attention counts stock and freshness conditions independently while counting each affected inventory item once in its total. Shopping generation explicitly accepts only `critical` and `low`, so expiry-only alerts never create purchases.
+
+Dashboard stats include `expiredCount`; Inventory supports `stock=expired` and links using `item=<inventory ID>` to review the exact account-scoped item. Expired cards show the expiry date and an Expired badge even when also low on stock. Correcting/removing the expiry date, deleting the item, or reducing its quantity to zero clears expired attention. Reading an alert marks it read but does not dismiss the underlying condition; there is no persistent handled state. Notification read markers use account-scoped storage and inventory IDs rather than item names.
+
+The scheduler detects date-based changes in the account's suggestion snapshot and publishes the existing `alerts_changed` signal. Open frontend pages also check the UTC date every 30 seconds and when visibility changes, refreshing stats/suggestions after rollover and recomputing Inventory/category attention. Expired and upcoming-expiry labels use the same UTC date convention throughout the UI and demo mode. The OpenAPI client is regenerated for the additional urgency and count; no database migration is needed.
 
 Purchases lock the list, atomically increase linked inventory, and mark rows as restocked in one transaction. Repeating completion skips already applied rows. Unlinked manual shopping items do not create pantry records automatically. Item changes are scoped to the supplied shopping-list ID.
 

@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { getCategoryAttention } from "@/lib/category-attention";
 import { useToast } from "@/hooks/use-toast";
+import { useUtcDate } from "@/hooks/use-utc-date";
 
 type ReviewItem = {
   inventoryItemId: number;
@@ -41,6 +42,7 @@ type ReviewItem = {
 };
 
 export default function Dashboard() {
+  const utcDay = useUtcDate();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -59,8 +61,8 @@ export default function Dashboard() {
   } = useListInventoryItems();
 
   const categoryAttention = useMemo(
-    () => getCategoryAttention(inventoryItems ?? []),
-    [inventoryItems],
+    () => getCategoryAttention(inventoryItems ?? [], new Date(`${utcDay}T00:00:00Z`)),
+    [inventoryItems, utcDay],
   );
   const hasStockSuggestions =
     suggestions?.some(
@@ -161,10 +163,10 @@ export default function Dashboard() {
         </section>
 
         {/* Stats Grid */}
-        <div className="dashboard-stats pantry-stats grid grid-cols-2 lg:grid-cols-4">
+        <div className="dashboard-stats pantry-stats grid grid-cols-2 lg:grid-cols-5" aria-label="Inventory and attention counts">
           {statsLoading ? (
             <>
-              {Array.from({ length: 4 }).map((_, i) => (
+              {Array.from({ length: 5 }).map((_, i) => (
                 <Card key={i}>
                   <CardContent className="p-6">
                     <Skeleton className="h-20 w-full" />
@@ -201,6 +203,13 @@ export default function Dashboard() {
                 icon={Clock}
                 testId="stat-expiring"
                 href="/inventory?stock=expiring"
+              />
+              <StatCard
+                label="Expired"
+                value={stats?.expiredCount || 0}
+                icon={AlertCircle}
+                testId="stat-expired"
+                href="/inventory?stock=expired"
               />
             </>
           )}
@@ -263,6 +272,7 @@ export default function Dashboard() {
                     .toLowerCase()
                     .replace(/[^a-z0-9]+/g, "-")}`;
                   const metrics = [
+                    { label: "Expired", count: category.expired, tone: "urgency-expired" },
                     {
                       label: "Out",
                       count: category.outOfStock,
@@ -339,7 +349,7 @@ export default function Dashboard() {
                   Your pantry is in good shape.
                 </p>
                 <p className="text-sm">
-                  No low-stock, out-of-stock, or soon-to-expire items.
+                  No stock or expiry issues need attention.
                 </p>
               </div>
             )}
@@ -349,7 +359,7 @@ export default function Dashboard() {
         {/* Grocery Suggestions */}
         <Card className="dashboard-panel dashboard-suggestions">
           <CardHeader className="dashboard-suggestions-header flex flex-row flex-wrap items-center justify-between gap-4">
-            <CardTitle className="dashboard-panel-title">Grocery Suggestions</CardTitle>
+            <CardTitle className="dashboard-panel-title">Grocery Suggestions &amp; Alerts</CardTitle>
             <Button
               className="dashboard-generate-button"
               onClick={handleGenerateShoppingList}
@@ -477,7 +487,7 @@ export default function Dashboard() {
               <div className="space-y-3">
                 {suggestions.map((suggestion, idx) => (
                   <div
-                    key={`${suggestion.name}-${idx}`}
+                    key={`${suggestion.inventoryItemId}-${suggestion.urgency}`}
                     className="dashboard-suggestion p-4 rounded-lg border border-border bg-card hover:bg-accent/5 transition-colors animate-slide-up"
                     style={{ animationDelay: `${idx * 50}ms` }}
                     data-testid={`suggestion-${idx}`}
@@ -486,7 +496,9 @@ export default function Dashboard() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-3 mb-2">
                           <h4 className="font-semibold text-lg">
+                            <Link href={`/inventory?item=${suggestion.inventoryItemId}`} className="hover:underline focus-visible:underline">
                             {suggestion.name}
+                            </Link>
                           </h4>
                           <UrgencyBadge urgency={suggestion.urgency} />
                         </div>

@@ -453,6 +453,83 @@ function renderApp(path = "/dashboard") {
   };
 }
 
+describe("expired inventory attention", () => {
+  it("refreshes dashboard attention at UTC midnight without editing inventory", async (context) => {
+    context.mock.timers.enable({ apis: ["Date", "setInterval"], now: new Date("2026-11-08T23:59:50Z") });
+    const api = new MockPantryApi();
+    api.state.inventory = [dashboardItem(101, "Midnight milk", "Dairy", 5, 2, 0)];
+    globalThis.fetch = api.fetch;
+    renderApp();
+    await waitFor(() => assert.equal(screen.getByTestId("stat-expiring").textContent, "1"));
+    assert.equal(screen.getByTestId("stat-expired").textContent, "0");
+    await act(async () => { context.mock.timers.tick(30_000); });
+    await waitFor(() => assert.equal(screen.getByTestId("stat-expired").textContent, "1"));
+    assert.equal(screen.getByTestId("stat-expiring").textContent, "0");
+    assert.equal(screen.getByTestId("category-attention-dairy-expired-count").textContent, "1");
+  });
+
+  it("shows expired and low alerts, links to the exact item, and clears after correcting its date", async () => {
+    const api = new MockPantryApi();
+    api.state.inventory = [
+      dashboardItem(101, "Expired milk", "Dairy", 1, 2, -1),
+      dashboardItem(102, "Future milk", "Dairy", 5, 2, 3),
+    ];
+    globalThis.fetch = api.fetch;
+    renderApp();
+    await waitFor(() => assert.equal(screen.getByTestId("stat-expired").textContent, "1"));
+    assert.equal(screen.getByTestId("category-attention-dairy-total").textContent, "2");
+    assert.equal(screen.getByTestId("category-attention-dairy-expired-count").textContent, "1");
+    assert.equal(screen.queryByText("No grocery suggestions right now."), null);
+    fireEvent.click(screen.getByTestId("notification-bell"));
+    const panel = screen.getByRole("button", { name: "Close notifications" }).parentElement!.parentElement!;
+    assert.equal(within(panel).queryByText("All caught up!"), null);
+    const alerts = await within(panel).findAllByRole("link", { name: "Expired milk" });
+    assert.equal(alerts.length, 2);
+    assert.equal(alerts[0].getAttribute("href"), "/inventory?item=101");
+    fireEvent.click(alerts[0]);
+    await screen.findByRole("heading", { name: "Inventory" });
+    await screen.findByTestId("inventory-item-101");
+    assert.equal(screen.queryByTestId("inventory-item-102"), null);
+    const card = screen.getByTestId("inventory-item-101");
+    assert.ok(within(card).getByText("Expired"));
+    assert.ok(within(card).getByText("Low Stock"));
+    assert.ok(card.textContent?.includes("Expired on:"));
+    fireEvent.click(screen.getByTestId("button-edit-101"));
+    await screen.findByTestId("dialog-inventory-item");
+    changeInput("input-item-expires", "");
+    fireEvent.click(screen.getByTestId("button-save-item"));
+    await waitFor(() => assert.equal(api.state.inventory[0].expiresAt, null));
+    await waitFor(() => assert.equal(within(card).queryByText("Expired"), null));
+    fireEvent.click(screen.getByRole("link", { name: "Dashboard" }));
+    await waitFor(() => assert.equal(screen.getByTestId("stat-expired").textContent, "0"));
+    // Replenishment remains available after freshness attention clears.
+    assert.equal((screen.getByTestId("button-generate-shopping-list") as HTMLButtonElement).disabled, false);
+  });
+
+  it("filters expired inventory while leaving empty past-dated items as out of stock", async () => {
+    const api = new MockPantryApi();
+    api.state.inventory = [
+      dashboardItem(101, "Expired milk", "Dairy", 5, 2, -1),
+      dashboardItem(102, "Empty milk", "Dairy", 0, 2, -1),
+      dashboardItem(103, "Today milk", "Dairy", 5, 2, 0),
+    ];
+    globalThis.fetch = api.fetch;
+    renderApp();
+    await waitFor(() => assert.equal(screen.getByTestId("stat-expired").textContent, "1"));
+    fireEvent.click(screen.getByRole("link", { name: "View Expired in inventory" }));
+    await screen.findByTestId("inventory-item-101");
+    assert.equal(screen.queryByTestId("inventory-item-102"), null);
+    assert.equal(screen.queryByTestId("inventory-item-103"), null);
+    assert.equal(screen.getByTestId("filter-expired").getAttribute("aria-pressed"), "true");
+    fireEvent.click(screen.getByTestId("button-delete-101"));
+    await screen.findByTestId("dialog-delete-confirm");
+    fireEvent.click(screen.getByTestId("button-confirm-delete"));
+    await screen.findByText("No items match these filters.");
+    fireEvent.click(screen.getByRole("link", { name: "Dashboard" }));
+    await waitFor(() => assert.equal(screen.getByTestId("stat-expired").textContent, "0"));
+  });
+});
+
 function changeInput(testId: string, value: string) {
   fireEvent.change(screen.getByTestId(testId), { target: { value } });
 }

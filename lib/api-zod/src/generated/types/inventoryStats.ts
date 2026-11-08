@@ -12,5 +12,7 @@ export interface InventoryStats {
   lowStockCount: number;
   outOfStockCount: number;
   expiringCount: number;
+  /** Items with positive quantity and an expiry date before today in UTC. */
+  expiredCount: number;
   categoryBreakdown: CategoryCount[];
 }

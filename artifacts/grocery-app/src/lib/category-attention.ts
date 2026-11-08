@@ -6,7 +6,12 @@ export type CategoryAttention = {
   outOfStock: number;
   lowStock: number;
   expiringSoon: number;
+  expired: number;
 };
+
+export function isExpired(expiresAt: string | null | undefined, now = new Date()): boolean {
+  return !!expiresAt && expiresAt.slice(0, 10) < now.toISOString().slice(0, 10);
+}
 
 export function isExpiringSoon(
   expiresAt: string | null | undefined,
@@ -38,6 +43,7 @@ export function getCategoryAttention(
         outOfStock: 0,
         lowStock: 0,
         expiringSoon: 0,
+        expired: 0,
       };
       grouped.set(item.category, category);
     }
@@ -45,6 +51,7 @@ export function getCategoryAttention(
     const isOutOfStock = item.quantity === 0;
     const isLowStock = !isOutOfStock && item.quantity <= item.minThreshold;
     const expiringSoon = isExpiringSoon(item.expiresAt, now);
+    const expired = item.quantity > 0 && isExpired(item.expiresAt, now);
 
     if (isOutOfStock) {
       category.outOfStock += 1;
@@ -53,7 +60,8 @@ export function getCategoryAttention(
     }
 
     if (expiringSoon) category.expiringSoon += 1;
-    if (isOutOfStock || isLowStock || expiringSoon) {
+    if (expired) category.expired += 1;
+    if (isOutOfStock || isLowStock || expiringSoon || expired) {
       category.attentionItems += 1;
     }
   }
@@ -62,6 +70,7 @@ export function getCategoryAttention(
     .filter((category) => category.attentionItems > 0)
     .sort(
       (a, b) =>
+        b.expired - a.expired ||
         b.outOfStock - a.outOfStock ||
         b.lowStock - a.lowStock ||
         b.expiringSoon - a.expiringSoon ||

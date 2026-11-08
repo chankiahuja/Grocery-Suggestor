@@ -16,5 +16,6 @@ export interface GrocerySuggestion {
   minThreshold: number;
   unit: string;
   reason: string;
+  /** Expired alerts are independent of stock alerts; one item may have both expired and low entries. Zero-quantity items do not receive expired alerts. Expiry-only entries do not generate shopping purchases. */
   urgency: GrocerySuggestionUrgency;
 }

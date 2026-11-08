@@ -1029,6 +1029,18 @@ body {
   border-left-color: #ad7955;
   background: linear-gradient(110deg, #faf4ee, #fffefa 42%);
 }
+.inventory-item-expired {
+  border-left-color: #a24436;
+  background: linear-gradient(110deg, #faece8, #fffefa 55%);
+}
+.inventory-status-expired,
+.urgency-expired,
+.dashboard-attention-metric.urgency-expired,
+.inventory-filter-chip-expired.is-selected {
+  border-color: #dfb4a9;
+  background: #faece8;
+  color: #8c3529;
+}
 .inventory-item-healthy {
   border-left-color: #81946f;
 }
@@ -1396,7 +1408,7 @@ body {
   border-color: #aab69d;
 }
 .dashboard-stats {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 0;
   margin: 0;
   padding: 8px 0 22px;
@@ -1723,4 +1735,22 @@ body:has(.pantry-adjustment-feedback) .pantry-main {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+@media (max-width: 900px) {
+  .dashboard-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dashboard-stats > a:nth-child(odd) { border-left: 0; }
+  .dashboard-stats > a:nth-child(n + 3) { border-top: 1px solid #dfe6dc; }
+}
+@media (max-width: 640px) {
+  .pantry-notification-panel {
+    position: fixed;
+    inset: 72px 16px auto;
+    width: auto;
+    max-width: none;
+    margin-top: 0;
+  }
+}
+@media (max-width: 480px) {
+  .dashboard-page .pantry-stat > div > div > div:last-child { display: none; }
 }

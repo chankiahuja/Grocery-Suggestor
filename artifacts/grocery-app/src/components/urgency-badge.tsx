@@ -2,12 +2,17 @@ import { cn } from '@/lib/utils';
 import { AlertCircle, AlertTriangle, Clock } from 'lucide-react';
 
 interface UrgencyBadgeProps {
-  urgency: 'critical' | 'low' | 'expiring_soon';
+  urgency: 'critical' | 'low' | 'expiring_soon' | 'expired';
   className?: string;
 }
 
 export function UrgencyBadge({ urgency, className }: UrgencyBadgeProps) {
   const config = {
+    expired: {
+      label: 'Expired',
+      icon: AlertCircle,
+      className: 'urgency-expired',
+    },
     critical: {
       label: 'Out of Stock',
       icon: AlertCircle,

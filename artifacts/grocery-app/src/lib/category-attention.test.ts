@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { InventoryItem } from '@workspace/api-client-react';
-import { getCategoryAttention, isExpiringSoon } from './category-attention';
+import { getCategoryAttention, isExpiringSoon, isExpired } from './category-attention';
 
 const today = '2026-01-01';
 const now = new Date(`${today}T12:00:00.000Z`);
@@ -58,12 +58,14 @@ describe('getCategoryAttention', () => {
     );
 
     assert.deepEqual(result, [
+      { category: 'Past Expiry', attentionItems: 1, outOfStock: 0, lowStock: 0, expiringSoon: 0, expired: 1 },
       {
         category: 'Out',
         attentionItems: 1,
         outOfStock: 1,
         lowStock: 0,
         expiringSoon: 1,
+        expired: 0,
       },
       {
         category: 'Mixed',
@@ -71,6 +73,7 @@ describe('getCategoryAttention', () => {
         outOfStock: 0,
         lowStock: 1,
         expiringSoon: 1,
+        expired: 0,
       },
       {
         category: 'Low Alpha',
@@ -78,6 +81,7 @@ describe('getCategoryAttention', () => {
         outOfStock: 0,
         lowStock: 1,
         expiringSoon: 0,
+        expired: 0,
       },
       {
         category: 'Low Beta',
@@ -85,6 +89,7 @@ describe('getCategoryAttention', () => {
         outOfStock: 0,
         lowStock: 1,
         expiringSoon: 0,
+        expired: 0,
       },
       {
         category: 'Expiry',
@@ -92,6 +97,7 @@ describe('getCategoryAttention', () => {
         outOfStock: 0,
         lowStock: 0,
         expiringSoon: 1,
+        expired: 0,
       },
     ]);
   });
@@ -103,11 +109,27 @@ describe('getCategoryAttention', () => {
         [
           item(1, 'Healthy', 4, 1),
           item(2, 'Not Yet Expiring', 3, 1, '2026-01-09'),
-          item(3, 'Already Expired', 3, 1, '2025-12-31'),
+
         ],
         now
       ),
       []
     );
+  });
+});
+
+
+describe('expired attention', () => {
+  it('uses UTC date boundaries and excludes today from expired status', () => {
+    const boundary = new Date('2026-01-02T00:30:00+05:30');
+    assert.equal(isExpired('2025-12-31', boundary), true);
+    assert.equal(isExpired('2026-01-01', boundary), false);
+    assert.equal(isExpired(null, boundary), false);
+  });
+  it('counts overlapping expired and low stock once and ignores empty expired stock', () => {
+    assert.deepEqual(getCategoryAttention([
+      item(1, 'Dairy', 1, 2, '2025-12-31'),
+      item(2, 'Dairy', 0, 2, '2025-12-31'),
+    ], now), [{ category: 'Dairy', attentionItems: 2, outOfStock: 1, lowStock: 1, expiringSoon: 0, expired: 1 }]);
   });
 });

@@ -13,10 +13,11 @@ import org.springframework.http.HttpStatus;
 public class PantryService {
     final PantryRepository repo;
     final ApplicationEventPublisher events;
+    final Clock clock;
     public record PantryChanged(String type, Long inventoryItemId, Long accountId) {
         public PantryChanged(String type, Long inventoryItemId) { this(type, inventoryItemId, null); }
     }
-    public PantryService(PantryRepository repo, ApplicationEventPublisher events) { this.repo = repo; this.events = events; }
+    public PantryService(PantryRepository repo, ApplicationEventPublisher events, Clock clock) { this.repo = repo; this.events = events; this.clock = clock; }
     static double number(Map<String,Object> row, String key) { return ((Number) row.get(key)).doubleValue(); }
     static long id(Map<String,Object> row) { return ((Number) row.get("id")).longValue(); }
     static void bad(String reason) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, reason); }
@@ -137,10 +138,14 @@ public class PantryService {
     }
     public void deleteInventory(long id) { deleteInventory(null, id); }
     public void deleteInventory(Long ownerId, long id) { inventory(ownerId, id); repo.execute("DELETE FROM inventory_items WHERE id=? AND " + ownerWhere("account_id", ownerId), id); events.publishEvent(new PantryChanged("inventory_changed", id, ownerId)); }
-    static boolean expiring(Map<String,Object> item) {
+    boolean expired(Map<String,Object> item) {
+        return number(item, "quantity") > 0 && item.get("expiresAt") != null
+            && LocalDate.parse(item.get("expiresAt").toString()).isBefore(Instant.ofEpochMilli(clock.millis()).atZone(ZoneOffset.UTC).toLocalDate());
+    }
+    boolean expiring(Map<String,Object> item) {
         if (item.get("expiresAt") == null) return false;
         var date = LocalDate.parse(item.get("expiresAt").toString());
-        var today = LocalDate.now(ZoneOffset.UTC);
+        var today = Instant.ofEpochMilli(clock.millis()).atZone(ZoneOffset.UTC).toLocalDate();
         return !date.isBefore(today) && !date.isAfter(today.plusDays(7));
     }
     public List<Map<String,Object>> suggestions() { return suggestions(null); }
@@ -149,15 +154,19 @@ public class PantryService {
         for (var item : inventory(ownerId)) {
             double quantity = number(item, "quantity"), threshold = number(item, "minThreshold");
             String urgency = quantity == 0 ? "critical" : quantity <= threshold ? "low" : expiring(item) ? "expiring_soon" : null;
-            if (urgency == null) continue;
-            Map<String,Object> suggestion = new LinkedHashMap<>();
-            suggestion.put("inventoryItemId", item.get("id"));
-            for (String key : List.of("name", "category", "minThreshold", "unit")) suggestion.put(key, item.get(key));
-            suggestion.put("currentQuantity", quantity); suggestion.put("urgency", urgency);
-            suggestion.put("reason", urgency.equals("critical") ? "Out of stock" : urgency.equals("low") ? quantity + " " + item.get("unit") + " left (minimum is " + threshold + ")" : "Expires on " + item.get("expiresAt"));
-            result.add(suggestion);
+            var urgencies = new ArrayList<String>();
+            if (expired(item)) urgencies.add("expired");
+            if (urgency != null) urgencies.add(urgency);
+            for (String alert : urgencies) {
+                Map<String,Object> suggestion = new LinkedHashMap<>();
+                suggestion.put("inventoryItemId", item.get("id"));
+                for (String key : List.of("name", "category", "minThreshold", "unit")) suggestion.put(key, item.get(key));
+                suggestion.put("currentQuantity", quantity); suggestion.put("urgency", alert);
+                suggestion.put("reason", alert.equals("critical") ? "Out of stock" : alert.equals("low") ? quantity + " " + item.get("unit") + " left (minimum is " + threshold + ")" : (alert.equals("expired") ? "Expired on " : "Expires on ") + item.get("expiresAt"));
+                result.add(suggestion);
+            }
         }
-        result.sort(Comparator.comparingInt(s -> List.of("critical", "low", "expiring_soon").indexOf(s.get("urgency"))));
+        result.sort(Comparator.comparingInt(s -> List.of("expired", "critical", "low", "expiring_soon").indexOf(s.get("urgency"))));
         return result;
     }
     public Map<String,Object> stats() { return stats(null); }
@@ -167,7 +176,8 @@ public class PantryService {
         items.forEach(i -> categories.merge(i.get("category").toString(), 1L, Long::sum));
         return Map.of("totalItems", items.size(), "outOfStockCount", items.stream().filter(i -> number(i,"quantity") == 0).count(),
             "lowStockCount", items.stream().filter(i -> number(i,"quantity") > 0 && number(i,"quantity") <= number(i,"minThreshold")).count(),
-            "expiringCount", items.stream().filter(PantryService::expiring).count(),
+            "expiringCount", items.stream().filter(this::expiring).count(),
+            "expiredCount", items.stream().filter(this::expired).count(),
             "categoryBreakdown", categories.entrySet().stream().map(e -> Map.of("category",e.getKey(),"count",e.getValue())).toList());
     }
     public Map<String,Object> list(long id) { return list(null, id); }
@@ -220,7 +230,7 @@ public class PantryService {
     public Map<String,Object> generateList() { return generateList(null, Map.of()); }
     public Map<String,Object> generateList(Map<String,Object> request) { return generateList(null, request); }
     public Map<String,Object> generateList(Long ownerId, Map<String,Object> request) {
-        var suggestions = suggestions(ownerId).stream().filter(s -> !s.get("urgency").equals("expiring_soon")).toList();
+        var suggestions = suggestions(ownerId).stream().filter(s -> List.of("critical", "low").contains(s.get("urgency"))).toList();
         if (suggestions.isEmpty()) bad("No low-stock suggestions are available.");
         var selected = new LinkedHashMap<Long, Map<String,Object>>();
         Object requestedItems = request.get("items");
