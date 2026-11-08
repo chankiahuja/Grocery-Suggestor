@@ -1,4 +1,7 @@
 import { useState, useEffect, useRef } from "react";
+import { Link } from "wouter";
+import { useUtcDate } from "@/hooks/use-utc-date";
+import { useSessionAccess } from "@/lib/preview-access";
 import {
   Bell,
   AlertCircle,
@@ -18,23 +21,31 @@ import type { GrocerySuggestion } from "@workspace/api-client-react";
 const STORAGE_KEY = "pantrypal-seen-notifications";
 
 function notifKey(s: GrocerySuggestion) {
-  return `${s.name}::${s.urgency}`;
+  return `${s.inventoryItemId}::${s.urgency}::${s.reason}`;
 }
 
-function loadSeen(): Set<string> {
+function loadSeen(key: string): Set<string> {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(key);
     return raw ? new Set(JSON.parse(raw)) : new Set();
   } catch {
     return new Set();
   }
 }
 
-function saveSeen(seen: Set<string>) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify([...seen]));
+function saveSeen(key: string, seen: Set<string>) {
+  try { localStorage.setItem(key, JSON.stringify([...seen])); } catch { /* Reading alerts works without storage. */ }
 }
 
 const URGENCY_CONFIG = {
+  expired: {
+    icon: AlertCircle,
+    label: "Expired",
+    color: "text-red-800",
+    bg: "bg-red-50",
+    border: "border-red-200",
+    dot: "bg-red-700",
+  },
   critical: {
     icon: AlertCircle,
     label: "Out of Stock",
@@ -63,12 +74,16 @@ const URGENCY_CONFIG = {
 
 export function NotificationCenter() {
   usePantryEvents();
+  useUtcDate();
+  const { account, demo } = useSessionAccess();
+  const storageKey = `${STORAGE_KEY}:${demo ? "demo" : account?.id ?? "anonymous"}`;
   const [open, setOpen] = useState(false);
-  const [seen, setSeen] = useState<Set<string>>(loadSeen);
+  const [seenState, setSeen] = useState(() => ({ key: storageKey, values: loadSeen(storageKey) }));
+  const seen = seenState.key === storageKey ? seenState.values : loadSeen(storageKey);
   const panelRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
-  const { data: suggestions = [] } = useGetGrocerySuggestions({
+  const { data: suggestions = [], isLoading, isError } = useGetGrocerySuggestions({
     query: {
       queryKey: getGetGrocerySuggestionsQueryKey(),
       refetchInterval: 30_000,
@@ -82,10 +97,10 @@ export function NotificationCenter() {
   useEffect(() => {
     if (open && suggestions.length > 0) {
       const next = new Set([...seen, ...suggestions.map(notifKey)]);
-      setSeen(next);
-      saveSeen(next);
+      setSeen({ key: storageKey, values: next });
+      saveSeen(storageKey, next);
     }
-  }, [open]);
+  }, [open, suggestions, storageKey]);
 
   // Close on outside click
   useEffect(() => {
@@ -120,6 +135,7 @@ export function NotificationCenter() {
   const lows = suggestions.filter((s) => s.urgency === "low");
   const expiring = suggestions.filter((s) => s.urgency === "expiring_soon");
   const grouped = [
+    { urgency: "expired" as const, items: suggestions.filter((s) => s.urgency === "expired") },
     { urgency: "critical" as const, items: criticals },
     { urgency: "low" as const, items: lows },
     { urgency: "expiring_soon" as const, items: expiring },
@@ -161,8 +177,8 @@ export function NotificationCenter() {
           data-testid="notification-panel"
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-            <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-border">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               <Bell className="h-4 w-4 text-muted-foreground" />
               <span className="font-semibold text-sm text-foreground">
                 Notifications
@@ -189,7 +205,11 @@ export function NotificationCenter() {
 
           {/* Body */}
           <div className="max-h-96 overflow-y-auto">
-            {suggestions.length === 0 ? (
+            {isLoading ? (
+              <p className="p-4 text-sm text-muted-foreground" role="status">Loading alerts…</p>
+            ) : isError ? (
+              <p className="p-4 text-sm text-destructive" role="alert">Alerts could not be loaded. Please try again.</p>
+            ) : suggestions.length === 0 ? (
               <div className="flex flex-col items-center gap-2 py-10 text-center px-4">
                 <CheckCheck className="h-8 w-8 text-muted-foreground/50" />
                 <p className="text-sm font-medium text-foreground">
@@ -230,7 +250,9 @@ export function NotificationCenter() {
                         />
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-foreground leading-snug truncate">
+                            <Link href={`/inventory?item=${s.inventoryItemId}`} onClick={() => setOpen(false)} className="hover:underline focus-visible:underline">
                             {s.name}
+                            </Link>
                           </p>
                           <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
                             {s.reason}

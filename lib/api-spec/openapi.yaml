@@ -792,6 +792,9 @@ components:
           type: number
         expiringCount:
           type: number
+        expiredCount:
+          type: number
+          description: Items with positive quantity and an expiry date before today in UTC.
         categoryBreakdown:
           type: array
           items:
@@ -801,6 +804,7 @@ components:
         - lowStockCount
         - outOfStockCount
         - expiringCount
+        - expiredCount
         - categoryBreakdown
 
     CategoryCount:
@@ -833,7 +837,8 @@ components:
           type: string
         urgency:
           type: string
-          enum: [critical, low, expiring_soon]
+          enum: [critical, low, expiring_soon, expired]
+          description: Expired alerts are independent of stock alerts; one item may have both expired and low entries. Zero-quantity items do not receive expired alerts. Expiry-only entries do not generate shopping purchases.
       required:
         - inventoryItemId
         - name

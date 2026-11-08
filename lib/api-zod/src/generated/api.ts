@@ -164,6 +164,7 @@ export const GetInventoryStatsResponse = zod.object({
   "lowStockCount": zod.number(),
   "outOfStockCount": zod.number(),
   "expiringCount": zod.number(),
+  "expiredCount": zod.number().describe('Items with positive quantity and an expiry date before today in UTC.'),
   "categoryBreakdown": zod.array(zod.object({
   "category": zod.string(),
   "count": zod.number()
@@ -322,7 +323,7 @@ export const GetGrocerySuggestionsResponseItem = zod.object({
   "minThreshold": zod.number(),
   "unit": zod.string(),
   "reason": zod.string(),
-  "urgency": zod.enum(['critical', 'low', 'expiring_soon'])
+  "urgency": zod.enum(['critical', 'low', 'expiring_soon', 'expired']).describe('Expired alerts are independent of stock alerts; one item may have both expired and low entries. Zero-quantity items do not receive expired alerts. Expiry-only entries do not generate shopping purchases.')
 })
 export const GetGrocerySuggestionsResponse = zod.array(GetGrocerySuggestionsResponseItem)
 

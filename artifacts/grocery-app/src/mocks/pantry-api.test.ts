@@ -2,6 +2,27 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { MockPantryApi, seedState } from "./pantry-api";
 
+test("expired demo alerts clear on correction and never create expiry-only purchases", async () => {
+  const api = new MockPantryApi();
+  const template = api.state.inventory[0];
+  api.state.inventory = [
+    { ...template, id: 101, name: "Expired only", quantity: 5, minThreshold: 2, expiresAt: "2000-01-01" },
+    { ...template, id: 102, name: "Expired low", quantity: 1, minThreshold: 2, expiresAt: "2000-01-01" },
+    { ...template, id: 103, name: "Empty expired", quantity: 0, minThreshold: 2, expiresAt: "2000-01-01" },
+  ];
+  const alerts = await (await api.fetch("/api/suggestions")).json();
+  assert.deepEqual(alerts.filter((a: any) => a.urgency === "expired").map((a: any) => a.inventoryItemId), [101, 102]);
+  assert.equal((await (await api.fetch("/api/inventory/stats")).json()).expiredCount, 2);
+  const invalid = await api.fetch("/api/suggestions/generate-list", { method: "POST", body: JSON.stringify({ items: [{ inventoryItemId: 101, quantity: 1 }] }) });
+  assert.equal(invalid.status, 400);
+  const list = await (await api.fetch("/api/suggestions/generate-list", { method: "POST" })).json();
+  assert.deepEqual(list.items.map((i: any) => i.inventoryItemId), [103, 102]);
+  await api.fetch("/api/inventory/101", { method: "PATCH", body: JSON.stringify({ expiresAt: null }) });
+  await api.fetch("/api/inventory/102", { method: "DELETE" });
+  assert.equal((await (await api.fetch("/api/inventory/stats")).json()).expiredCount, 0);
+  assert.ok((await (await api.fetch("/api/suggestions")).json()).every((a: any) => a.urgency !== "expired"));
+});
+
 function undo(api: MockPantryApi, key = "adjustment-1", id = 2) {
   return api.fetch(`/api/inventory/${id}/undo`, { method: "POST", body: JSON.stringify({ idempotencyKey: key }) });
 }

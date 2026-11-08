@@ -151,9 +151,14 @@ export interface InventoryStats {
   lowStockCount: number;
   outOfStockCount: number;
   expiringCount: number;
+  /** Items with positive quantity and an expiry date before today in UTC. */
+  expiredCount: number;
   categoryBreakdown: CategoryCount[];
 }
 
+/**
+ * Expired alerts are independent of stock alerts; one item may have both expired and low entries. Zero-quantity items do not receive expired alerts. Expiry-only entries do not generate shopping purchases.
+ */
 export type GrocerySuggestionUrgency = typeof GrocerySuggestionUrgency[keyof typeof GrocerySuggestionUrgency];
 
 
@@ -161,6 +166,7 @@ export const GrocerySuggestionUrgency = {
   critical: 'critical',
   low: 'low',
   expiring_soon: 'expiring_soon',
+  expired: 'expired',
 } as const;
 
 export interface GrocerySuggestion {
@@ -172,6 +178,7 @@ export interface GrocerySuggestion {
   minThreshold: number;
   unit: string;
   reason: string;
+  /** Expired alerts are independent of stock alerts; one item may have both expired and low entries. Zero-quantity items do not receive expired alerts. Expiry-only entries do not generate shopping purchases. */
   urgency: GrocerySuggestionUrgency;
 }
 

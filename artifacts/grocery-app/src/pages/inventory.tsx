@@ -39,19 +39,24 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { isExpiringSoon } from "@/lib/category-attention";
+import { isExpired, isExpiringSoon } from "@/lib/category-attention";
+import { useUtcDate } from "@/hooks/use-utc-date";
 
 export default function Inventory() {
+  const utcDay = useUtcDate();
+  const now = new Date(`${utcDay}T00:00:00Z`);
   const searchParams = useSearch();
   const [, setLocation] = useLocation();
   const [search, setSearch] = useState("");
   const filters = new URLSearchParams(searchParams);
   const selectedCategory = filters.get("category");
   const selectedStock = filters.get("stock");
-  const stockFilter = selectedStock === "low" || selectedStock === "out" || selectedStock === "expiring"
+  const selectedItem = filters.get("item");
+  const stockFilter = selectedStock === "low" || selectedStock === "out" || selectedStock === "expiring" || selectedStock === "expired"
     ? selectedStock : null;
   const updateFilter = (key: "category" | "stock", value: string | null) => {
     const next = new URLSearchParams(searchParams);
+    next.delete("item");
     if (value === null) next.delete(key);
     else next.set(key, value);
     const query = next.toString();
@@ -68,17 +73,6 @@ export default function Inventory() {
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
-
-  const isItemExpired = (expiresAt?: string | null) => {
-    if (!expiresAt) return false;
-
-    const [year, month, day] = expiresAt.slice(0, 10).split("-").map(Number);
-    const expirationDate = new Date(year, month - 1, day);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    return expirationDate < today;
-  };
 
   const { data: items, isLoading, isError, isFetching, refetch } = useListInventoryItems(
     stockFilter === "low" ? { lowStock: true } : stockFilter === "out" ? { outOfStock: true } : undefined,
@@ -97,9 +91,10 @@ export default function Inventory() {
     const matchesCategory = selectedCategory
       ? item.category === selectedCategory
       : true;
-    const matchesExpiration =
-      stockFilter !== "expiring" || isExpiringSoon(item.expiresAt);
-    return matchesSearch && matchesCategory && matchesExpiration;
+    const matchesExpiration = stockFilter === "expired"
+      ? item.quantity > 0 && isExpired(item.expiresAt, now)
+      : stockFilter !== "expiring" || isExpiringSoon(item.expiresAt, now);
+    return matchesSearch && matchesCategory && matchesExpiration && (!selectedItem || String(item.id) === selectedItem);
   });
 
   const handleEdit = (item: InventoryItem) => {
@@ -178,6 +173,17 @@ export default function Inventory() {
                 />
               </div>
               <div className="inventory-filter-chips flex gap-2 flex-wrap" aria-label="Inventory filters">
+                {selectedItem && <Button variant="outline" size="sm" onClick={() => setLocation("/inventory")}>
+                  Show all inventory
+                </Button>}
+                <Button
+                  variant="outline" size="sm"
+                  className={cn("inventory-filter-chip inventory-filter-chip-expired", stockFilter === "expired" && "is-selected")}
+                  onClick={() => updateFilter("stock", stockFilter === "expired" ? null : "expired")}
+                  data-testid="filter-expired" aria-pressed={stockFilter === "expired"}
+                >
+                  <CircleX className="h-4 w-4 mr-2" />Expired
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
@@ -239,7 +245,7 @@ export default function Inventory() {
             </CardTitle>
             {!isLoading && !isError && (
               <p className="inventory-results-description">
-                {search || selectedCategory || stockFilter
+                {search || selectedCategory || stockFilter || selectedItem
                   ? "Matching household essentials"
                   : "Everything you keep track of, all in one place."}
               </p>
@@ -297,19 +303,19 @@ export default function Inventory() {
                     {filteredItems.map((item, idx) => {
                       const isLowStock = item.quantity <= item.minThreshold;
                       const isOutOfStock = item.quantity === 0;
-                      const isExpired = isItemExpired(item.expiresAt);
-                      const expiringSoon = isExpiringSoon(item.expiresAt);
+                      const expired = item.quantity > 0 && isExpired(item.expiresAt, now);
+                      const expiringSoon = isExpiringSoon(item.expiresAt, now);
 
                       return (
                         <div
                           key={item.id}
                           className={cn(
                             "inventory-item-card animate-slide-up",
-                            isOutOfStock
+                            expired ? "inventory-item-expired" : isOutOfStock
                               ? "inventory-item-out"
                               : isLowStock
                                 ? "inventory-item-low"
-                                : isExpired || expiringSoon
+                                : expiringSoon
                                   ? "inventory-item-expiring"
                                   : "inventory-item-healthy",
                           )}
@@ -333,17 +339,17 @@ export default function Inventory() {
                                     Low Stock
                                   </span>
                                 )}
-                                {isExpired && !isLowStock && !isOutOfStock && (
-                                  <span className="inventory-status-badge inventory-status-expiring">
+                                {expired && (
+                                  <span className="inventory-status-badge inventory-status-expired">
                                     Expired
                                   </span>
                                 )}
-                                {expiringSoon && !isExpired && !isLowStock && !isOutOfStock && (
+                                {expiringSoon && !expired && !isLowStock && !isOutOfStock && (
                                   <span className="inventory-status-badge inventory-status-expiring">
                                     Expiring Soon
                                   </span>
                                 )}
-                                {!isOutOfStock && !isLowStock && !isExpired && !expiringSoon && (
+                                {!isOutOfStock && !isLowStock && !expired && !expiringSoon && (
                                   <span className="inventory-status-badge inventory-status-healthy">
                                     In good shape
                                   </span>
@@ -385,8 +391,8 @@ export default function Inventory() {
                               {item.expiresAt && (
                                 <span>
                                   <Clock aria-hidden="true" />
-                                  Expires:{" "}
-                                  {new Date(item.expiresAt).toLocaleDateString()}
+                                  {expired ? "Expired on:" : "Expires:"}{" "}
+                                  {new Date(item.expiresAt).toLocaleDateString(undefined, { timeZone: "UTC" })}
                                 </span>
                               )}
                             </div>
@@ -429,12 +435,12 @@ export default function Inventory() {
                   <div className="inventory-state inventory-empty">
                     <Package className="inventory-state-icon" />
                     <p className="inventory-state-title">
-                      {search || selectedCategory || stockFilter
+                      {search || selectedCategory || stockFilter || selectedItem
                         ? "No items match these filters."
                         : "No inventory items yet."}
                     </p>
                     <p className="inventory-state-description">
-                      {search || selectedCategory || stockFilter
+                      {search || selectedCategory || stockFilter || selectedItem
                         ? "Try a different search or filter."
                         : "Add your household essentials to get started."}
                     </p>

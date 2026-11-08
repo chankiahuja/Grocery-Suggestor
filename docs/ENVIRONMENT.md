@@ -77,7 +77,7 @@ For PostgreSQL, set `$env:SPRING_PROFILES_ACTIVE = 'postgres'` and configure `DB
 - Maven wrapper fails to download: check network access to Maven Central and JAVA_HOME/JDK configuration.
 - Windows wrapper requires JAVA_HOME, even if java is already on PATH. For this machine: `$env:JAVA_HOME = 'C:/Program Files/Java/jdk-17'` (use your actual JDK location on another machine).
 - Windows Vite native binary missing: reinstall with the current lockfile; this repository now permits Windows native optional dependencies.
-- No alerts: add a pantry item with quantity zero or an expiry within seven days. The SSE stream is `/api/notifications/stream`; suggestions are the recoverable alert snapshot.
+- No alerts: add a pantry item with quantity zero, an expiry within seven days, or positive quantity and a past expiry date. Expired and upcoming expiry use UTC dates. The SSE stream is `/api/notifications/stream`; suggestions are the recoverable alert snapshot.
 - Browser notifications require explicit permission. In-app bell alerts work without it.
 
 Prototype limits: account ownership is per account; household sharing and invitations remain separate work. Spring events and SSE are process-local and not durable. Reconnects and polling recover current stock alerts; purchase events are cache refresh signals, not a historical notification inbox.
