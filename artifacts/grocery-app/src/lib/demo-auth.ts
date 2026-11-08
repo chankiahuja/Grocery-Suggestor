@@ -10,11 +10,16 @@ export function emailError(value: string): string {
     : "Enter a valid email address, such as you@example.com.";
 }
 
-export function mobileError(value: string): string {
+export function mobileError(value: string, countryCode = "+91"): string {
   if (!value.trim()) return "Enter your mobile number.";
-  return /^[0-9]{10}$/.test(value.trim())
+  const digits = value.trim();
+  if (!/^[0-9]+$/.test(digits))
+    return "Enter digits only, without the country code or spaces.";
+  if (countryCode === "+91")
+    return digits.length === 10 ? "" : "Enter a 10-digit Indian mobile number.";
+  return digits.length >= 4 && digits.length <= 14
     ? ""
-    : "Enter exactly 10 digits, without +91 or spaces.";
+    : "Enter a mobile number with 4 to 14 digits.";
 }
 
 export function otpError(

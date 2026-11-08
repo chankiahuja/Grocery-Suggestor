@@ -213,16 +213,27 @@
 .auth-input-wrap input[aria-invalid="true"] {
   border-color: #a33c29;
 }
-.auth-prefix {
-  position: absolute;
-  left: 14px;
+.auth-phone-field .auth-country-code {
+  width: min(46%, 190px);
+  min-width: 115px;
+  min-height: 48px;
+  border: 1px solid var(--pantry-line);
+  border-right: 0;
+  border-radius: 9px 0 0 9px;
+  background: #fcfcf7;
+  color: var(--pantry-ink);
+  padding: 0 8px 0 11px;
   font-size: 13px;
-  color: var(--pantry-muted);
-  border-right: 1px solid var(--pantry-line);
-  padding-right: 11px;
+  text-overflow: ellipsis;
 }
-.auth-has-prefix input {
-  padding-left: 66px;
+.auth-phone-field .auth-country-code:focus {
+  outline: 2px solid #a8b885;
+  outline-offset: 1px;
+  z-index: 1;
+}
+.auth-phone-field input {
+  border-radius: 0 9px 9px 0;
+  min-width: 0;
 }
 .auth-error {
   color: #a33c29;

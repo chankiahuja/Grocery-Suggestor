@@ -618,7 +618,7 @@ describe("mobile sign-in and sign-up preview", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Get verification code" }),
     );
-    await screen.findByText("Enter exactly 10 digits, without +91 or spaces.");
+    await screen.findByText("Enter a 10-digit Indian mobile number.");
     fireEvent.change(screen.getByLabelText("Mobile number"), {
       target: { value: "9876543210" },
     });

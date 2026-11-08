@@ -45,3 +45,16 @@ test("demo OTP validation rejects incomplete, incorrect, expired and consumed co
   assert.match(otpError("123456", expires, expires), /expired/);
   assert.match(otpError("123456", 0, now), /expired/);
 });
+
+test("international mobile preview validates basic digits without applying Indian length rules", () => {
+  for (const code of ["+1", "+44", "+358"]) {
+    for (const value of ["1234", "1234567", "12345678901234"])
+      assert.equal(mobileError(value, code), "");
+    assert.equal(mobileError("", code), "Enter your mobile number.");
+    for (const value of ["123", "123456789012345"])
+      assert.match(mobileError(value, code), /4 to 14 digits/);
+    for (const value of ["+12345678", "1234 5678", "123-4567", "abcdefgh"])
+      assert.match(mobileError(value, code), /digits only/);
+  }
+  assert.match(mobileError("1234567", "+91"), /10-digit Indian/);
+});

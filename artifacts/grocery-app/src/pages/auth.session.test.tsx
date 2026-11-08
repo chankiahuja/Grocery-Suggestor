@@ -117,6 +117,77 @@ describe("route loading", { concurrency: false }, () => {
   });
 });
 
+describe("mobile country selector", { concurrency: false }, () => {
+  for (const path of ["/login", "/signup"]) {
+    it(`defaults to India and previews a selected international number on ${path}`, async () => {
+      const api = new AuthApi();
+      await mount(path, api);
+      await screen.findByRole("button", { name: "Mobile number" });
+      if (path === "/signup") fireEvent.change(screen.getByLabelText(/Your name/), { target: { value: "Riya" } });
+      fireEvent.click(screen.getByRole("button", { name: "Mobile number" }));
+      const selector = screen.getByRole("combobox", { name: "Country code" }) as HTMLSelectElement;
+      assert.equal(selector.value, "IN");
+      assert.ok(within(selector).getByRole("option", { name: "India (+91)" }));
+      assert.ok(within(selector).getByRole("option", { name: "Canada (+1)" }));
+      assert.ok(within(selector).getByRole("option", { name: "United States (+1)" }));
+      fireEvent.click(screen.getByRole("button", { name: "Get verification code" }));
+      await screen.findByText("Enter your mobile number.");
+      fireEvent.change(screen.getByLabelText("Mobile number"), { target: { value: "1234567" } });
+      fireEvent.click(screen.getByRole("button", { name: "Get verification code" }));
+      await screen.findByText("Enter a 10-digit Indian mobile number.");
+      fireEvent.change(selector, { target: { value: "CA" } });
+      fireEvent.click(screen.getByRole("button", { name: "Get verification code" }));
+      await screen.findByLabelText("Verification code");
+      assert.ok(screen.getByText("+1 1234567"));
+      assert.ok(screen.getByText(/Mobile preview only/));
+      fireEvent.click(screen.getByRole("button", { name: "Change number" }));
+      assert.equal((screen.getByRole("combobox", { name: "Country code" }) as HTMLSelectElement).value, "CA");
+      fireEvent.click(screen.getByRole("button", { name: "Get verification code" }));
+      fireEvent.change(await screen.findByLabelText("Verification code"), { target: { value: "123456" } });
+      fireEvent.click(screen.getByRole("button", { name: "Verify & continue" }));
+      await screen.findByText(/You are not signed in/);
+      assert.equal(api.authenticated, false);
+      assert.equal(api.requests.filter(request => ["/api/auth/code", "/api/auth/verify"].includes(request.path)).length, 0);
+    });
+  }
+
+  it("keeps distinct shared-code selections through login/signup navigation and email switching", async () => {
+    const api = new AuthApi();
+    await mount("/login", api);
+    fireEvent.click(await screen.findByRole("button", { name: "Mobile number" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Country code" }), { target: { value: "CA" } });
+    fireEvent.click(screen.getByRole("link", { name: "Create account" }));
+    await screen.findByRole("heading", { name: "A little more together." });
+    assert.equal((screen.getByRole("combobox", { name: "Country code" }) as HTMLSelectElement).value, "CA");
+    fireEvent.change(screen.getByRole("combobox", { name: "Country code" }), { target: { value: "US" } });
+    fireEvent.click(screen.getByRole("button", { name: "Email address" }));
+    assert.equal(screen.queryByRole("combobox", { name: "Country code" }), null);
+    fireEvent.click(screen.getByRole("button", { name: "Mobile number" }));
+    assert.equal((screen.getByRole("combobox", { name: "Country code" }) as HTMLSelectElement).value, "US");
+    fireEvent.click(screen.getByRole("link", { name: "Sign in" }));
+    await screen.findByRole("heading", { name: "Welcome home." });
+    assert.equal((screen.getByRole("combobox", { name: "Country code" }) as HTMLSelectElement).value, "US");
+  });
+
+  it("reports non-India format errors without truncating an overlong pasted number", async () => {
+    await mount("/login", new AuthApi());
+    fireEvent.click(await screen.findByRole("button", { name: "Mobile number" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Country code" }), { target: { value: "GB" } });
+    for (const [number, message] of [
+      ["+447123456789", /digits only/],
+      ["07123 456789", /digits only/],
+      ["123", /4 to 14 digits/],
+      ["123456789012345", /4 to 14 digits/],
+    ] as const) {
+      fireEvent.change(screen.getByLabelText("Mobile number"), { target: { value: number } });
+      fireEvent.click(screen.getByRole("button", { name: "Get verification code" }));
+      await screen.findByText(message);
+      assert.equal(screen.queryByLabelText("Verification code"), null);
+      assert.equal(screen.getByLabelText("Mobile number").getAttribute("aria-invalid"), "true");
+    }
+  });
+});
+
 describe("real email authentication", { concurrency: false }, () => {
   it("restores the account name, opens account details and supports keyboard dismissal", async () => {
     const api = new AuthApi();
