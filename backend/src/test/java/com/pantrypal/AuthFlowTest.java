@@ -4,12 +4,16 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.Cookie;
 import java.io.IOException;
+import java.net.SocketTimeoutException;
 import java.time.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.security.core.Authentication;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -351,6 +355,65 @@ class AuthFlowTest {
         // IP quota also bounds requests across different recipient addresses.
         for (int i = 0; i < 14; i++) browser.requestCode("other" + i + "@example.com");
         browser.post("/api/auth/code", Map.of("email", "last@example.com", "intent", "login"), 429);
+    }
+
+    @Test
+    @ExtendWith(OutputCaptureExtension.class)
+    void deliveryTimeoutIsSanitizedAndCanRecoverAfterCooldown(CapturedOutput output) throws Exception {
+        var browser = new Browser(); browser.session();
+        String email = "timeout@example.com";
+        String diagnostic = "synthetic-smtp-secret-do-not-expose";
+        doAnswer(call -> {
+            codes.put(email, call.getArgument(1));
+            throw new MailSendException(diagnostic, new SocketTimeoutException("Read timed out"));
+        }).when(mail).send(eq(email), anyString(), anyLong());
+
+        var failure = browser.post("/api/auth/code",
+            Map.of("email", email, "intent", "signup", "name", "Timeout test"), 503);
+        assertThat(failure.get("error").asText()).isEqualTo("Email could not be sent. Please try again shortly.");
+        String failedId = jdbc.queryForObject("SELECT challenge_id FROM email_challenges WHERE email=?", String.class, email);
+        String failedCode = codes.get(email);
+        assertThat(failure.toString()).doesNotContain(diagnostic, failedCode, failedId);
+        assertThat(jdbc.queryForObject("SELECT code_hash FROM email_challenges WHERE email=?", String.class, email)).isNull();
+        assertThat(jdbc.queryForObject("SELECT used FROM email_challenges WHERE email=?", Boolean.class, email)).isTrue();
+        browser.verify(email, json.createObjectNode().put("challengeId", failedId), failedCode, 400);
+        assertThat(browser.session().get("authenticated").asBoolean()).isFalse();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM accounts", Integer.class)).isZero();
+        browser.post("/api/auth/code", Map.of("email", email, "intent", "signup", "name", "Timeout test"), 429);
+
+        doAnswer(call -> { codes.put(email, call.getArgument(1)); return null; })
+            .when(mail).send(eq(email), anyString(), anyLong());
+        now.addAndGet(30_000);
+        var recovered = browser.requestCode(email);
+        browser.verify(email, json.createObjectNode().put("challengeId", failedId), failedCode, 400);
+        assertThat(browser.verify(email, recovered, codes.get(email), 200).get("authenticated").asBoolean()).isTrue();
+        assertThat(output.getAll()).doesNotContain(diagnostic, failedCode);
+    }
+
+    @Test void verificationEmailQuotaAppliesAcrossDifferentIps() {
+        String challengeId = UUID.randomUUID().toString();
+        for (int attempt = 0; attempt < 20; attempt++) {
+            final String ip = "email-quota-ip-" + attempt;
+            assertThatThrownBy(() -> auth.verify("quota@example.com", challengeId, "000000", ip))
+                .isInstanceOf(ResponseStatusException.class).satisfies(error ->
+                    assertThat(((ResponseStatusException) error).getStatusCode().value()).isEqualTo(400));
+        }
+        assertThatThrownBy(() -> auth.verify("QUOTA@example.com", challengeId, "000000", "fresh-ip"))
+            .isInstanceOf(ResponseStatusException.class).satisfies(error ->
+                assertThat(((ResponseStatusException) error).getStatusCode().value()).isEqualTo(429));
+    }
+
+    @Test void verificationIpQuotaAppliesAcrossDifferentEmails() {
+        String challengeId = UUID.randomUUID().toString();
+        for (int attempt = 0; attempt < 60; attempt++) {
+            final String email = "quota" + attempt + "@example.com";
+            assertThatThrownBy(() -> auth.verify(email, challengeId, "000000", "shared-ip"))
+                .isInstanceOf(ResponseStatusException.class).satisfies(error ->
+                    assertThat(((ResponseStatusException) error).getStatusCode().value()).isEqualTo(400));
+        }
+        assertThatThrownBy(() -> auth.verify("another@example.com", challengeId, "000000", "shared-ip"))
+            .isInstanceOf(ResponseStatusException.class).satisfies(error ->
+                assertThat(((ResponseStatusException) error).getStatusCode().value()).isEqualTo(429));
     }
 
     @Test void existingAccountIsReusedAndConcurrentVerificationConsumesCodeOnce() throws Exception {
