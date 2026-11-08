@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { afterEach, describe, it } from "node:test";
+import { afterEach, beforeEach, describe, it, mock } from "node:test";
+import { authFeatures } from "../lib/auth-features";
 import React from "react";
 import { JSDOM } from "jsdom";
 import { MockPantryApi } from "../mocks/pantry-api";
@@ -28,6 +29,7 @@ afterEach(() => {
   setCsrfToken(null);
   globalThis.fetch = originalFetch;
   localStorage.clear();
+  mock.restoreAll();
 });
 
 class AuthApi {
@@ -73,7 +75,7 @@ class AuthApi {
   };
 }
 
-async function mount(path: string, api: AuthApi) {
+async function mount(path: string, api: AuthApi, preview = false) {
   globalThis.fetch = api.fetch;
   const location = memoryLocation({ path });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { retry: false, gcTime: Infinity } } });
@@ -81,7 +83,7 @@ async function mount(path: string, api: AuthApi) {
   let view!: ReturnType<typeof render>;
   // Settle the initial async session check and route effects before entering input.
   await act(async () => {
-    view = render(<QueryClientProvider client={client}><Router hook={location.hook}><AppRoutes /></Router></QueryClientProvider>);
+    view = render(<QueryClientProvider client={client}><Router hook={location.hook}><AppRoutes preview={preview} /></Router></QueryClientProvider>);
   });
   return { ...view, client, location };
 }
@@ -117,7 +119,88 @@ describe("route loading", { concurrency: false }, () => {
   });
 });
 
+describe("email-only launch", { concurrency: false }, () => {
+  for (const preview of [false, true]) {
+    for (const path of ["/login", "/signup"]) {
+      it(`offers only email on ${path} in ${preview ? "demo" : "normal"} mode`, async () => {
+        const api = new AuthApi();
+        await mount(path, api, preview);
+        const email = await screen.findByLabelText("Email address");
+        assert.equal(email.getAttribute("type"), "email");
+        assert.equal(screen.queryByRole("button", { name: "Mobile number" }), null);
+        assert.equal(screen.queryByRole("group", { name: "Choose mobile number or email" }), null);
+        assert.equal(screen.queryByRole("combobox", { name: "Country code" }), null);
+        assert.doesNotMatch(document.body.textContent ?? "", /SMS|email or mobile/);
+        if (path === "/signup") fireEvent.change(screen.getByLabelText(/Your name/), { target: { value: "New User" } });
+        fireEvent.change(email, { target: { value: "user@example.com" } });
+        // Keyboard/form submission uses the same email-only path.
+        fireEvent.submit(email.closest("form")!);
+        await screen.findByLabelText("Verification code");
+        if (!preview) {
+          const request = api.requests.find(request => request.path === "/api/auth/code")!;
+          assert.equal(request.body.intent, path === "/signup" ? "signup" : "login");
+          if (path === "/signup") assert.equal(request.body.name, "New User");
+        }
+        fireEvent.change(screen.getByLabelText("Verification code"), { target: { value: preview ? "123456" : "654321" } });
+        fireEvent.click(screen.getByRole("button", { name: "Verify & continue" }));
+        await screen.findByRole("heading", { name: "Dashboard" });
+        assert.equal(api.authenticated, !preview);
+        if (preview) assert.equal(api.requests.filter(request => request.path.startsWith("/api/auth/")).length, 0);
+      });
+    }
+  }
+
+  it("advertises email without SMS on the landing page", async () => {
+    await mount("/", new AuthApi());
+    await screen.findByText("Sign in with a one-time code by email.");
+    assert.doesNotMatch(document.body.textContent ?? "", /email or mobile|SMS/);
+  });
+
+  it("does not request a mobile code when the email input is modified in developer tools", async () => {
+    const api = new AuthApi();
+    await mount("/login", api);
+    const input = await screen.findByLabelText("Email address") as HTMLInputElement;
+    input.type = "tel";
+    fireEvent.change(input, { target: { value: "9876543210" } });
+    fireEvent.submit(input.closest("form")!);
+    await screen.findByText("Enter a valid email address, such as you@example.com.");
+    assert.equal(screen.queryByLabelText("Verification code"), null);
+    assert.equal(api.requests.filter(request => request.path === "/api/auth/code").length, 0);
+  });
+
+  for (const action of ["request", "resend", "verify"]) {
+    it(`blocks a stale mobile ${action} handler when the flag is disabled`, async () => {
+      let enabled = true;
+      mock.method(authFeatures, "mobilePreviewEnabled", () => enabled);
+      const api = new AuthApi();
+      await mount("/login", api);
+      fireEvent.click(screen.getByRole("button", { name: "Mobile number" }));
+      fireEvent.change(screen.getByLabelText("Mobile number"), { target: { value: "9876543210" } });
+      if (action !== "request") {
+        fireEvent.click(screen.getByRole("button", { name: "Get verification code" }));
+        await screen.findByLabelText("Verification code");
+        if (action === "verify") fireEvent.change(screen.getByLabelText("Verification code"), { target: { value: "123456" } });
+      }
+      enabled = false;
+      if (action === "resend") {
+        const resend = screen.getByRole("button", { name: /Resend/ }) as HTMLButtonElement;
+        // Simulate removing the disabled attribute in developer tools.
+        resend.disabled = false;
+        fireEvent.click(resend);
+      } else {
+        const input = screen.getByLabelText(action === "request" ? "Mobile number" : "Verification code");
+        fireEvent.submit(input.closest("form")!);
+      }
+      await screen.findByLabelText("Email address");
+      assert.ok(screen.getByText("Mobile sign-in is currently unavailable. Use email."));
+      assert.equal(api.authenticated, false);
+      assert.equal(api.requests.filter(request => ["/api/auth/code", "/api/auth/verify"].includes(request.path)).length, 0);
+    });
+  }
+});
+
 describe("mobile country selector", { concurrency: false }, () => {
+  beforeEach(() => { mock.method(authFeatures, "mobilePreviewEnabled", () => true); });
   for (const path of ["/login", "/signup"]) {
     it(`defaults to India and previews a selected international number on ${path}`, async () => {
       const api = new AuthApi();
@@ -319,6 +402,7 @@ describe("real email authentication", { concurrency: false }, () => {
   });
 
   it("keeps mobile verification an unauthenticated preview", async () => {
+    mock.method(authFeatures, "mobilePreviewEnabled", () => true);
     const api = new AuthApi(); await mount("/login", api);
     await screen.findByRole("heading", { name: "Welcome home." });
     fireEvent.click(screen.getByRole("button", { name: "Mobile number" }));

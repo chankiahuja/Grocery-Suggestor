@@ -25,6 +25,7 @@ Copy [`.env.example`](../.env.example) to `.env` to override Compose credentials
 | PORT | 5173 | Vite |
 | BASE_PATH | / | Vite |
 | API_TARGET | http://localhost:8080 | Vite proxy |
+| VITE_ENABLE_MOBILE_PREVIEW | false | Vite build-time opt-in for the preserved, unauthenticated mobile preview; not SMS authentication |
 | MAIL_HOST / MAIL_PORT | localhost / 1025 | Spring SMTP transport; local Mailpit defaults |
 | MAIL_FROM | PantryPal <no-reply@pantrypal.test> | Disposable local sender; configure a verified sender for real delivery |
 | MAIL_USERNAME / MAIL_PASSWORD | empty | SMTP credentials when using a provider |
@@ -37,6 +38,19 @@ Copy [`.env.example`](../.env.example) to `.env` to override Compose credentials
 For native Windows development, run your installed Mailpit executable with `--listen 127.0.0.1:8025 --smtp 127.0.0.1:1025`, then open http://localhost:8025 to read verification codes. Full-stack sign-in requires this SMTP service when the default `MAIL_HOST`/`MAIL_PORT` are used. Docker Compose runs its own Mailpit service at the same host ports and uses `mailpit:1025` inside its network; stop native Mailpit before starting Compose to avoid port conflicts. The browser-only `dev:mock` mode still uses code `123456` without sending mail or creating a server session.
 
 Normal mode issues an HttpOnly, SameSite=Lax session cookie and a CSRF token returned by `GET /api/auth/session`. Session attributes are stored through Spring Session JDBC; Flyway creates the tables. Cookies are Secure by default outside the `local` profile. Serve a deployed app over HTTPS, keep `AUTH_COOKIE_SECURE=true`, and configure SMTP credentials only through environment variables. Pantry and shopping data is scoped to the signed-in account. A missing `AUTH_OTP_SECRET` invalidates outstanding codes on backend restart, while signed-in sessions continue to work.
+
+### Mobile preview opt-in
+
+Login and signup offer email only by default, including `dev:mock`. The mobile preview remains in the source and can be explicitly enabled for development with a Vite build-time flag:
+
+```powershell
+$env:VITE_ENABLE_MOBILE_PREVIEW = 'true'
+npx.cmd pnpm@10.26.1 dev:mock
+```
+
+Restart Vite after changing the flag; a packaged frontend must be rebuilt to change it. Set it to `false` or remove it and restart/rebuild to restore the launch default. Vite can also read an app-local `.env.local`; the repository-root Compose `.env` does not automatically configure a native frontend build. The preserved country selector defaults to India (+91), keeps its selection across steps, and retains its existing validation.
+
+This restores a preview only: no SMS is sent, no mobile account is created, and normal-mode mobile verification cannot authenticate against Spring. The UI switch and its handler guards are not a security boundary; server-side email OTP and sessions remain authoritative. Do not use the preview flag as a recovery path for real mobile-only accounts. See the [release account check](GS-114-EMAIL-ONLY-AUTH.md).
 
 ### Claiming legacy shared pantry data
 

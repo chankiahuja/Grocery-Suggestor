@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { afterEach, describe, it } from "node:test";
+import { afterEach, beforeEach, describe, it, mock } from "node:test";
+import { authFeatures } from "../lib/auth-features";
 import React from "react";
 import { MockPantryApi } from "../mocks/pantry-api";
 import { JSDOM } from "jsdom";
@@ -551,6 +552,7 @@ afterEach(() => {
   clients.clear();
   globalThis.fetch = originalFetch;
   window.history.replaceState({}, "", "/");
+    mock.restoreAll();
 });
 
 describe("public and protected routes", () => {
@@ -586,6 +588,7 @@ describe("public and protected routes", () => {
   }
 
   it("opens the dashboard after the preview and returns to login on a fresh load", async () => {
+    mock.method(authFeatures, "mobilePreviewEnabled", () => true);
     const api = new MockPantryApi();
     globalThis.fetch = api.fetch;
     const location = memoryLocation({ path: "/inventory" });
@@ -643,8 +646,8 @@ describe("logout", () => {
     );
     await screen.findByRole("heading", { name: "Welcome home." });
     assert.equal(screen.queryByRole("button", { name: /Account menu for/ }), null);
-    fireEvent.change(screen.getByLabelText("Mobile number"), {
-      target: { value: "9876543210" },
+    fireEvent.change(screen.getByLabelText("Email address"), {
+      target: { value: "demo@example.com" },
     });
     fireEvent.click(
       screen.getByRole("button", { name: "Get verification code" }),
@@ -679,6 +682,7 @@ describe("logout", () => {
 });
 
 describe("mobile sign-in and sign-up preview", () => {
+  beforeEach(() => { mock.method(authFeatures, "mobilePreviewEnabled", () => true); });
   it("validates mobile and OTP, allows changing the number, and opens the dashboard directly", async () => {
     globalThis.fetch = async () => {
       throw new Error("Auth preview must not make network requests");
@@ -790,8 +794,8 @@ describe("create account name", () => {
     };
     const { queryClient } = renderApp("/signup");
     await screen.findByRole("textbox", { name: "Your name" });
-    fireEvent.change(screen.getByLabelText("Mobile number"), {
-      target: { value: "9876543210" },
+    fireEvent.change(screen.getByLabelText("Email address"), {
+      target: { value: "demo@example.com" },
     });
     fireEvent.click(
       screen.getByRole("button", { name: "Get verification code" }),
@@ -814,7 +818,7 @@ describe("create account name", () => {
     );
     await screen.findByLabelText("Verification code");
     assert.equal(screen.queryByText("Riya Preview"), null);
-    fireEvent.click(screen.getByRole("button", { name: "Change number" }));
+    fireEvent.click(screen.getByRole("button", { name: "Change email" }));
     assert.equal(
       (screen.getByRole("textbox", { name: "Your name" }) as HTMLInputElement).value,
       "Riya Preview",
@@ -830,6 +834,8 @@ describe("create account name", () => {
 });
 
 describe("email OTP preview", () => {
+  // This suite also checks switching away from email in the preserved preview.
+  beforeEach(() => { mock.method(authFeatures, "mobilePreviewEnabled", () => true); });
   for (const signup of [false, true]) {
     it(`validates email, preserves it on change, expires/resends OTP, and opens dashboard for ${signup ? "signup" : "login"}`, async () => {
       const api = new MockPantryApi();

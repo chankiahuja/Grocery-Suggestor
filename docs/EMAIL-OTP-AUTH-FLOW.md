@@ -1,6 +1,6 @@
 # Email OTP authentication flow (GS-14)
 
-This document describes the full-stack email sign-in and sign-up flow implemented by [AuthService](../backend/src/main/java/com/pantrypal/AuthService.java), [AuthController](../backend/src/main/java/com/pantrypal/AuthController.java), and [SecurityConfig](../backend/src/main/java/com/pantrypal/SecurityConfig.java). The browser-only `dev:mock` and mobile preview flows do not authenticate with Spring.
+This document describes the full-stack email sign-in and sign-up flow implemented by [AuthService](../backend/src/main/java/com/pantrypal/AuthService.java), [AuthController](../backend/src/main/java/com/pantrypal/AuthController.java), and [SecurityConfig](../backend/src/main/java/com/pantrypal/SecurityConfig.java). Email is the only visible method by default in both normal and demo mode. The browser-only `dev:mock` flow and the opt-in mobile preview do not authenticate with Spring. The mobile preview is retained behind `VITE_ENABLE_MOBILE_PREVIEW`, disabled by default; enabling it does not provide SMS authentication.
 
 ## End-to-end flow
 
