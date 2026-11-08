@@ -14,7 +14,7 @@ The restriction is checked at method selection, form submission, code request, r
 
 ## Account release check
 
-On 2026-11-09, a read-only transaction inspected the local PostgreSQL database `pantrypal` at `localhost:5432`, schema `public`:
+On 2026-11-08 (Asia/Kolkata, UTC+05:30), a read-only transaction inspected the local PostgreSQL database `pantrypal` at `localhost:5432`, schema `public`:
 
 - `accounts` has `id`, required `email`, optional `display_name`, and `created_at`; no phone/mobile identifier column.
 - Four accounts exist; zero have a missing/blank email or an identifier lacking `@`.
