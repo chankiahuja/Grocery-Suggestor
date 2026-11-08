@@ -12,6 +12,7 @@ import {
   otpError,
 } from "@/lib/demo-auth";
 import { PHONE_COUNTRIES } from "@/lib/phone-countries";
+import { authFeatures } from "@/lib/auth-features";
 
 export default function Auth() { return <AuthScreen />; }
 export function PreviewAuth() { return <AuthScreen demo />; }
@@ -19,11 +20,12 @@ export function PreviewAuth() { return <AuthScreen demo />; }
 function AuthScreen({ demo }: { demo?: boolean }) {
   const session = useSessionAccess();
   const preview = demo ?? session.demo;
+  const mobileEnabled = authFeatures.mobilePreviewEnabled();
   const completePreview = useCompletePreview();
   const [location, navigate] = useLocation();
   const signup = location === "/signup";
-  const [step, setStep] = useState<"mobile" | "otp">("mobile");
-  const [method, setMethod] = useState<"mobile" | "email">(preview ? "mobile" : "email");
+  const [step, setStep] = useState<"identifier" | "otp">("identifier");
+  const [method, setMethod] = useState<"mobile" | "email">(preview && mobileEnabled ? "mobile" : "email");
   const isEmail = method === "email";
   const [identifier, setIdentifier] = useState("");
   const [countryRegion, setCountryRegion] = useState("IN");
@@ -53,12 +55,24 @@ function AuthScreen({ demo }: { demo?: boolean }) {
     busy.current = false;
     setPending(false);
     setChallengeId("");
-    setStep("mobile");
+    setStep("identifier");
     setOtp("");
     setError("");
     setStatus("");
     setExpiresAt(0);
     setResendAt(0);
+  }
+  function ensureMethodAvailable() {
+    // Recheck at submission time as well as hiding the option. A stale mobile
+    // form must not issue, resend or verify a code after the switch is disabled.
+    if (method === "mobile" && !authFeatures.mobilePreviewEnabled()) {
+      reset();
+      setMethod("email");
+      setIdentifier("");
+      setError("Mobile sign-in is currently unavailable. Use email.");
+      return false;
+    }
+    return true;
   }
   function identifierError(value: string) {
     const message = isEmail ? emailError(value) : mobileError(value, countryCode);
@@ -73,6 +87,9 @@ function AuthScreen({ demo }: { demo?: boolean }) {
     setFullName("");
     setNameError("");
   }, [location]);
+  useEffect(() => {
+    if (!mobileEnabled && method === "mobile") ensureMethodAvailable();
+  }, [mobileEnabled, method]);
   useEffect(() => () => { requestVersion.current++; }, []);
   useEffect(() => {
     if (step !== "otp") return;
@@ -80,7 +97,7 @@ function AuthScreen({ demo }: { demo?: boolean }) {
     return () => window.clearInterval(timer);
   }, [step]);
   useEffect(() => {
-    if (step === "mobile") {
+    if (step === "identifier") {
       if (signup && !fullName) nameInput.current?.focus();
       else identifierInput.current?.focus();
     }
@@ -101,6 +118,7 @@ function AuthScreen({ demo }: { demo?: boolean }) {
   }
 
   async function sendCode() {
+    if (!ensureMethodAvailable()) return;
     if (busy.current) return;
     if (preview || !isEmail) {
       issueDemoCode();
@@ -130,6 +148,7 @@ function AuthScreen({ demo }: { demo?: boolean }) {
   }
 
   async function verifyCode() {
+    if (!ensureMethodAvailable()) return;
     if (busy.current) return;
     const message = preview || !isEmail ? otpError(otp, expiresAt)
       : !/^[0-9]{6}$/.test(otp.trim()) ? "Enter a 6-digit verification code." : "";
@@ -245,9 +264,10 @@ function AuthScreen({ demo }: { demo?: boolean }) {
                 ? "Mobile is a preview. Use email for account access."
                 : signup
                 ? "Create your account. Make room for simpler days."
-                : "Your email or mobile. No password to remember."}
+                : mobileEnabled ? "Your email or mobile. No password to remember."
+                : "Your email. No password to remember."}
           </p>
-          {step === "mobile" && (
+          {step === "identifier" && (
             <>
               <nav className="auth-account-tabs" aria-label="Account options">
                 <Link href="/login" aria-current={!signup ? "page" : undefined}>
@@ -261,6 +281,7 @@ function AuthScreen({ demo }: { demo?: boolean }) {
                 noValidate
                 onSubmit={(event) => {
                   event.preventDefault();
+                  if (!ensureMethodAvailable()) return;
                   const missingName = signup && !fullName.trim();
                   setNameError(missingName ? "Enter your name." : "");
                   const message = identifierError(identifier);
@@ -314,7 +335,7 @@ function AuthScreen({ demo }: { demo?: boolean }) {
                     </p>
                   </div>
                 )}
-                <div
+                {mobileEnabled && <div
                   className="auth-tabs auth-methods"
                   role="group"
                   aria-label="Choose mobile number or email"
@@ -326,6 +347,7 @@ function AuthScreen({ demo }: { demo?: boolean }) {
                       disabled={pending}
                       aria-pressed={method === option}
                       onClick={() => {
+                        if (option === "mobile" && !authFeatures.mobilePreviewEnabled()) return;
                         if (option === method) return;
                         reset();
                         setIdentifier("");
@@ -335,7 +357,7 @@ function AuthScreen({ demo }: { demo?: boolean }) {
                       {option === "email" ? "Email address" : "Mobile number"}
                     </button>
                   ))}
-                </div>
+                </div>}
                 <div className="auth-field">
                   <label htmlFor="auth-mobile">
                     {isEmail ? "Email address" : "Mobile number"}
@@ -399,7 +421,7 @@ function AuthScreen({ demo }: { demo?: boolean }) {
                 </button>
                 <p className="auth-new-account">
                   {signup
-                    ? "Verify your email or mobile to create your account."
+                    ? mobileEnabled ? "Verify your email or mobile to create your account." : "Verify your email to create your account."
                     : "Sign in with a one-time code. No password needed."}
                 </p>
               </form>
@@ -469,6 +491,7 @@ function AuthScreen({ demo }: { demo?: boolean }) {
                   type="button"
                   disabled={remaining > 0 || pending}
                   onClick={() => {
+                    if (!ensureMethodAvailable()) return;
                     if (Date.now() < resendAt) return;
                     if (preview || !isEmail) {
                       issueDemoCode();
@@ -488,7 +511,7 @@ function AuthScreen({ demo }: { demo?: boolean }) {
           {(preview || !isEmail) && <aside className="auth-demo-notice">
             <strong>{preview ? "Interactive preview" : "Mobile preview — not authenticated"}</strong>
             <p>
-              {preview ? "No SMS or email is sent." : "No SMS is sent. Sign in with email for real access."} Use demo code <b>{DEMO_OTP}</b> on the
+              {preview ? mobileEnabled ? "No SMS or email is sent." : "No email is sent." : "No SMS is sent. Sign in with email for real access."} Use demo code <b>{DEMO_OTP}</b> on the
               next screen. No account or authenticated session is created by this preview.
             </p>
           </aside>}

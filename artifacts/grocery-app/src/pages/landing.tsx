@@ -30,7 +30,7 @@ export default function Landing() {
             <div className="landing-actions">
               <Link className="landing-button" href="/signup">Create account <ArrowUpRight size={16} /></Link>
             </div>
-            <p className="landing-access-note">Sign in with a one-time code by email or mobile.</p>
+            <p className="landing-access-note">Sign in with a one-time code by email.</p>
             <Link className="landing-demo-link" href="/login">Explore the sample dashboard <ArrowUpRight size={14} /></Link>
           </div>
           <div className="landing-visual">
