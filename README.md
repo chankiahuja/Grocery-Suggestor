@@ -42,6 +42,8 @@ Normal full-stack mode uses real email OTP and persistent server-side sessions. 
 
 `dev:mock` keeps the browser-only email OTP preview with code `123456` and localStorage pantry data. Its navigation gate does not authenticate against Spring. Login and signup offer email only by default in both normal and demo mode. The mobile preview and country selector are preserved behind the disabled-by-default `VITE_ENABLE_MOBILE_PREVIEW` build flag; explicitly enabling it restores only a preview, never SMS delivery or backend authentication. See [environment setup](docs/ENVIRONMENT.md#mobile-preview-opt-in) for opt-in instructions and [the email-only release check](docs/GS-114-EMAIL-ONLY-AUTH.md) for account audit scope.
 
+Login sends a code only for an existing account. Its response says “If an account exists for this email, we'll send a verification code” without confirming account existence or delivery. Login delivery runs in a bounded background queue; signup remains the way to create an account and sends its code synchronously. If no login code arrives, check the email/spam folder or choose Create an account. After a restart or delivery failure, request another code after the cooldown.
+
 The `seed:demo` command requests a local email code, prompts for the code shown in Mailpit and then seeds through an authenticated session. Optionally set `DEMO_SEED_EMAIL` to skip the email prompt. See [environment setup](docs/ENVIRONMENT.md) for mail and session settings.
 
 ### Optional PostgreSQL setup with Docker

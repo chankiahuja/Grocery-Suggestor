@@ -16,6 +16,8 @@ import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.security.core.Authentication;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -39,6 +41,7 @@ class AuthFlowTest {
     @Autowired ObjectMapper json;
     @Autowired JdbcTemplate jdbc;
     @Autowired AuthService auth;
+    @Autowired @Qualifier("loginMailExecutor") ThreadPoolTaskExecutor loginMailExecutor;
     @MockitoBean OtpMailSender mail;
     @MockitoBean Clock clock;
     @MockitoSpyBean NotificationEvents notifications;
@@ -73,7 +76,12 @@ class AuthFlowTest {
         }
         JsonNode post(String path, Object body, int expected) throws Exception {
             var request = postRequest(path).content(json.writeValueAsString(body));
-            return read(mvc.perform(request).andExpect(status().is(expected)).andReturn());
+            var response = read(mvc.perform(request).andExpect(status().is(expected)).andReturn());
+            if (path.equals("/api/auth/code") && expected == 200) {
+                await().atMost(Duration.ofSeconds(5)).until(() ->
+                    loginMailExecutor.getActiveCount() == 0 && loginMailExecutor.getThreadPoolExecutor().getQueue().isEmpty());
+            }
+            return response;
         }
         org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder postRequest(String path) {
             var request = org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(path)
@@ -263,7 +271,8 @@ class AuthFlowTest {
         var browser = new Browser(); browser.session();
         var login = browser.post("/api/auth/code", Map.of("email", "new@example.com", "intent", "login"), 200);
         assertThat(login.get("challengeId").asText()).isNotBlank();
-        browser.verify("new@example.com", login, codes.get("new@example.com"), 400);
+        verify(mail, never()).send(eq("new@example.com"), anyString(), anyLong());
+        browser.verify("new@example.com", login, "000000", 400);
         assertThat(browser.session().get("authenticated").asBoolean()).isFalse();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM accounts WHERE email='new@example.com'", Integer.class)).isZero();
         assertThat(jdbc.queryForObject("SELECT used FROM email_challenges WHERE email='new@example.com'", Boolean.class)).isTrue();
@@ -341,7 +350,7 @@ class AuthFlowTest {
         now.addAndGet(300_000);
         browser.verify("expired@example.com", challenge, codes.get("expired@example.com"), 410);
         doThrow(new MailSendException("Delivery unavailable")).when(mail).send(eq("failed@example.com"), anyString(), anyLong());
-        browser.post("/api/auth/code", Map.of("email", "failed@example.com", "intent", "login"), 503);
+        browser.post("/api/auth/code", Map.of("email", "failed@example.com", "intent", "signup", "name", "Test"), 503);
         assertThat(jdbc.queryForObject("SELECT used FROM email_challenges WHERE email='failed@example.com'", Boolean.class)).isTrue();
         assertThat(jdbc.queryForObject("SELECT code_hash FROM email_challenges WHERE email='failed@example.com'", String.class)).isNull();
     }

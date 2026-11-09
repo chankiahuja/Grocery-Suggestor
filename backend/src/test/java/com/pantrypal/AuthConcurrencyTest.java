@@ -13,6 +13,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -25,6 +27,8 @@ import org.springframework.web.server.ResponseStatusException;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.awaitility.Awaitility.await;
+import java.time.Duration;
 
 @SpringBootTest(properties = {
     "spring.datasource.url=${AUTH_BURST_DB_URL:jdbc:h2:mem:auth_burst;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE}",
@@ -40,6 +44,7 @@ class AuthConcurrencyTest {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper json;
     @Autowired DataSource dataSource;
+    @Autowired @Qualifier("loginMailExecutor") ThreadPoolTaskExecutor loginMailExecutor;
     @MockitoBean OtpMailSender mail;
     @MockitoBean Clock clock;
     final AtomicLong now = new AtomicLong();
@@ -86,13 +91,17 @@ class AuthConcurrencyTest {
         var browsers = new ArrayList<Browser>();
         for (int i = 0; i < 100; i++) browsers.add(new Browser(i));
         for (String intent : List.of("signup", "login")) {
-            captureMail(new CountDownLatch(100));
+            // Signup requests deliver synchronously; bounded login workers cannot
+            // rendezvous all 100 sends at once. Wait for queued activation instead.
+            captureMail("signup".equals(intent) ? new CountDownLatch(100) : null);
             burst(browsers, browser -> {
                 browser.session();
                 browser.challenge = browser.post("/api/auth/code", Map.of(
                     "email", browser.email, "intent", intent, "name", "Person " + browser.index), 200);
                 return 200;
             });
+            await().atMost(Duration.ofSeconds(15)).until(() ->
+                loginMailExecutor.getActiveCount() == 0 && loginMailExecutor.getThreadPoolExecutor().getQueue().isEmpty());
             var results = burst(browsers, browser -> {
                 var state = browser.post("/api/auth/verify", Map.of("email", browser.email,
                     "challengeId", browser.challenge.get("challengeId").asText(), "code", codes.get(browser.email)), 200);

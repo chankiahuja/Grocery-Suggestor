@@ -42,7 +42,8 @@ paths:
       tags: [auth]
       security:
         - CsrfToken: []
-      summary: Send an expiring single-use email code; server enforces request limits and resend cooldown
+      summary: Request an expiring email code with request limits and resend cooldown
+      description: Login requests enqueue delivery and return the same challenge shape whether an account exists or not. Only existing accounts receive login email. SMTP timing and failures do not affect the login response. Signup sends synchronously and may return a delivery error.
       requestBody:
         required: true
         content:
@@ -51,7 +52,7 @@ paths:
               $ref: "#/components/schemas/EmailCodeRequest"
       responses:
         "200":
-          description: Code delivered to the configured email transport
+          description: Login request accepted without confirming account existence or delivery; signup code delivered to the configured email transport
           content:
             application/json:
               schema:
@@ -63,7 +64,7 @@ paths:
         "429":
           description: Request limit or resend cooldown exceeded
         "503":
-          description: Delivery failed; challenge invalidated
+          description: Login delivery queue unavailable, or signup delivery failed; matching challenge invalidated
   /auth/verify:
     post:
       operationId: verifyEmailCode
@@ -85,11 +86,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/AuthSession"
         "400":
-          description: Invalid, superseded or reused code, or login without an existing account
+          description: Generic verification failure; login also uses this response for expired codes, exhausted challenge attempts, and absent accounts
         "403":
           description: Missing or invalid CSRF token
         "410":
-          description: Expired code
+          description: Expired signup code; login failures remain generic
         "429":
           description: Attempt limit exceeded
   /auth/logout:

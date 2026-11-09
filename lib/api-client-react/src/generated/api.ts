@@ -158,7 +158,8 @@ export const getRequestEmailCodeUrl = () => {
 }
 
 /**
- * @summary Send an expiring single-use email code; server enforces request limits and resend cooldown
+ * Login requests enqueue delivery and return the same challenge shape whether an account exists or not. Only existing accounts receive login email. SMTP timing and failures do not affect the login response. Signup sends synchronously and may return a delivery error.
+ * @summary Request an expiring email code with request limits and resend cooldown
  */
 export const requestEmailCode = async (emailCodeRequest: EmailCodeRequest, options?: Parameters<typeof customFetch>[1]): Promise<EmailChallenge> => {
 
@@ -207,7 +208,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type RequestEmailCodeMutationError = ErrorType<void>
 
     /**
- * @summary Send an expiring single-use email code; server enforces request limits and resend cooldown
+ * @summary Request an expiring email code with request limits and resend cooldown
  */
 export const useRequestEmailCode = <TError = ErrorType<void>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestEmailCode>>, TError,{data: BodyType<EmailCodeRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
