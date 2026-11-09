@@ -87,7 +87,23 @@ npx pnpm@10.26.1 start
 
 Open http://localhost:8080. Use your installed JDK path for `JAVA_HOME`. The start command rebuilds React before starting Java and uses the default `local` profile, with H2 at `backend/data/pantrypal.mv.db`. Data survives restarts. Do not open the same database from multiple application processes. Set an absolute `PANTRYPAL_DATA_DIR` to keep the location consistent across launch methods. The H2 console is not enabled. No browser-side mock is enabled in this mode.
 
-For PostgreSQL, set `$env:SPRING_PROFILES_ACTIVE = 'postgres'` and configure `DB_URL`, `DB_USER`, and `DB_PASSWORD` before starting. Existing `DB_*` variables do not override the local H2 profile. Compose explicitly selects PostgreSQL. Tests continue to use an isolated in-memory H2 database. H2 compatibility mode does not establish PostgreSQL compatibility.
+For native PostgreSQL, set `$env:SPRING_PROFILES_ACTIVE = 'postgres'` and configure `DB_URL`, `DB_USER`, and `DB_PASSWORD` before starting. Existing `DB_*` variables do not override the local H2 profile. Use `jdbc:postgresql://localhost:5432/pantrypal` for normal local app use. Use the separate `jdbc:postgresql://localhost:5432/pantrypal_auth_test` database for destructive, migration, concurrency, or load tests; never point those tests at production or the normal app database. Compose explicitly selects PostgreSQL. Tests continue to use an isolated in-memory H2 database unless a PostgreSQL-specific smoke test is explicitly enabled. H2 compatibility mode does not establish PostgreSQL compatibility.
+
+Switching from H2 to PostgreSQL does not transfer or delete H2 records. Keep the H2 database files intact; if existing records are needed in PostgreSQL, plan and verify a separate one-time export/import before switching normal app use. PantryPal's notifications are process-local refresh signals, not durable records; after restart, active alerts are reconstructed from the PostgreSQL-backed pantry via `/api/suggestions`.
+
+The opt-in PostgreSQL smoke tests create and drop uniquely named schemas inside the isolated test database. From `backend`, configure only `DB_URL`, `DB_USER`, and `DB_PASSWORD` for `pantrypal_auth_test`, then run:
+
+```powershell
+$env:DB_URL = 'jdbc:postgresql://localhost:5432/pantrypal_auth_test'
+$env:DB_USER = '<local test database user>'
+$env:DB_PASSWORD = '<local test database password>'
+$env:PANTRYPAL_POSTGRES_SMOKE = 'true'
+.\mvnw.cmd '-Dtest=PostgresAccountOwnershipSmokeTest' test
+$env:PANTRYPAL_POSTGRES_RUNTIME_SMOKE = 'true'
+.\mvnw.cmd '-Dtest=PostgresRuntimeSmokeTest' test
+```
+
+The runtime smoke starts the real `postgres` profile twice, applies and validates Flyway migrations, checks account/inventory/list and recoverable alert persistence, verifies service-layer two-account isolation, and runs 30 concurrent stock updates through a pool capped at two connections. It does not exercise HTTP/session isolation or prove notification delivery across restart. Notifications are not durable; only the active alert snapshot is reconstructed from inventory. Never set these test variables to the normal app database.
 
 ## Troubleshooting
 
