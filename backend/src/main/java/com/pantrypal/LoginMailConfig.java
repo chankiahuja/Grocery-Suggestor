@@ -1,5 +1,6 @@
 package com.pantrypal;
 
+import java.util.concurrent.ThreadPoolExecutor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
@@ -15,6 +16,7 @@ public class LoginMailConfig {
         executor.setThreadNamePrefix("pantry-login-mail-");
         executor.setDaemon(true);
         // Never perform SMTP on the request thread when the queue is full.
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.AbortPolicy());
         return executor;
     }
 }

@@ -178,7 +178,9 @@ class LoginCodeTest {
         try {
             for (int i = 0; i < 4; i++) executor.execute(() -> {
                 entered.countDown();
-                try { release.await(10, TimeUnit.SECONDS); }
+                // Allow slow runs to fill the queue and assert rejection before
+                // workers can drain it. The finally block releases normal runs.
+                try { release.await(60, TimeUnit.SECONDS); }
                 catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
             });
             assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
