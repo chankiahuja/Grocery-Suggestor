@@ -16,8 +16,9 @@ function mailtoHref(address: string, category: string, subject: string, message:
     "",
     message.trim(),
   ].filter((line, index) => line || index < 3).join("\n");
-  const params = new URLSearchParams({ subject: subject.trim() || "PantryPal feedback", body });
-  return `mailto:${address}?${params.toString()}`;
+  const encodedSubject = encodeURIComponent(subject.trim() || "PantryPal feedback");
+  const encodedBody = encodeURIComponent(body);
+  return `mailto:${address}?subject=${encodedSubject}&body=${encodedBody}`;
 }
 
 export function FeedbackForm({ initialEmail = "", compact = false }: { initialEmail?: string; compact?: boolean }) {

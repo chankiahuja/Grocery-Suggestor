@@ -114,7 +114,10 @@ describe("Contact & Feedback", { concurrency: false }, () => {
 
     await screen.findByRole("alert");
     assert.equal((screen.getByLabelText("Message Required") as HTMLTextAreaElement).value, "Keep my text");
-    assert.match(screen.getByRole("link", { name: "Email support instead" }).getAttribute("href") ?? "", /^mailto:help@example\.test\?/);
+    const mailto = screen.getByRole("link", { name: "Email support instead" }).getAttribute("href") ?? "";
+    assert.match(mailto, /^mailto:help@example\.test\?subject=PantryPal%20feedback&body=/);
+    assert.match(mailto, /Keep%20my%20text$/);
+    assert.equal(mailto.includes("+"), false);
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     await screen.findByRole("heading", { name: "Message sent" });
     assert.equal(api.requests.filter(item => item.path === "/api/feedback" && item.method === "POST").length, 2);
