@@ -24,6 +24,16 @@
         <targetPath>static</targetPath>
       </resource>
     </resources>
+    <testResources>
+      <testResource><directory>src/test/resources</directory></testResource>
+      <!-- Give production settings a unique name: test application.yml shadows the main one. -->
+      <testResource>
+        <directory>src/main/resources</directory>
+        <includes><include>application.yml</include></includes>
+        <targetPath>production-config</targetPath>
+        <filtering>false</filtering>
+      </testResource>
+    </testResources>
     <plugins><plugin><groupId>org.springframework.boot</groupId><artifactId>spring-boot-maven-plugin</artifactId></plugin></plugins>
   </build>
 </project>
