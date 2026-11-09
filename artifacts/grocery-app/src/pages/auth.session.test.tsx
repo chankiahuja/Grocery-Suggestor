@@ -38,6 +38,7 @@ class AuthApi {
   requests: { path: string; method: string; csrf: string | null; body: Record<string, unknown> }[] = [];
   pantry = new MockPantryApi();
   codeFailure = 0;
+  codeFailureMessage = "Too many requests. Please wait before trying again.";
   verifyFailure = "";
   codeGate: Promise<void> | null = null;
   loseVerifyResponse = false;
@@ -56,7 +57,7 @@ class AuthApi {
     if (path.startsWith("/api/auth/") && csrf !== this.csrf) return json({ error: "CSRF missing" }, 403);
     if (path === "/api/auth/code") {
       if (this.codeGate) await this.codeGate;
-      if (this.codeFailure) return json({ error: "Too many requests. Please wait before trying again." }, this.codeFailure);
+      if (this.codeFailure) return json({ error: this.codeFailureMessage }, this.codeFailure);
       return json({ challengeId: "challenge-1", expiresAt: new Date(Date.now() + 300_000).toISOString(), resendAt: new Date(Date.now() + 30_000).toISOString() });
     }
     if (path === "/api/auth/verify") {
@@ -122,6 +123,53 @@ describe("route loading", { concurrency: false }, () => {
 });
 
 describe("email-only launch", { concurrency: false }, () => {
+  for (const scenario of [
+    { path: "/login", error: "Unable to request a code. Please try again shortly." },
+    { path: "/signup", error: "Email could not be sent. Please try again shortly." },
+  ]) {
+    it(`keeps ${scenario.path} on email entry after a 503 and permits recovery`, async () => {
+      const api = new AuthApi();
+      api.codeFailure = 503;
+      api.codeFailureMessage = scenario.error;
+      await mount(scenario.path, api);
+      if (scenario.path === "/signup") fireEvent.change(await screen.findByLabelText(/Your name/), { target: { value: "New Person" } });
+      fireEvent.change(await screen.findByLabelText("Email address"), { target: { value: "user@example.com" } });
+      fireEvent.click(screen.getByRole("button", { name: "Get verification code" }));
+      const error = await screen.findByText(scenario.error);
+      assert.equal(error.getAttribute("aria-live"), "polite");
+      assert.equal(screen.queryByLabelText("Verification code"), null);
+      assert.equal((screen.getByLabelText("Email address") as HTMLInputElement).value, "user@example.com");
+      assert.equal(api.authenticated, false);
+      assert.equal(api.requests.filter(request => request.path === "/api/auth/verify").length, 0);
+      api.codeFailure = 0;
+      fireEvent.click(screen.getByRole("button", { name: "Get verification code" }));
+      await screen.findByLabelText("Verification code");
+      assert.equal(screen.queryByText(scenario.error), null);
+    });
+  }
+
+  it("shows neutral guidance for accepted login and enables retry only after cooldown", async () => {
+    const api = new AuthApi();
+    await mount("/login", api);
+    fireEvent.change(await screen.findByLabelText("Email address"), { target: { value: "user@example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: "Get verification code" }));
+    await screen.findByLabelText("Verification code");
+    await screen.findByText("If an account exists for this email, we'll send a verification code.");
+    assert.ok(screen.getByText(/Delivery may be delayed or unavailable.*resend countdown/));
+    assert.equal(screen.queryByText("Code sent. Check your email inbox."), null);
+    const resend = screen.getByRole("button", { name: /Resend in/ }) as HTMLButtonElement;
+    assert.equal(resend.disabled, true);
+    fireEvent.click(resend);
+    assert.equal(api.requests.filter(request => request.path === "/api/auth/code").length, 1);
+    const later = Date.now() + 31_000;
+    mock.method(Date, "now", () => later);
+    await waitFor(() => assert.equal(resend.disabled, false), { timeout: 2500 });
+    fireEvent.click(screen.getByRole("button", { name: "Resend code" }));
+    await waitFor(() => assert.equal(api.requests.filter(request => request.path === "/api/auth/code").length, 2));
+    await waitFor(() => assert.equal((screen.getByRole("button", { name: /Resend in/ }) as HTMLButtonElement).disabled, true));
+    assert.equal(api.authenticated, false);
+  });
+
   it("uses conditional login copy and offers signup after a generic verification failure", async () => {
     const api = new AuthApi();
     api.verifyFailure = "We couldn't verify this code. Check your email and code, or request another. If you haven't registered, create an account first.";
