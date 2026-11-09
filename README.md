@@ -12,7 +12,7 @@ For visual walkthroughs, see the [application architecture](docs/ARCHITECTURE.md
 
 ### Local application on port 8080 (embedded database)
 
-Install Node.js 24 and Java 17+, and set `JAVA_HOME` to your JDK directory. From the repository root:
+Install Node.js 24 and Java 17+, and set `JAVA_HOME` to your JDK directory. The root `pnpm start` command loads an optional ignored `.env` before launching Spring. From the repository root:
 
 ```sh
 npx pnpm@10.26.1 install

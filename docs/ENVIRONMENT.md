@@ -26,10 +26,11 @@ Copy [`.env.example`](../.env.example) to `.env` to override Compose credentials
 | BASE_PATH | / | Vite |
 | API_TARGET | http://localhost:8080 | Vite proxy |
 | VITE_ENABLE_MOBILE_PREVIEW | false | Vite build-time opt-in for the preserved, unauthenticated mobile preview; not SMS authentication |
-| MAIL_HOST / MAIL_PORT | localhost / 1025 | Spring SMTP transport; local Mailpit defaults |
+| MAIL_HOST / MAIL_PORT | localhost / 1025 | Spring SMTP transport for native Java; local Mailpit defaults |
 | MAIL_FROM | PantryPal <no-reply@pantrypal.test> | Disposable local sender; configure a verified sender for real delivery |
 | MAIL_USERNAME / MAIL_PASSWORD | empty | SMTP credentials when using a provider |
-| MAIL_SMTP_AUTH / MAIL_STARTTLS | false / false | Enable for a provider that requires them |
+| MAIL_SMTP_AUTH / MAIL_STARTTLS | false / false | Enable for a provider that requires them; external SMTP with auth must also enable TLS |
+| PANTRYPAL_SMTP_HOST / PANTRYPAL_SMTP_PORT | mailpit / 1025 | Optional Docker Compose SMTP override; leave unset to use Mailpit |
 | PANTRYPAL_SUPPORT_EMAIL | empty | Recipient for Contact & Feedback submissions and displayed support link; the selected mailbox is `support@mypantrypal.in`; configure outside source control |
 | PANTRYPAL_SUPPORT_RESPONSE_TIME | empty | Optional, verified response expectation shown on the contact page; never inferred or invented |
 | AUTH_COOKIE_SECURE | false in local profile; true otherwise | Secure session-cookie flag; set true behind HTTPS |
@@ -41,7 +42,7 @@ For native Windows development, run your installed Mailpit executable with `--li
 
 Normal mode issues an HttpOnly, SameSite=Lax session cookie and a CSRF token returned by `GET /api/auth/session`. Session attributes are stored through Spring Session JDBC; Flyway creates the tables. Cookies are Secure by default outside the `local` profile. Serve a deployed app over HTTPS, keep `AUTH_COOKIE_SECURE=true`, and configure SMTP credentials only through environment variables. Pantry and shopping data is scoped to the signed-in account. A missing `AUTH_OTP_SECRET` invalidates outstanding codes on backend restart, while signed-in sessions continue to work.
 
-Contact & Feedback submits through the configured SMTP transport. Issue #126 records `support@mypantrypal.in` as the selected address, with MX/SPF checks and a two-way mail test completed on 9 November 2026. Set `PANTRYPAL_SUPPORT_EMAIL` to this address in the deployment environment before enabling the flow; the local ignored root `.env` is configured for Docker Compose. If no address is configured, the app displays a neutral unconfigured state and does not report successful delivery. Do not promise a response time until one is decided; `PANTRYPAL_SUPPORT_RESPONSE_TIME` remains optional and is displayed only when explicitly configured. User-submitted message contents are sent to the mailbox and are not written to application logs or the database. Configure support details and SMTP credentials through the deployment environment, never source control.
+For SMTP, the local Mailpit default stays unencrypted, but any external provider that requires authentication must also enable TLS. We explicitly reject that configuration at startup unless `MAIL_STARTTLS=true`. In the shared root `.env`, single-quote secrets containing `$` or `#` so Compose preserves the full value, for example `MAIL_PASSWORD='pa$word'` or `MAIL_PASSWORD='abc#123'`. Unquoted values are easy to rewrite during Compose interpolation. The root `pnpm start` launcher loads the ignored root `.env` for native Java; launching Maven directly still requires setting variables in the shell or IDE. Compose uses Mailpit by default; set `PANTRYPAL_SMTP_HOST` and `PANTRYPAL_SMTP_PORT` to override it, and configure `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_SMTP_AUTH`, `MAIL_STARTTLS`, and a verified `MAIL_FROM` as required by the provider. A message accepted by Mailpit is only captured locally, not delivered to the support inbox. If no support address is configured, the app displays a neutral unconfigured state and does not report successful delivery. Do not promise a response time until one is decided; `PANTRYPAL_SUPPORT_RESPONSE_TIME` remains optional and is displayed only when explicitly configured. User-submitted message contents are sent to the mailbox and are not written to application logs or the database. Configure support details and SMTP credentials through ignored local environment files or deployment environment, never source control.
 
 ### Mobile preview opt-in
 
