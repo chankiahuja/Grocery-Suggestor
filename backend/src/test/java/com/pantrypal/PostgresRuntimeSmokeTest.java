@@ -1,7 +1,10 @@
 package com.pantrypal;
 
 import java.sql.DriverManager;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -154,7 +157,14 @@ class PostgresRuntimeSmokeTest {
 
         Flyway flyway = context.getBean(Flyway.class);
         flyway.validate();
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("6");
+        var current = flyway.info().current();
+        assertThat(current).isNotNull();
+        var latestResolvedVersion = Arrays.stream(flyway.info().all())
+            .map(migration -> migration.getVersion())
+            .filter(Objects::nonNull)
+            .max(Comparator.naturalOrder())
+            .orElseThrow(() -> new IllegalStateException("Flyway resolved no versioned migrations"));
+        assertThat(current.getVersion()).isEqualTo(latestResolvedVersion);
     }
 
     private String schemaUrl(String url, String schema) {
