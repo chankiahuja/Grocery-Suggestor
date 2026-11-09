@@ -6,9 +6,14 @@ import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mail.MailException;
@@ -19,11 +24,13 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class AuthService {
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
     public record Account(long id, String email, String name) {}
     public record Challenge(String challengeId, String expiresAt, String resendAt) {}
     private final JdbcTemplate jdbc;
     private final AuthRateLimiter limits;
     private final OtpMailSender mail;
+    private final Executor loginMailExecutor;
     private final Clock clock;
     private final TransactionTemplate tx;
     private final SecureRandom random = new SecureRandom();
@@ -31,11 +38,13 @@ public class AuthService {
     private final long lifetimeSeconds, cooldownSeconds;
     private final int maxAttempts;
     public AuthService(JdbcTemplate jdbc, AuthRateLimiter limits, OtpMailSender mail, Clock clock, PlatformTransactionManager manager,
+        @Qualifier("loginMailExecutor") Executor loginMailExecutor,
         @Value("${pantrypal.auth.otp-secret:}") String secret,
         @Value("${pantrypal.auth.otp-lifetime-seconds:300}") long lifetimeSeconds,
         @Value("${pantrypal.auth.resend-cooldown-seconds:30}") long cooldownSeconds,
         @Value("${pantrypal.auth.max-attempts:5}") int maxAttempts) {
         this.jdbc = jdbc; this.limits = limits; this.mail = mail; this.clock = clock;
+        this.loginMailExecutor = loginMailExecutor;
         this.tx = new TransactionTemplate(manager);
         this.secret = secret.isBlank() ? random.generateSeed(32) : secret.getBytes(StandardCharsets.UTF_8);
         if (this.secret.length < 32 || lifetimeSeconds <= 0 || cooldownSeconds <= 0 || maxAttempts <= 0) {
@@ -79,16 +88,52 @@ public class AuthService {
             jdbc.update("UPDATE email_challenges SET challenge_id=?,code_hash=?,intent=?,display_name=?,expires_at=?,attempts=0,used=TRUE WHERE email=?",
                 id, codeHash, intent, "signup".equals(intent) ? displayName : null, expires, email);
         });
+        if ("login".equals(intent)) {
+            // Every login takes the same reservation/enqueue path. Account lookup
+            // and SMTP run off-thread, so delivery latency/failure cannot reveal membership.
+            final String loginCode = code;
+            try { loginMailExecutor.execute(() -> deliverLogin(email, id, loginCode, codeHash)); }
+            catch (RejectedExecutionException unavailable) {
+                invalidate(email, id);
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Unable to request a code. Please try again shortly.");
+            }
+        } else {
+            deliver(email, id, code, codeHash);
+        }
+        return new Challenge(id, Instant.ofEpochMilli(expires).toString(), Instant.ofEpochMilli(now + cooldownSeconds * 1000).toString());
+    }
+
+    private void deliverLogin(String email, String id, String code, String codeHash) {
+        try {
+            // Skip stale/expired queued work before sending anything.
+            var current = jdbc.queryForList("SELECT challenge_id, expires_at FROM email_challenges WHERE email=?", email);
+            if (current.isEmpty() || !id.equals(current.get(0).get("challenge_id"))
+                || clock.millis() >= ((Number) current.get(0).get("expires_at")).longValue()) return;
+            if (jdbc.queryForObject("SELECT COUNT(*) FROM accounts WHERE email=?", Integer.class, email) == 0) {
+                invalidate(email, id);
+                return;
+            }
+            deliver(email, id, code, codeHash);
+        } catch (RuntimeException failure) {
+            // No email address, code, SMTP diagnostics or exception text in logs.
+            log.warn("Login code delivery failed; request another code after the cooldown");
+        }
+    }
+
+    private void invalidate(String email, String id) {
+        tx.executeWithoutResult(status -> jdbc.update(
+            "UPDATE email_challenges SET code_hash=NULL,used=TRUE WHERE email=? AND challenge_id=?", email, id));
+    }
+
+    private void deliver(String email, String id, String code, String codeHash) {
         try { mail.send(email, code, lifetimeSeconds); }
         catch (MailException error) {
             // A delayed failure must not invalidate a newer resend.
-            tx.executeWithoutResult(status -> jdbc.update(
-                "UPDATE email_challenges SET code_hash=NULL,used=TRUE WHERE email=? AND challenge_id=?", email, id));
+            invalidate(email, id);
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Email could not be sent. Please try again shortly.");
         }
         tx.executeWithoutResult(status -> jdbc.update(
             "UPDATE email_challenges SET used=FALSE WHERE email=? AND challenge_id=? AND code_hash=?", email, id, codeHash));
-        return new Challenge(id, Instant.ofEpochMilli(expires).toString(), Instant.ofEpochMilli(now + cooldownSeconds * 1000).toString());
     }
 
     public Account verify(String rawEmail, String challengeId, String code, String ip) {
@@ -112,6 +157,15 @@ public class AuthService {
         var rows = jdbc.queryForList("SELECT * FROM email_challenges WHERE email=? FOR UPDATE", email);
         if (rows.isEmpty()) throw invalid();
         var row = rows.get(0);
+        try { return verifyReservedChallenge(email, challengeId, code, row); }
+        catch (ResponseStatusException rejection) {
+            // An undelivered login must behave like a wrong/expired/used login
+            // code, including after the attempt cap. Global rate limits still apply.
+            if ("login".equals(row.get("intent"))) throw invalid();
+            throw rejection;
+        }
+    }
+    private Account verifyReservedChallenge(String email, String challengeId, String code, Map<String, Object> row) {
         if (!challengeId.equals(row.get("challenge_id")) || Boolean.TRUE.equals(row.get("used")) || row.get("code_hash") == null) throw invalid();
         if (clock.millis() >= ((Number) row.get("expires_at")).longValue()) {
             throw new ResponseStatusException(HttpStatus.GONE, "This code has expired. Request another code.");
@@ -128,7 +182,7 @@ public class AuthService {
         }
         return accountByEmail(email);
     }
-    private ResponseStatusException invalid() { return new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid or already-used code. Request a new code if needed."); }
+    private ResponseStatusException invalid() { return new ResponseStatusException(HttpStatus.BAD_REQUEST, "We couldn't verify this code. Check your email and code, or request another. If you haven't registered, create an account first."); }
     public Account account(long id) {
         var row = jdbc.queryForMap("SELECT * FROM accounts WHERE id=?", id);
         return new Account(id, row.get("email").toString(), (String) row.get("display_name"));

@@ -138,7 +138,7 @@ function AuthScreen({ demo }: { demo?: boolean }) {
       setResendAt(Date.parse(challenge.resendAt));
       setNow(Date.now());
       setOtp("");
-      setStatus("Code sent. Check your email inbox.");
+      setStatus(signup ? "Code sent. Check your email inbox." : "If an account exists for this email, we'll send a verification code.");
       setStep("otp");
     } catch (cause) {
       if (version === requestVersion.current) setError(failureMessage(cause));
@@ -506,6 +506,9 @@ function AuthScreen({ demo }: { demo?: boolean }) {
               <p className="auth-resend-status" role="status">
                 {status}
               </p>
+              {!signup && !preview && isEmail && <p className="auth-new-account">
+                No code? Check your spam folder or email address. New here? <Link href="/signup">Create an account</Link>.
+              </p>}
             </form>
           )}
           {(preview || !isEmail) && <aside className="auth-demo-notice">

@@ -38,6 +38,7 @@ class AuthApi {
   requests: { path: string; method: string; csrf: string | null; body: Record<string, unknown> }[] = [];
   pantry = new MockPantryApi();
   codeFailure = 0;
+  verifyFailure = "";
   codeGate: Promise<void> | null = null;
   loseVerifyResponse = false;
   account = { id: 1, email: "user@example.com", name: "User" as string | null };
@@ -59,6 +60,7 @@ class AuthApi {
       return json({ challengeId: "challenge-1", expiresAt: new Date(Date.now() + 300_000).toISOString(), resendAt: new Date(Date.now() + 30_000).toISOString() });
     }
     if (path === "/api/auth/verify") {
+      if (this.verifyFailure) return json({ error: this.verifyFailure }, 400);
       if (body.code !== "654321") return json({ error: "Invalid code" }, 400);
       this.authenticated = true; this.csrf = "signed-in-token";
       if (this.loseVerifyResponse) throw new TypeError("Verification response lost after commit");
@@ -120,6 +122,29 @@ describe("route loading", { concurrency: false }, () => {
 });
 
 describe("email-only launch", { concurrency: false }, () => {
+  it("uses conditional login copy and offers signup after a generic verification failure", async () => {
+    const api = new AuthApi();
+    api.verifyFailure = "We couldn't verify this code. Check your email and code, or request another. If you haven't registered, create an account first.";
+    await mount("/login", api);
+    fireEvent.change(await screen.findByLabelText("Email address"), { target: { value: "unknown@example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: "Get verification code" }));
+    await screen.findByLabelText("Verification code");
+    await screen.findByText("If an account exists for this email, we'll send a verification code.");
+    assert.equal(screen.queryByText("Code sent. Check your email inbox."), null);
+    assert.match(document.body.textContent ?? "", /Check your spam folder or email address/);
+    fireEvent.change(screen.getByLabelText("Verification code"), { target: { value: "654321" } });
+    fireEvent.click(screen.getByRole("button", { name: "Verify & continue" }));
+    await screen.findByText(api.verifyFailure);
+    assert.equal(api.authenticated, false);
+    fireEvent.click(screen.getByRole("link", { name: "Create an account" }));
+    const name = await screen.findByLabelText(/Your name/);
+    fireEvent.change(name, { target: { value: "New Person" } });
+    fireEvent.change(screen.getByLabelText("Email address"), { target: { value: "unknown@example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: "Get verification code" }));
+    await screen.findByText("Code sent. Check your email inbox.");
+    assert.equal(api.requests.filter(request => request.path === "/api/auth/code").at(-1)?.body.intent, "signup");
+  });
+
   for (const preview of [false, true]) {
     for (const path of ["/login", "/signup"]) {
       it(`offers only email on ${path} in ${preview ? "demo" : "normal"} mode`, async () => {
@@ -143,7 +168,8 @@ describe("email-only launch", { concurrency: false }, () => {
         }
         fireEvent.change(screen.getByLabelText("Verification code"), { target: { value: preview ? "123456" : "654321" } });
         fireEvent.click(screen.getByRole("button", { name: "Verify & continue" }));
-        await screen.findByRole("heading", { name: "Dashboard" });
+        // The first sign-in loads the dashboard chunk lazily.
+        await screen.findByRole("heading", { name: "Dashboard" }, { timeout: 10_000 });
         assert.equal(api.authenticated, !preview);
         if (preview) assert.equal(api.requests.filter(request => request.path.startsWith("/api/auth/")).length, 0);
       });
@@ -191,7 +217,9 @@ describe("email-only launch", { concurrency: false }, () => {
         const input = screen.getByLabelText(action === "request" ? "Mobile number" : "Verification code");
         fireEvent.submit(input.closest("form")!);
       }
-      await screen.findByLabelText("Email address");
+      // React may suppress a click on a disabled resend button even after DOM
+      // tampering. The next one-second OTP timer tick also resets stale state.
+      await screen.findByLabelText("Email address", {}, { timeout: 3_000 });
       assert.ok(screen.getByText("Mobile sign-in is currently unavailable. Use email."));
       assert.equal(api.authenticated, false);
       assert.equal(api.requests.filter(request => ["/api/auth/code", "/api/auth/verify"].includes(request.path)).length, 0);
