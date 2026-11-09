@@ -111,7 +111,10 @@ class LoginCodeTest {
     }
 
     @Test void smtpFailureDoesNotChangeLoginResponseOrLeaveAUsableCode() throws Exception {
-        doThrow(new MailSendException("synthetic SMTP failure"))
+        doAnswer(call -> {
+            codes.put(call.getArgument(0), call.getArgument(1));
+            throw new MailSendException("synthetic SMTP failure");
+        })
             .when(mail).send(eq("known@example.com"), anyString(), anyLong());
         var known = request("known@example.com", 200);
         var absent = request("absent@example.com", 200);
@@ -121,6 +124,20 @@ class LoginCodeTest {
             assertThat(jdbc.queryForObject("SELECT used FROM email_challenges WHERE email=?", Boolean.class, email)).isTrue();
         }
         assertThat(responseFields(known)).isEqualTo(responseFields(absent));
+        // Even the actual attempted code cannot authenticate after failed delivery.
+        assertThatThrownBy(() -> auth.verify("known@example.com", known.get("challengeId").asText(), codes.get("known@example.com"), "verify-ip"))
+            .isInstanceOf(ResponseStatusException.class).satisfies(failure ->
+                assertThat(((ResponseStatusException) failure).getStatusCode().value()).isEqualTo(400));
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM accounts", Integer.class)).isEqualTo(1);
+        assertThat(request("known@example.com", 429)).isEqualTo(request("absent@example.com", 429));
+        doAnswer(call -> { codes.put(call.getArgument(0), call.getArgument(1)); return null; })
+            .when(mail).send(anyString(), anyString(), anyLong());
+        now.addAndGet(30_000);
+        var recovered = request("known@example.com", 200);
+        var absentRetry = request("absent@example.com", 200);
+        assertThat(responseFields(recovered)).isEqualTo(responseFields(absentRetry));
+        delivered();
+        assertThat(auth.verify("known@example.com", recovered.get("challengeId").asText(), codes.get("known@example.com"), "verify-ip").name()).isEqualTo("Known");
     }
 
     @Test void loginVerificationFailuresStayGenericEvenAfterExpiryOrAttemptCap() throws Exception {

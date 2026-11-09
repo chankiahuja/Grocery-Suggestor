@@ -507,7 +507,7 @@ function AuthScreen({ demo }: { demo?: boolean }) {
                 {status}
               </p>
               {!signup && !preview && isEmail && <p className="auth-new-account">
-                No code? Check your spam folder or email address. New here? <Link href="/signup">Create an account</Link>.
+                No code? Check your spam folder or email address. Delivery may be delayed or unavailable. Wait for the resend countdown, then choose Resend code to try again. New here? <Link href="/signup">Create an account</Link>.
               </p>}
             </form>
           )}
