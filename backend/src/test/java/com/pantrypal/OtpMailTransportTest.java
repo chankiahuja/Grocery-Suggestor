@@ -8,13 +8,28 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.autoconfigure.mail.MailSenderAutoConfiguration;
+import org.springframework.boot.env.YamlPropertySourceLoader;
 import org.springframework.boot.test.context.ConfigDataApplicationContextInitializer;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.mail.MailException;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
+import org.springframework.core.io.ClassPathResource;
 import static org.assertj.core.api.Assertions.*;
 
 class OtpMailTransportTest {
+    @Test
+    void testAndProductionConfigurationRemainSeparate() throws Exception {
+        var loader = new YamlPropertySourceLoader();
+        var test = loader.load("test", new ClassPathResource("application.yml")).get(0);
+        var production = loader.load("production", new ClassPathResource("production-config/application.yml")).get(0);
+        assertThat(test.getProperty("spring.datasource.url").toString()).startsWith("jdbc:h2:mem:pantry;");
+        for (String key : new String[] {"connectiontimeout", "timeout", "writetimeout"}) {
+            String property = "spring.mail.properties.mail.smtp." + key;
+            assertThat(test.getProperty(property)).isNull();
+            assertThat(production.getProperty(property)).hasToString("5000");
+        }
+    }
+
     @Test
     @Timeout(20)
     void configuredReadTimeoutBoundsAnUnresponsiveSmtpServer() throws Exception {
@@ -34,7 +49,7 @@ class OtpMailTransportTest {
                     .withInitializer(new ConfigDataApplicationContextInitializer())
                     .withConfiguration(AutoConfigurations.of(MailSenderAutoConfiguration.class))
                     .withPropertyValues(
-                        "spring.config.location=file:src/main/resources/application.yml",
+                        "spring.config.location=classpath:/production-config/application.yml",
                         "spring.mail.host=127.0.0.1", "spring.mail.port=" + server.getLocalPort(),
                         "spring.mail.username=", "spring.mail.password=",
                         "spring.mail.properties.mail.smtp.auth=false",
@@ -44,7 +59,8 @@ class OtpMailTransportTest {
                         assertThat(context).hasNotFailed();
                         var sender = context.getBean(JavaMailSenderImpl.class);
                         var properties = sender.getJavaMailProperties();
-                        // Values come from application.yml, not test overrides.
+                        // This is a build-time copy of production application.yml,
+                        // not the same-named test configuration or timeout overrides.
                         for (String key : new String[] {"connectiontimeout", "timeout", "writetimeout"}) {
                             assertThat(properties.getProperty("mail.smtp." + key)).isEqualTo("5000");
                         }
