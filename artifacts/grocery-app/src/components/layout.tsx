@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Home, Package, ShoppingCart, Tags, Leaf, UserRound, LogOut, ChevronDown } from "lucide-react";
+import { Home, Package, ShoppingCart, Tags, Leaf, UserRound, LogOut, ChevronDown, MessageSquareText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NotificationCenter } from "@/components/notification-center";
 import { useLogoutPreview, useSessionAccess } from "@/lib/preview-access";
@@ -7,6 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { QuickFeedbackDialog } from "@/components/quick-feedback-dialog";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location, navigate] = useLocation();
@@ -16,6 +17,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState("");
   const [accountDetailsOpen, setAccountDetailsOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const accountTrigger = useRef<HTMLButtonElement>(null);
   const logoutPending = useRef(false);
   const isShoppingListDetail = /^\/shopping-lists\/[^/]+$/.test(location);
@@ -127,6 +129,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <DropdownMenuItem className="pantry-account-menu-item" onSelect={() => setAccountDetailsOpen(true)}>
                   <UserRound aria-hidden="true" /> Account details
                 </DropdownMenuItem>
+                <DropdownMenuItem className="pantry-account-menu-item" onSelect={() => setFeedbackOpen(true)}>
+                  <MessageSquareText aria-hidden="true" /> Share feedback
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem className="pantry-account-menu-item pantry-account-logout" disabled={loggingOut} onSelect={() => void handleLogout()}>
                   <LogOut aria-hidden="true" /> {loggingOut ? "Logging out…" : "Log out"}
@@ -152,6 +157,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </dl>
         </DialogContent>
       </Dialog>
+      {feedbackOpen && <QuickFeedbackDialog email={account?.email} open onOpenChange={setFeedbackOpen} />}
       <main className="pantry-main">
         <nav aria-label="Breadcrumb" className="pantry-breadcrumb">
           <Link href="/dashboard">My household</Link>
@@ -190,6 +196,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <Leaf className="h-3 w-3" /> A little more in order.
           </span>
           <span>Thoughtful shopping. Less waste.</span>
+          <Link href="/contact">Contact &amp; Feedback</Link>
         </footer>
       </main>
     </div>

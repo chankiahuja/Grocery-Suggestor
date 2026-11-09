@@ -55,6 +55,7 @@ export default function Landing() {
 
       <footer className="landing-footer">
         <span><Leaf size={13} /> Thoughtfully stocked. Simply lived.</span>
+        <Link href="/contact">Contact &amp; Feedback</Link>
         <span>© Pantry Pal · A little more in order.</span>
       </footer>
     </div>

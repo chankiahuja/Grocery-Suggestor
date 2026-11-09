@@ -9,7 +9,7 @@ flowchart TB
     User["User"]
 
     subgraph Browser["Browser: React and TypeScript"]
-        Screens["Dashboard, inventory and shopping lists"]
+        Screens["Dashboard, inventory, shopping lists and Contact & Feedback"]
         Feedback["Consume / Restock dialogs and Undo feedback"]
         Queries["Generated API client and React Query cache"]
         Bell["Notification bell"]
@@ -46,7 +46,7 @@ flowchart TB
     Events -->|SSE: /api/notifications/stream| Stream
 ```
 
-The server owns validation, authenticated sessions and committed stock. React Query caches server responses and refetches dependent views after changes. SSE carries refresh signals; the notification bell recovers its alert contents from the suggestions API. There is no message broker or durable notification inbox.
+The server owns validation, authenticated sessions and committed stock. React Query caches server responses and refetches dependent views after changes. SSE carries refresh signals; the notification bell recovers its alert contents from the suggestions API. There is no message broker or durable notification inbox. The public Contact & Feedback page and signed-in quick-feedback dialog use a CSRF-protected API; submissions are validated, rate limited and sent to the environment-configured support mailbox without being persisted or logged. The address and any response-time note are environment-configured; absent details are not invented. A success response means the SMTP transport accepted the message.
 
 OpenAPI defines the REST contract and generates the TypeScript client; it does not generate the Spring backend. Database changes use new Flyway migrations. Historical Express/Drizzle packages are outside this runtime.
 

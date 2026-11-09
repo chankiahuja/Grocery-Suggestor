@@ -7,7 +7,7 @@ info:
 security:
   - SessionCookie: []
 x-authentication-notes: >-
-  API access requires a session except for health and auth endpoints. Obtain a CSRF token
+  API access requires a session except for health, auth, and feedback endpoints. Obtain a CSRF token
   from GET /auth/session and send it as X-CSRF-TOKEN on POST/PATCH/DELETE, including auth
   writes. Refresh the token after verification/logout. Production requires HTTPS and Secure cookies.
 servers:
@@ -109,6 +109,48 @@ paths:
                 $ref: "#/components/schemas/AuthSession"
         "403":
           description: Missing or invalid CSRF token
+  /feedback/config:
+    get:
+      operationId: getFeedbackConfig
+      tags: [feedback]
+      security: []
+      summary: Get the configured support address, if available
+      responses:
+        "200":
+          description: Support contact configuration; null means no value is configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeedbackConfig"
+  /feedback:
+    post:
+      operationId: submitFeedback
+      tags: [feedback]
+      security:
+        - CsrfToken: []
+      summary: Send a categorized support or feedback message
+      description: Validated messages are sent to the configured support mailbox. Contents are not persisted or logged. A success response means the SMTP transport accepted the message.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FeedbackSubmission"
+      responses:
+        "200":
+          description: The configured mail transport accepted the message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeedbackAccepted"
+        "400":
+          description: Invalid category, message, subject or reply email
+        "403":
+          description: Missing or invalid CSRF token
+        "429":
+          description: Submission rate limit exceeded
+        "503":
+          description: Support is not configured or the message could not be sent
   /notifications/stream:
     get:
       operationId: streamPantryNotifications
@@ -587,6 +629,40 @@ components:
       in: header
       name: X-CSRF-TOKEN
   schemas:
+    FeedbackConfig:
+      type: object
+      required: [supportEmail, responseTime]
+      properties:
+        supportEmail:
+          type: [string, "null"]
+          format: email
+        responseTime:
+          type: [string, "null"]
+          maxLength: 120
+    FeedbackSubmission:
+      type: object
+      required: [category, message]
+      properties:
+        category:
+          type: string
+          enum: [problem, idea, other]
+        subject:
+          type: string
+          maxLength: 120
+        message:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        email:
+          type: string
+          format: email
+          maxLength: 254
+    FeedbackAccepted:
+      type: object
+      required: [accepted]
+      properties:
+        accepted:
+          type: boolean
     AuthAccount:
       type: object
       required: [id, email, name]

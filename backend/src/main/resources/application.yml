@@ -26,6 +26,9 @@ spring:
   jackson:
     time-zone: UTC
 pantrypal:
+  support:
+    email: ${PANTRYPAL_SUPPORT_EMAIL:}
+    response-time: ${PANTRYPAL_SUPPORT_RESPONSE_TIME:}
   auth:
     mail-from: ${MAIL_FROM:PantryPal <no-reply@pantrypal.test>}
     cookie-secure: ${AUTH_COOKIE_SECURE:true}

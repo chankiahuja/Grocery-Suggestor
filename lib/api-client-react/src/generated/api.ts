@@ -25,6 +25,9 @@ import type {
   EmailCodeRequest,
   EmailVerification,
   ErrorResponse,
+  FeedbackAccepted,
+  FeedbackConfig,
+  FeedbackSubmission,
   GrocerySuggestion,
   HealthStatus,
   InventoryAdjustmentInput,
@@ -361,6 +364,155 @@ export const useLogoutSession = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getLogoutSessionMutationOptions(options));
+    }
+
+export const getGetFeedbackConfigUrl = () => {
+
+
+
+
+  return `/api/feedback/config`
+}
+
+/**
+ * @summary Get the configured support address, if available
+ */
+export const getFeedbackConfig = async ( options?: Parameters<typeof customFetch>[1]): Promise<FeedbackConfig> => {
+
+  return customFetch<FeedbackConfig>(getGetFeedbackConfigUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFeedbackConfigQueryKey = () => {
+    return [
+    `/api/feedback/config`
+    ] as const;
+    }
+
+
+export const getGetFeedbackConfigQueryOptions = <TData = Awaited<ReturnType<typeof getFeedbackConfig>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFeedbackConfig>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFeedbackConfigQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFeedbackConfig>>> = ({ signal }) => getFeedbackConfig({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFeedbackConfig>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFeedbackConfigQueryResult = NonNullable<Awaited<ReturnType<typeof getFeedbackConfig>>>
+export type GetFeedbackConfigQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get the configured support address, if available
+ */
+
+export function useGetFeedbackConfig<TData = Awaited<ReturnType<typeof getFeedbackConfig>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFeedbackConfig>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFeedbackConfigQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSubmitFeedbackUrl = () => {
+
+
+
+
+  return `/api/feedback`
+}
+
+/**
+ * Validated messages are sent to the configured support mailbox. Contents are not persisted or logged. A success response means the SMTP transport accepted the message.
+ * @summary Send a categorized support or feedback message
+ */
+export const submitFeedback = async (feedbackSubmission: FeedbackSubmission, options?: Parameters<typeof customFetch>[1]): Promise<FeedbackAccepted> => {
+
+  return customFetch<FeedbackAccepted>(getSubmitFeedbackUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(feedbackSubmission)
+  }
+);}
+
+
+
+
+
+export const getSubmitFeedbackMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitFeedback>>, TError,{data: BodyType<FeedbackSubmission>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof submitFeedback>>, TError,{data: BodyType<FeedbackSubmission>}, TContext> => {
+
+const mutationKey = ['submitFeedback'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof submitFeedback>>, {data: BodyType<FeedbackSubmission>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  submitFeedback(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SubmitFeedbackMutationResult = NonNullable<Awaited<ReturnType<typeof submitFeedback>>>
+    export type SubmitFeedbackMutationBody = BodyType<FeedbackSubmission>
+    export type SubmitFeedbackMutationError = ErrorType<void>
+
+    /**
+ * @summary Send a categorized support or feedback message
+ */
+export const useSubmitFeedback = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitFeedback>>, TError,{data: BodyType<FeedbackSubmission>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof submitFeedback>>,
+        TError,
+        {data: BodyType<FeedbackSubmission>},
+        TContext
+      > => {
+      return useMutation(getSubmitFeedbackMutationOptions(options));
     }
 
 export const getStreamPantryNotificationsUrl = () => {
