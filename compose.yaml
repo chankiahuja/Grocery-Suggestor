@@ -28,6 +28,7 @@ services:
       MAIL_USERNAME: ${MAIL_USERNAME:-}
       MAIL_PASSWORD: ${MAIL_PASSWORD:-}
       MAIL_SMTP_AUTH: ${MAIL_SMTP_AUTH:-false}
+      # External SMTP with auth must also enable STARTTLS; Mailpit remains the local plaintext default.
       MAIL_STARTTLS: ${MAIL_STARTTLS:-false}
       PANTRYPAL_SUPPORT_EMAIL: ${PANTRYPAL_SUPPORT_EMAIL:-}
       PANTRYPAL_SUPPORT_RESPONSE_TIME: ${PANTRYPAL_SUPPORT_RESPONSE_TIME:-}
