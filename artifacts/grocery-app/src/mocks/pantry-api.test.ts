@@ -23,6 +23,17 @@ test("expired demo alerts clear on correction and never create expiry-only purch
   assert.ok((await (await api.fetch("/api/suggestions")).json()).every((a: any) => a.urgency !== "expired"));
 });
 
+test("browser demo keeps feedback unconfigured rather than reporting a false delivery", async () => {
+  const api = new MockPantryApi();
+  const config = await (await api.fetch("/api/feedback/config")).json();
+  assert.deepEqual(config, { supportEmail: null, responseTime: null });
+  const response = await api.fetch("/api/feedback", {
+    method: "POST",
+    body: JSON.stringify({ category: "idea", message: "A suggestion" }),
+  });
+  assert.equal(response.status, 503);
+});
+
 function undo(api: MockPantryApi, key = "adjustment-1", id = 2) {
   return api.fetch(`/api/inventory/${id}/undo`, { method: "POST", body: JSON.stringify({ idempotencyKey: key }) });
 }

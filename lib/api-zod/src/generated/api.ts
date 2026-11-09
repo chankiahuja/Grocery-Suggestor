@@ -83,6 +83,43 @@ export const LogoutSessionResponse = zod.object({
 
 
 /**
+ * @summary Get the configured support address, if available
+ */
+export const getFeedbackConfigResponseResponseTimeMax = 120;
+
+
+
+export const GetFeedbackConfigResponse = zod.object({
+  "supportEmail": zod.email().nullable(),
+  "responseTime": zod.string().max(getFeedbackConfigResponseResponseTimeMax).nullable()
+})
+
+
+/**
+ * Validated messages are sent to the configured support mailbox. Contents are not persisted or logged. A success response means the SMTP transport accepted the message.
+ * @summary Send a categorized support or feedback message
+ */
+export const submitFeedbackBodySubjectMax = 120;
+
+export const submitFeedbackBodyMessageMax = 2000;
+
+export const submitFeedbackBodyEmailMax = 254;
+
+
+
+export const SubmitFeedbackBody = zod.object({
+  "category": zod.enum(['problem', 'idea', 'other']),
+  "subject": zod.string().max(submitFeedbackBodySubjectMax).optional(),
+  "message": zod.string().min(1).max(submitFeedbackBodyMessageMax),
+  "email": zod.email().max(submitFeedbackBodyEmailMax).optional()
+})
+
+export const SubmitFeedbackResponse = zod.object({
+  "accepted": zod.boolean()
+})
+
+
+/**
  * Connect with EventSource. Event pantry-event contains a JSON type (inventory_changed, purchase_completed, alerts_changed, or heartbeat). Recover current alert state from GET /suggestions.
  * @summary Server-sent cache invalidation signals after inventory changes and purchases
  */

@@ -34,7 +34,7 @@ public class SecurityConfig {
     @Bean SecurityFilterChain security(HttpSecurity http, HttpSessionSecurityContextRepository contexts,
         HttpSessionCsrfTokenRepository csrf) throws Exception {
         http.authorizeHttpRequests(auth -> auth
-            .requestMatchers("/api/auth/**", "/api/healthz").permitAll()
+            .requestMatchers("/api/auth/**", "/api/feedback/**", "/api/healthz").permitAll()
             .requestMatchers("/api/**").authenticated()
             .anyRequest().permitAll());
         http.securityContext(context -> context.securityContextRepository(contexts));

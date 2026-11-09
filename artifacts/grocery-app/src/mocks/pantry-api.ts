@@ -173,6 +173,10 @@ export class MockPantryApi {
     };
 
     if (parts[0] === "healthz") return this.json({ status: "ok" });
+    if (parts[0] === "feedback") {
+      if (method === "GET" && parts[1] === "config") return this.json({ supportEmail: null, responseTime: null });
+      if (method === "POST") return this.json({ error: "Support is not configured in the browser demo." }, 503);
+    }
     if (parts[0] === "suggestions") {
       const suggestions = this.suggestions();
       if (method === "GET" && parts.length === 1) return this.json(suggestions);

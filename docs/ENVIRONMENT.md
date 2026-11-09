@@ -30,6 +30,8 @@ Copy [`.env.example`](../.env.example) to `.env` to override Compose credentials
 | MAIL_FROM | PantryPal <no-reply@pantrypal.test> | Disposable local sender; configure a verified sender for real delivery |
 | MAIL_USERNAME / MAIL_PASSWORD | empty | SMTP credentials when using a provider |
 | MAIL_SMTP_AUTH / MAIL_STARTTLS | false / false | Enable for a provider that requires them |
+| PANTRYPAL_SUPPORT_EMAIL | empty | Recipient for Contact & Feedback submissions and displayed support link; the selected mailbox is `support@mypantrypal.in`; configure outside source control |
+| PANTRYPAL_SUPPORT_RESPONSE_TIME | empty | Optional, verified response expectation shown on the contact page; never inferred or invented |
 | AUTH_COOKIE_SECURE | false in local profile; true otherwise | Secure session-cookie flag; set true behind HTTPS |
 | AUTH_OTP_SECRET | random process-local if empty | Set a secret of at least 32 bytes to keep pending codes valid across restarts |
 | AUTH_OTP_LIFETIME_SECONDS / AUTH_RESEND_COOLDOWN_SECONDS / AUTH_MAX_ATTEMPTS | 300 / 30 / 5 | Server-side code lifetime, resend delay, per-code attempt cap |
@@ -38,6 +40,8 @@ Copy [`.env.example`](../.env.example) to `.env` to override Compose credentials
 For native Windows development, run your installed Mailpit executable with `--listen 127.0.0.1:8025 --smtp 127.0.0.1:1025`, then open http://localhost:8025 to read verification codes. Full-stack sign-in requires this SMTP service when the default `MAIL_HOST`/`MAIL_PORT` are used. Docker Compose runs its own Mailpit service at the same host ports and uses `mailpit:1025` inside its network; stop native Mailpit before starting Compose to avoid port conflicts. The browser-only `dev:mock` mode still uses code `123456` without sending mail or creating a server session.
 
 Normal mode issues an HttpOnly, SameSite=Lax session cookie and a CSRF token returned by `GET /api/auth/session`. Session attributes are stored through Spring Session JDBC; Flyway creates the tables. Cookies are Secure by default outside the `local` profile. Serve a deployed app over HTTPS, keep `AUTH_COOKIE_SECURE=true`, and configure SMTP credentials only through environment variables. Pantry and shopping data is scoped to the signed-in account. A missing `AUTH_OTP_SECRET` invalidates outstanding codes on backend restart, while signed-in sessions continue to work.
+
+Contact & Feedback submits through the configured SMTP transport. Issue #126 records `support@mypantrypal.in` as the selected address, with MX/SPF checks and a two-way mail test completed on 9 November 2026. Set `PANTRYPAL_SUPPORT_EMAIL` to this address in the deployment environment before enabling the flow; the local ignored root `.env` is configured for Docker Compose. If no address is configured, the app displays a neutral unconfigured state and does not report successful delivery. Do not promise a response time until one is decided; `PANTRYPAL_SUPPORT_RESPONSE_TIME` remains optional and is displayed only when explicitly configured. User-submitted message contents are sent to the mailbox and are not written to application logs or the database. Configure support details and SMTP credentials through the deployment environment, never source control.
 
 ### Mobile preview opt-in
 

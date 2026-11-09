@@ -22,7 +22,7 @@ export function LoginGate({ children, preview = import.meta.env?.MODE === "mock"
     setError("");
     setAccount(null);
     if (preview) {
-      if (location !== "/" && location !== "/login" && location !== "/signup") {
+      if (location !== "/" && location !== "/login" && location !== "/signup" && location !== "/contact") {
         navigate("/login", { replace: true });
       }
       setReady(true);
@@ -48,7 +48,7 @@ export function LoginGate({ children, preview = import.meta.env?.MODE === "mock"
 
   if (error) return <main role="alert">{error} <button onClick={() => setRetry(value => value + 1)}>Retry connection</button></main>;
   if (!ready) return <main role="status">Checking your session…</main>;
-  if (!completed && location !== "/" && location !== "/login" && location !== "/signup") {
+  if (!completed && location !== "/" && location !== "/login" && location !== "/signup" && location !== "/contact") {
     return <Redirect to="/login" replace />;
   }
   if (completed && (location === "/login" || location === "/signup" || location === "/")) return <Redirect to="/dashboard" replace />;

@@ -5,6 +5,42 @@
  * Grocery Suggester API with email OTP authentication and CSRF-protected sessions.
  * OpenAPI spec version: 0.1.0
  */
+export interface FeedbackConfig {
+  /** @nullable */
+  supportEmail: string | null;
+  /**
+     * @maxLength 120
+     * @nullable
+     */
+  responseTime: string | null;
+}
+
+export type FeedbackSubmissionCategory = typeof FeedbackSubmissionCategory[keyof typeof FeedbackSubmissionCategory];
+
+
+export const FeedbackSubmissionCategory = {
+  problem: 'problem',
+  idea: 'idea',
+  other: 'other',
+} as const;
+
+export interface FeedbackSubmission {
+  category: FeedbackSubmissionCategory;
+  /** @maxLength 120 */
+  subject?: string;
+  /**
+     * @minLength 1
+     * @maxLength 2000
+     */
+  message: string;
+  /** @maxLength 254 */
+  email?: string;
+}
+
+export interface FeedbackAccepted {
+  accepted: boolean;
+}
+
 export interface AuthAccount {
   id: number;
   email: string;
