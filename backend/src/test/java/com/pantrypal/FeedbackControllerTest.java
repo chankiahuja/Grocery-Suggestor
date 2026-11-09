@@ -5,9 +5,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mail.MailSendException;
 import org.springframework.mail.SimpleMailMessage;
@@ -25,6 +28,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
+@ExtendWith(OutputCaptureExtension.class)
 @TestPropertySource(properties = {
     "pantrypal.support.email=support@example.test",
     "pantrypal.support.response-time=We aim to respond within two business days."
@@ -105,16 +109,18 @@ class FeedbackControllerTest {
     }
 
     @Test
-    void reportsMailFailureWithoutEchoingProviderDetails() throws Exception {
+    void logsOnlyMailExceptionClassAndReturnsGenericMailFailure(CapturedOutput output) throws Exception {
         var browser = new AnonymousBrowser();
         browser.start();
         doThrow(new MailSendException("private smtp diagnostic"))
             .when(mailSender).send(any(SimpleMailMessage.class));
 
         String response = browser.submit("""
-            {"category":"problem","message":"A problem"}
+            {"category":"problem","subject":"private feedback subject","message":"private feedback message","email":"private-reply@example.test"}
             """, 503);
         assertThat(response).contains("could not be sent").doesNotContain("private smtp diagnostic");
+        assertThat(output).contains("Feedback email delivery failed: MailSendException")
+            .doesNotContain("private smtp diagnostic", "private feedback subject", "private feedback message", "private-reply@example.test");
     }
 
     @Test

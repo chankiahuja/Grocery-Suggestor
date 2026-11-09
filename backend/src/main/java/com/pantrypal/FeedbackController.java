@@ -2,6 +2,8 @@ package com.pantrypal;
 
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.mail.MailException;
@@ -13,6 +15,8 @@ import org.springframework.web.server.ResponseStatusException;
 @RestController
 @RequestMapping("/api/feedback")
 public class FeedbackController {
+    private static final Logger log = LoggerFactory.getLogger(FeedbackController.class);
+
     public record Submission(String category, String subject, String message, String email) {}
     public record ContactConfig(String supportEmail, String responseTime) {}
 
@@ -79,6 +83,7 @@ public class FeedbackController {
         try {
             mailSender.send(mail);
         } catch (MailException failure) {
+            log.warn("Feedback email delivery failed: {}", failure.getClass().getSimpleName());
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Your message could not be sent. Please try again or use the support email link.");
         }
         return Map.of("accepted", true);
