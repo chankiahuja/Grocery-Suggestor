@@ -18,6 +18,7 @@ export * from './feedbackAccepted';
 export * from './feedbackConfig';
 export * from './feedbackSubmission';
 export * from './feedbackSubmissionCategory';
+export * from './getAccountDeletionStatus200';
 export * from './grocerySuggestion';
 export * from './grocerySuggestionUrgency';
 export * from './healthStatus';

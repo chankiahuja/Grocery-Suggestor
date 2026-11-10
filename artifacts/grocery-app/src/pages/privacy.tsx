@@ -1,0 +1,21 @@
+import { Link } from "wouter";
+import { useGetFeedbackConfig } from "@workspace/api-client-react";
+
+export default function Privacy() {
+  const contact = useGetFeedbackConfig();
+  return <div className="min-h-[100dvh] bg-background px-5 py-8 text-foreground">
+    <main className="mx-auto max-w-2xl space-y-7 leading-relaxed">
+      <Link href="/" className="underline">Return to PantryPal</Link>
+      <h1 className="text-3xl font-semibold">Privacy at PantryPal</h1>
+      <p className="rounded-xl border bg-card p-4"><strong>Draft — deployment review pending.</strong> Hosting, email-provider, mailbox and backup retention details still need operator verification before the web pilot. This page describes application behavior and its current limits.</p>
+      <p>This notice covers your account, pantry, email sign-in and feedback data.</p>
+      <section><h2 className="text-xl font-semibold">What we store</h2><p>We store your account name and email, pantry quantities and expiry dates, notes, shopping lists, purchase/restock flags and stock adjustment history to provide the app. The current application has no separate stored wishlist or preference profile. Your browser also stores account-specific notification read markers.</p></section>
+      <section><h2 className="text-xl font-semibold">How email sign-in works</h2><p>We send a one-time code to your email through the configured mail provider. The server stores a code hash, expiry and attempt counts, abuse-prevention counters and database-backed sessions. The session cookie is HttpOnly; deployed HTTPS sessions use Secure cookies. Email and hosting providers process data needed to deliver these services.</p></section>
+      <section><h2 className="text-xl font-semibold">Contact and feedback</h2><p>Your message and optional reply email are sent to the configured support mailbox. Message contents are not stored in the application database or written to application logs. Mailbox and provider copies need separate removal by support. Please don't include passwords, one-time codes or pantry details.</p></section>
+      <section><h2 className="text-xl font-semibold">Deleting your account</h2><p>Open Account settings from the signed-in account menu and choose Delete account. A recent email verification is required. Confirmed deletion removes your account, pantry, adjustment history, shopping lists and associated sign-in state from the active application database and revokes all sessions. A later signup creates a new account without restoring old data.</p><p className="mt-3">The current browser clears its signed-in state and account notification markers. Other browsers may retain displayed or offline copies until they reconnect. Already-delivered support emails, exports and backups are not erased by the account button. Operator cleanup and restore reconciliation are required; no immediate backup-erasure promise or verified retention period is available yet.</p></section>
+      <section><h2 className="text-xl font-semibold">Orders and purchases</h2><p>PantryPal does not track grocery orders, payments or receipts. Shopping lists can mark items purchased and update pantry stock. We will revisit this notice before introducing additional purchase tracking or retention requirements.</p></section>
+      <section><h2 className="text-xl font-semibold">Questions</h2>{contact.data?.supportEmail ? <a className="break-all underline" href={`mailto:${contact.data.supportEmail}`}>{contact.data.supportEmail}</a> : <p>Support contact details are not currently available. <Link href="/contact" className="underline">Check Contact &amp; Feedback</Link> for the current availability.</p>}</section>
+    </main>
+    <footer className="mx-auto mt-10 max-w-2xl"><Link href="/" className="underline">Return to PantryPal</Link></footer>
+  </div>;
+}

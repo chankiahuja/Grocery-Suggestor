@@ -520,6 +520,7 @@ function AuthScreen({ demo }: { demo?: boolean }) {
           </aside>}
         </div>
         <footer className="auth-form-footer">
+          <Link href="/privacy">Privacy notice</Link>
           <span>© Pantry Pal · A little more in order.</span>
           <Link href="/login">Sign in to explore ↗</Link>
         </footer>

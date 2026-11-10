@@ -29,6 +29,7 @@ afterEach(() => {
   setCsrfToken(null);
   globalThis.fetch = originalFetch;
   localStorage.clear();
+  dom.window.sessionStorage.clear();
   mock.restoreAll();
 });
 
@@ -45,6 +46,9 @@ class AuthApi {
   account = { id: 1, email: "user@example.com", name: "User" as string | null };
   logoutFailure = false;
   logoutGate: Promise<void> | null = null;
+  recentAuthentication = true;
+  deletionFailure = false;
+  deletionGate: Promise<void> | null = null;
   readonly fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const path = new URL(String(input), "http://localhost").pathname;
     const method = (init?.method || "GET").toUpperCase();
@@ -54,6 +58,7 @@ class AuthApi {
     const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json" } });
     if (path === "/api/auth/session" && method === "GET")
       return json({ authenticated: this.authenticated, account: this.authenticated ? this.account : null, csrfToken: this.csrf });
+    if (path === "/api/feedback/config") return json({ supportEmail: null, responseTime: null });
     if (path.startsWith("/api/auth/") && csrf !== this.csrf) return json({ error: "CSRF missing" }, 403);
     if (path === "/api/auth/code") {
       if (this.codeGate) await this.codeGate;
@@ -74,6 +79,14 @@ class AuthApi {
       return json({ authenticated: false, account: null, csrfToken: this.csrf });
     }
     if (!this.authenticated) return json({ error: "Sign in" }, 401);
+    if (path === "/api/account/deletion-status") return json({ recentAuthentication: this.recentAuthentication });
+    if (path === "/api/account" && method === "DELETE") {
+      if (csrf !== this.csrf) return json({ error: "CSRF missing" }, 403);
+      if (this.deletionGate) await this.deletionGate;
+      if (this.deletionFailure) return json({ error: "Temporary failure" }, 500);
+      this.authenticated = false;
+      return new Response(null, { status: 204 });
+    }
     return this.pantry.fetch(input, init);
   };
 }
@@ -90,6 +103,84 @@ async function mount(path: string, api: AuthApi, preview = false) {
   });
   return { ...view, client, location };
 }
+
+describe("privacy and account deletion", { concurrency: false }, () => {
+  it("clears signed-in queries and only this account's read markers after confirmed deletion", async () => {
+    const api = new AuthApi(); api.authenticated = true;
+    localStorage.setItem("pantrypal-seen-notifications:1", "[]");
+    localStorage.setItem("pantrypal-seen-notifications:2", "[\"other account\"]");
+    const view = await mount("/account", api);
+    view.client.setQueryData(["private-pantry"], { name: "Private stock" });
+    fireEvent.click(await screen.findByRole("button", { name: "Delete account" }));
+    const dialog = await screen.findByRole("dialog");
+    const remove = within(dialog).getByRole("button", { name: "Delete account" });
+    await waitFor(() => assert.equal((remove as HTMLButtonElement).disabled, false));
+    fireEvent.click(remove);
+    await screen.findByRole("heading", { name: "Welcome home." });
+    assert.equal(api.authenticated, false);
+    assert.equal(localStorage.getItem("pantrypal-seen-notifications:1"), null);
+    assert.equal(localStorage.getItem("pantrypal-seen-notifications:2"), "[\"other account\"]");
+    assert.equal(view.client.getQueryData(["private-pantry"]), undefined);
+    assert.equal(screen.queryByRole("button", { name: /Account menu/ }), null);
+  });
+  it("opens the privacy notice without a session and labels provider details as draft", async () => {
+    await mount("/privacy", new AuthApi());
+    await screen.findByRole("heading", { name: "Privacy at PantryPal" });
+    assert.ok(screen.getByText("Draft — deployment review pending."));
+    assert.ok(screen.getByRole("heading", { name: "Deleting your account" }));
+  });
+
+  it("keeps deletion separate, cancels without a request and restores trigger focus", async () => {
+    const api = new AuthApi(); api.authenticated = true;
+    await mount("/account", api);
+    const trigger = await screen.findByRole("button", { name: "Delete account" });
+    fireEvent.click(trigger);
+    const dialog = await screen.findByRole("dialog", { name: "Delete your PantryPal account?" });
+    await waitFor(() => assert.equal((within(dialog).getByRole("button", { name: "Keep my account" }) as HTMLButtonElement).disabled, false));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Keep my account" }));
+    await waitFor(() => assert.equal(screen.queryByRole("dialog"), null));
+    await waitFor(() => assert.equal(document.activeElement, trigger));
+    assert.equal(api.requests.filter(r => r.method === "DELETE").length, 0);
+  });
+
+  it("requires fresh OTP for an old session and uses the rotated CSRF token", async () => {
+    const api = new AuthApi(); api.authenticated = true; api.recentAuthentication = false; api.deletionFailure = true;
+    await mount("/account", api);
+    fireEvent.click(await screen.findByRole("button", { name: "Delete account" }));
+    const dialog = await screen.findByRole("dialog");
+    await screen.findByRole("button", { name: "Request verification code" });
+    assert.equal((within(dialog).getByRole("button", { name: "Delete account" }) as HTMLButtonElement).disabled, true);
+    fireEvent.click(screen.getByRole("button", { name: "Request verification code" }));
+    fireEvent.change(await screen.findByLabelText("Verification code"), { target: { value: "654321" } });
+    fireEvent.click(screen.getByRole("button", { name: "Verify email" }));
+    await screen.findByText("Email verified. Review the confirmation before deleting your account.");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete account" }));
+    await screen.findByText(/Deletion could not be confirmed/);
+    assert.equal(api.requests.find(r => r.method === "DELETE")?.csrf, "signed-in-token");
+    assert.equal(api.authenticated, true);
+    assert.equal((within(dialog).getByRole("button", { name: "Delete account" }) as HTMLButtonElement).disabled, false);
+  });
+
+  it("prevents duplicate deletion and preserves account markers on failure for a retry", async () => {
+    const api = new AuthApi(); api.authenticated = true; api.deletionFailure = true;
+    let release!: () => void;
+    api.deletionGate = new Promise<void>(resolve => { release = resolve; });
+    localStorage.setItem("pantrypal-seen-notifications:1", "[]");
+    await mount("/account", api);
+    fireEvent.click(await screen.findByRole("button", { name: "Delete account" }));
+    const dialog = await screen.findByRole("dialog");
+    const remove = within(dialog).getByRole("button", { name: "Delete account" });
+    await waitFor(() => assert.equal((remove as HTMLButtonElement).disabled, false));
+    fireEvent.click(remove); fireEvent.click(remove);
+    await screen.findByRole("button", { name: "Deleting your account…" });
+    assert.equal(api.requests.filter(r => r.method === "DELETE").length, 1);
+    await act(async () => { release(); });
+    await screen.findByText(/Deletion could not be confirmed/);
+    assert.equal(localStorage.getItem("pantrypal-seen-notifications:1"), "[]");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete account" }));
+    await waitFor(() => assert.equal(api.requests.filter(r => r.method === "DELETE").length, 2));
+  });
+});
 
 describe("route loading", { concurrency: false }, () => {
   it("shows a loading status until a deferred page is ready", async () => {

@@ -289,6 +289,10 @@ export interface PurchaseResult {
   updatedInventoryItems: number;
 }
 
+export type GetAccountDeletionStatus200 = {
+  recentAuthentication: boolean;
+};
+
 export type ListInventoryItemsParams = {
 category?: string;
 /**

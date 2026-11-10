@@ -1,8 +1,18 @@
 import { ArrowUpRight, Leaf } from "lucide-react";
 import { Link } from "wouter";
+import { useEffect, useState } from "react";
 
 export default function Landing() {
   const base = import.meta.env?.BASE_URL ?? "/";
+  const [deleted, setDeleted] = useState(false);
+  useEffect(() => {
+    try {
+      if (window.sessionStorage.getItem("pantrypal-deletion-confirmed") === "1") {
+        setDeleted(true);
+        window.sessionStorage.removeItem("pantrypal-deletion-confirmed");
+      }
+    } catch { /* The public page also works without browser storage. */ }
+  }, []);
 
   return (
     <div className="landing-shell">
@@ -22,6 +32,7 @@ export default function Landing() {
       </header>
 
       <main>
+        {deleted && <p role="status" className="mx-auto max-w-2xl rounded-xl border bg-card p-4">Your PantryPal account has been deleted. You've been signed out.</p>}
         <section className="landing-hero" aria-labelledby="landing-heading">
           <div className="landing-hero-copy">
             <div className="landing-eyebrow"><span /> YOUR HOME, IN SYNC</div>
@@ -56,6 +67,7 @@ export default function Landing() {
       <footer className="landing-footer">
         <span><Leaf size={13} /> Thoughtfully stocked. Simply lived.</span>
         <Link href="/contact">Contact &amp; Feedback</Link>
+        <Link href="/privacy">Privacy notice</Link>
         <span>© Pantry Pal · A little more in order.</span>
       </footer>
     </div>

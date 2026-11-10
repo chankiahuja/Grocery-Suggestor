@@ -28,6 +28,7 @@ import type {
   FeedbackAccepted,
   FeedbackConfig,
   FeedbackSubmission,
+  GetAccountDeletionStatus200,
   GrocerySuggestion,
   HealthStatus,
   InventoryAdjustmentInput,
@@ -74,6 +75,155 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetAccountDeletionStatusUrl = () => {
+
+
+
+
+  return `/api/account/deletion-status`
+}
+
+/**
+ * @summary Check whether this session verified email within the last five minutes
+ */
+export const getAccountDeletionStatus = async ( options?: Parameters<typeof customFetch>[1]): Promise<GetAccountDeletionStatus200> => {
+
+  return customFetch<GetAccountDeletionStatus200>(getGetAccountDeletionStatusUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAccountDeletionStatusQueryKey = () => {
+    return [
+    `/api/account/deletion-status`
+    ] as const;
+    }
+
+
+export const getGetAccountDeletionStatusQueryOptions = <TData = Awaited<ReturnType<typeof getAccountDeletionStatus>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAccountDeletionStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAccountDeletionStatusQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAccountDeletionStatus>>> = ({ signal }) => getAccountDeletionStatus({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAccountDeletionStatus>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAccountDeletionStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getAccountDeletionStatus>>>
+export type GetAccountDeletionStatusQueryError = ErrorType<void>
+
+
+/**
+ * @summary Check whether this session verified email within the last five minutes
+ */
+
+export function useGetAccountDeletionStatus<TData = Awaited<ReturnType<typeof getAccountDeletionStatus>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAccountDeletionStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAccountDeletionStatusQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getDeleteAccountUrl = () => {
+
+
+
+
+  return `/api/account`
+}
+
+/**
+ * Requires email verification within five minutes. Deletes owned inventory, adjustment history, shopping data, email challenge and all account sessions in one transaction. Mailbox/provider backups require separate operator handling. A repeated request after revocation returns 401 or 403; a lost response must not be treated as confirmed success.
+ * @summary Permanently delete the current account from active application stores
+ */
+export const deleteAccount = async ( options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getDeleteAccountUrl(),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteAccountMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAccount>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteAccount>>, TError,void, TContext> => {
+
+const mutationKey = ['deleteAccount'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteAccount>>, void> = () => {
+
+
+          return  deleteAccount(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteAccountMutationResult = NonNullable<Awaited<ReturnType<typeof deleteAccount>>>
+
+    export type DeleteAccountMutationError = ErrorType<void>
+
+    /**
+ * @summary Permanently delete the current account from active application stores
+ */
+export const useDeleteAccount = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAccount>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteAccount>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getDeleteAccountMutationOptions(options));
+    }
 
 export const getGetAuthSessionUrl = () => {
 

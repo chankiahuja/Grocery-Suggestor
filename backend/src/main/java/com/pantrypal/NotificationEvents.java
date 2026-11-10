@@ -92,7 +92,7 @@ public class NotificationEvents {
     private final PantryService service;
     private final SessionRepository<? extends Session> sessions;
     private final Executor deliveryExecutor;
-    private final Map<Long,String> previousByAccount = new HashMap<>();
+    private final Map<Long,String> previousByAccount = new ConcurrentHashMap<>();
     @Autowired
     public NotificationEvents(PantryService service, SessionRepository<? extends Session> sessions,
         @Qualifier("notificationDeliveryExecutor") Executor deliveryExecutor) {
@@ -123,6 +123,12 @@ public class NotificationEvents {
         try { send(accountId, subscriber, SseEmitter.event().name("ready").data(Map.of("status", "connected"))); }
         catch (IOException | DataAccessException | CannotCreateTransactionException e) { subscriber.close(); removeClient(accountId, subscriber); }
         return emitter;
+    }
+    @TransactionalEventListener
+    public void deleted(AccountDeletionService.AccountDeleted event) {
+        var subscribers = clients.remove(event.accountId());
+        if (subscribers != null) subscribers.forEach(Subscriber::close);
+        previousByAccount.remove(event.accountId());
     }
     public void disconnectSession(String sessionId) {
         if (sessionId == null) return;

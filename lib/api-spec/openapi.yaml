@@ -23,6 +23,44 @@ tags:
   - name: shopping-lists
     description: Shopping list management
 paths:
+  /account/deletion-status:
+    get:
+      operationId: getAccountDeletionStatus
+      tags: [account]
+      summary: Check whether this session verified email within the last five minutes
+      responses:
+        "200":
+          description: Server-side deletion eligibility
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [recentAuthentication]
+                properties:
+                  recentAuthentication:
+                    type: boolean
+        "401":
+          description: Sign in required
+  /account:
+    delete:
+      operationId: deleteAccount
+      tags: [account]
+      security:
+        - SessionCookie: []
+          CsrfToken: []
+      summary: Permanently delete the current account from active application stores
+      description: Requires email verification within five minutes. Deletes owned inventory, adjustment history, shopping data, email challenge and all account sessions in one transaction. Mailbox/provider backups require separate operator handling. A repeated request after revocation returns 401 or 403; a lost response must not be treated as confirmed success.
+      responses:
+        "204":
+          description: Deletion committed and current session invalidated
+        "401":
+          description: Sign in required or account no longer exists
+        "403":
+          description: CSRF invalid or fresh email verification required
+        "409":
+          description: Data constraint prevented deletion; transaction rolled back
+        "500":
+          description: Unexpected failure. Database failures roll back; an error or lost response alone does not establish whether deletion committed. Recheck sign-in state before retrying.
   /auth/session:
     get:
       operationId: getAuthSession
