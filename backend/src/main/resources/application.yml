@@ -19,6 +19,8 @@ spring:
       initialize-schema: never
   profiles:
     default: local
+    group:
+      production: postgres
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/pantrypal}
     username: ${DB_USER:pantrypal}
@@ -36,4 +38,5 @@ pantrypal:
     otp-lifetime-seconds: ${AUTH_OTP_LIFETIME_SECONDS:300}
     resend-cooldown-seconds: ${AUTH_RESEND_COOLDOWN_SECONDS:30}
     max-attempts: ${AUTH_MAX_ATTEMPTS:5}
+  smtp-required: ${PANTRYPAL_SMTP_REQUIRED:true}
   expiry-check-ms: ${EXPIRY_CHECK_MS:60000}

@@ -1,5 +1,9 @@
 package com.pantrypal;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.sql.DriverManager;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -16,6 +20,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import com.zaxxer.hikari.HikariDataSource;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
+import org.springframework.boot.web.context.WebServerApplicationContext;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.jdbc.core.JdbcTemplate;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -25,7 +30,7 @@ class PostgresRuntimeSmokeTest {
     private static final int CONCURRENT_WRITES = 30;
 
     @Test
-    void postgresProfileMigratesPersistsAndIsolatesDataAcrossRestart() throws Exception {
+    void productionProfileMigratesPersistsAndUsesSecureWebSettingsAcrossRestart() throws Exception {
         String url = required("DB_URL");
         String username = required("DB_USER");
         String password = required("DB_PASSWORD");
@@ -132,7 +137,8 @@ class PostgresRuntimeSmokeTest {
         return new SpringApplicationBuilder(PantryApplication.class)
             .web(WebApplicationType.SERVLET)
             .run(
-                "--spring.profiles.active=postgres",
+                "--spring.profiles.active=production",
+                "--spring.config.additional-location=classpath:/production-config/",
                 "--spring.datasource.url=" + schemaUrl(url, schema),
                 "--spring.datasource.driver-class-name=org.postgresql.Driver",
                 "--spring.datasource.username=" + username,
@@ -143,17 +149,35 @@ class PostgresRuntimeSmokeTest {
                 "--spring.flyway.schemas=" + schema,
                 "--spring.flyway.default-schema=" + schema,
                 "--spring.mail.host=localhost",
-                "--spring.mail.properties.mail.smtp.auth=false",
+                "--spring.mail.username=test-user",
+                "--spring.mail.password=test-password",
+                "--spring.mail.properties.mail.smtp.auth=true",
+                "--spring.mail.properties.mail.smtp.starttls.enable=true",
+                "--pantrypal.auth.otp-secret=0123456789abcdef0123456789abcdef",
                 "--server.port=0",
                 "--pantrypal.expiry-check-ms=3600000");
     }
 
     private void verifyRuntime(ConfigurableApplicationContext context, String schema) throws Exception {
-        assertThat(context.getEnvironment().getActiveProfiles()).containsExactly("postgres");
+        assertThat(context.getEnvironment().getActiveProfiles()).contains("production", "postgres");
         try (var connection = context.getBean(DataSource.class).getConnection()) {
             assertThat(connection.getMetaData().getDatabaseProductName()).contains("PostgreSQL");
             assertThat(connection.getSchema()).isEqualTo(schema);
         }
+
+        int port = ((WebServerApplicationContext) context).getWebServer().getPort();
+        var client = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build();
+        var httpsResponse = client.send(
+            HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/auth/session"))
+                .header("X-Forwarded-Proto", "https")
+                .GET()
+                .build(),
+            HttpResponse.BodyHandlers.ofString());
+        assertThat(httpsResponse.statusCode()).isEqualTo(200);
+        assertThat(httpsResponse.headers().firstValue("Set-Cookie"))
+            .hasValueSatisfying(cookie -> assertThat(cookie)
+                .contains("Secure", "HttpOnly", "SameSite=Lax"));
+        assertThat(httpsResponse.headers().firstValue("Strict-Transport-Security")).isPresent();
 
         Flyway flyway = context.getBean(Flyway.class);
         flyway.validate();
