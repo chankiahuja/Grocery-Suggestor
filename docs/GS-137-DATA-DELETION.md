@@ -36,6 +36,18 @@ V7 adds an internal unique string representation of the account ID and a cascadi
 
 ## Provider and restore release gates
 
+### Current staging provider check — 10 November 2026
+
+The checked-in Render Blueprint currently selects a **Free** web service and a **Free** Render PostgreSQL database. Render's current Free-instance documentation says:
+
+- Free web services cannot send outbound traffic on ports 25, 465 or 587. The production configuration's default Brevo SMTP endpoint uses port 587, so OTP and support-email delivery cannot work on this plan even after credentials are added.
+- Free Render PostgreSQL databases do not support any form of backup or managed export, expire after 30 days, and are deleted after the documented grace period. There is therefore no Render-managed backup to reconcile in the current staging configuration. This is not a durability guarantee and must be re-evaluated before changing the database plan or creating a self-managed export.
+- The web-service filesystem is ephemeral and is not an application data store.
+
+Brevo's current documentation says transactional logs and email previews are retained without a time limit by default unless a custom retention rule is configured. Individual transactional logs can be manually deleted; Brevo says queued deletion can take up to 72 hours. The actual PantryPal Brevo account settings have not been inspected, so neither a retention period nor completed deletion can be claimed yet.
+
+Before enabling email sign-in for the pilot, choose and verify one supported delivery path: upgrade the Render web service to a plan that permits authenticated SMTP, or implement and review an HTTPS mail-provider transport. Do not put API keys or SMTP credentials in the repository. After choosing the path, verify OTP delivery, feedback delivery to `support@mypantrypal.in`, the configured Brevo retention rule, and manual log deletion with disposable test data.
+
 Before finalizing the public notice or admitting pilot users, record the actual hosting, SMTP, support mailbox and backup/export arrangements. Record provider retention and deletion controls from the configured plan; do not infer a retention period from another plan or environment. The draft privacy page must remain identified as awaiting deployment review until these facts are confirmed.
 
 Account deletion does not remove already-delivered support messages or provider backups. Support must verify the requester, search attributable messages and remove available copies according to the provider controls. Do not send a deletion confirmation email containing a pantry snapshot or keep deleted accounts for analytics.
