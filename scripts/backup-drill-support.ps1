@@ -7,6 +7,32 @@ function Get-BackupDrillMavenInvocation {
     return [pscustomobject]@{ Command = 'sh'; Arguments = @((Join-Path $Backend 'mvnw')) }
 }
 
+function Invoke-WithBackupDrillCleanup {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][scriptblock]$Action,
+        [Parameter(Mandatory = $true)][scriptblock[]]$Cleanup
+    )
+    $primaryError = $null
+    try { & $Action }
+    catch {
+        $primaryError = $_
+        throw
+    } finally {
+        $firstCleanupError = $null
+        foreach ($step in $Cleanup) {
+            try { & $step }
+            catch {
+                if ($null -ne $primaryError -or $null -ne $firstCleanupError) {
+                    # A caller's WarningPreference=Stop must not replace the pending error.
+                    Write-Warning ("Backup drill cleanup also failed: " + $_.Exception.Message) -WarningAction Continue
+                } else { $firstCleanupError = $_ }
+            }
+        }
+        if ($null -eq $primaryError -and $null -ne $firstCleanupError) { throw $firstCleanupError }
+    }
+}
+
 function Invoke-WithBackupDrillEnvironment {
     param([Parameter(Mandatory = $true)][scriptblock]$Action)
     $drillNames = @('PANTRYPAL_POSTGRES_BACKUP_DRILL', 'BACKUP_DRILL_USER', 'BACKUP_DRILL_PASSWORD',

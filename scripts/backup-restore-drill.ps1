@@ -29,11 +29,12 @@ $port = $listener.LocalEndpoint.Port
 $listener.Stop()
 
 Invoke-WithBackupDrillEnvironment -Action {
-    $startAttempted = $false
-    try {
+    # Shared state is explicit because action and cleanup run in separate scriptblock scopes.
+    $cluster = @{ StartAttempted = $false }
+    Invoke-WithBackupDrillCleanup -Action {
         & $tools['initdb'] -D $data --username=drill_operator --auth=scram-sha-256 --encoding=UTF8 --no-locale "--pwfile=$passwordFile"
         if ($LASTEXITCODE -ne 0) { throw 'Isolated PostgreSQL initialization failed' }
-        $startAttempted = $true
+        $cluster.StartAttempted = $true
         & $tools['pg_ctl'] -D $data -l $serverLog -o "-h 127.0.0.1 -p $port" -w start
         if ($LASTEXITCODE -ne 0) { throw 'Isolated PostgreSQL startup was not confirmed; inspect its ignored log' }
         $env:PGPASSWORD = $disposablePassword
@@ -51,17 +52,18 @@ Invoke-WithBackupDrillEnvironment -Action {
             & $maven.Command @mavenArguments
             if ($LASTEXITCODE -ne 0) { throw 'Backup drill failed; inspect the test report and ignored tool logs' }
         } finally { Pop-Location }
-    } finally {
-        $stopFailed = $false
-        if ($startAttempted) {
+    } -Cleanup @({
+        if ($cluster.StartAttempted) {
             & $tools['pg_ctl'] -D $data status
             if ($LASTEXITCODE -eq 0) {
                 & $tools['pg_ctl'] -D $data -m fast -w stop
-                $stopFailed = $LASTEXITCODE -ne 0
+                if ($LASTEXITCODE -ne 0) {
+                    throw 'Could not stop the isolated drill cluster; inspect its pg_ctl status before cleanup'
+                }
             }
         }
+    }, {
         if (Test-Path -LiteralPath $passwordFile) { Remove-Item -LiteralPath $passwordFile }
-        if ($stopFailed) { throw 'Could not stop the isolated drill cluster; inspect its pg_ctl status before cleanup' }
-    }
+    })
 }
 Write-Output 'Backup drill passed; its isolated PostgreSQL cluster has stopped.'

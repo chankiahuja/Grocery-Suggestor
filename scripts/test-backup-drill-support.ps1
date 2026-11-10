@@ -42,4 +42,48 @@ Invoke-WithBackupDrillEnvironment -Action {
         Assert-DrillCheck ($null -eq $env:PGPASSWORD -and $null -eq $env:PG_NEW_DRILL_VALUE) 'New PostgreSQL variables leaked'
     }
 }
-Write-Output 'Passed: Windows/non-Windows Maven selection and environment restoration after success/failure.'
+Invoke-WithBackupDrillEnvironment -Action {
+    $env:PGSSLMODE = 'require'
+    $checkRoot = Join-Path $backend 'target/backup-cleanup-checks'
+    New-Item -ItemType Directory -Path $checkRoot -Force | Out-Null
+    foreach ($failDrill in @($false, $true)) {
+        foreach ($failStop in @($false, $true)) {
+            $passwordPath = Join-Path $checkRoot ([guid]::NewGuid().ToString('N') + '.txt')
+            [IO.File]::WriteAllText($passwordPath, 'synthetic-test-password')
+            $steps = New-Object 'System.Collections.Generic.List[string]'
+            $primary = New-Object System.Exception('Backup drill failed; inspect the test report and ignored tool logs')
+            $caught = $null
+            $observed = @{ Warnings = @() }
+            $previousWarningPreference = $WarningPreference
+            try {
+                $WarningPreference = 'Stop'
+                Invoke-WithBackupDrillEnvironment -Action {
+                    $env:PGPASSWORD = 'temporary-test-value'
+                    try {
+                        Invoke-WithBackupDrillCleanup -Action {
+                            $steps.Add('maven')
+                            if ($failDrill) { throw $primary }
+                        } -Cleanup @({
+                            $steps.Add('stop')
+                            if ($failStop) { throw 'Could not stop the isolated drill cluster' }
+                        }, {
+                            $steps.Add('password')
+                            Remove-Item -LiteralPath $passwordPath
+                        }) -WarningVariable cleanupWarnings
+                    } finally { $observed.Warnings = @($cleanupWarnings) }
+                }
+            } catch { $caught = $_ }
+            finally { $WarningPreference = $previousWarningPreference }
+            if ($failDrill) {
+                Assert-DrillCheck ($null -ne $caught -and [object]::ReferenceEquals($caught.Exception, $primary)) 'Cleanup replaced the primary Maven error'
+            } elseif ($failStop) {
+                Assert-DrillCheck ($null -ne $caught -and $caught.Exception.Message -eq 'Could not stop the isolated drill cluster') 'Stop-only failure did not fail the drill'
+            } else { Assert-DrillCheck ($null -eq $caught) "Unexpected cleanup failure: $caught" }
+            Assert-DrillCheck (($steps -join ',') -eq 'maven,stop,password') 'Cleanup did not attempt every step'
+            Assert-DrillCheck ($observed.Warnings.Count -eq [int]($failDrill -and $failStop)) 'Combined failure did not emit the expected cleanup warning'
+            Assert-DrillCheck (-not (Test-Path -LiteralPath $passwordPath)) 'Password file was not removed after failure'
+            Assert-DrillCheck ($env:PGSSLMODE -eq 'require' -and $null -eq $env:PGPASSWORD) 'Environment was not restored after cleanup'
+        }
+    }
+}
+Write-Output 'Passed: wrapper selection, environment restoration and drill/stop failure combinations (including WarningPreference=Stop).'
