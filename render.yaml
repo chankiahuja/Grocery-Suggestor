@@ -2,7 +2,7 @@ services:
   - type: web
     name: pantrypal-staging
     runtime: docker
-    plan: 0.5c-512mb
+    plan: free
     region: oregon
     dockerfilePath: ./backend/Dockerfile
     dockerContext: .
@@ -35,28 +35,13 @@ services:
         generateValue: true
       - key: AUTH_COOKIE_SECURE
         value: "true"
-      - key: MAIL_HOST
-        value: smtp-relay.brevo.com
-      - key: MAIL_PORT
-        value: "587"
-      - key: MAIL_USERNAME
-        sync: false
-      - key: MAIL_PASSWORD
-        sync: false
-      - key: MAIL_SMTP_AUTH
-        value: "true"
-      - key: MAIL_STARTTLS
-        value: "true"
-      - key: MAIL_FROM
-        sync: false
-      - key: PANTRYPAL_SUPPORT_EMAIL
-        sync: false
+      - key: PANTRYPAL_SMTP_REQUIRED
+        value: "false"
 
 databases:
   - name: pantrypal-staging-db
     databaseName: pantrypal
     user: pantrypal_staging
-    plan: 0.5c-1g
+    plan: free
     region: oregon
     postgresMajorVersion: "17"
-    diskSizeGB: 1
