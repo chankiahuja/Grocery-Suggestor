@@ -69,11 +69,12 @@ class PostgresBackupRestoreDrillTest {
         output = Path.of("target", "backup-drill", suffix);
         Files.createDirectories(output);
         Path archive = output.resolve("synthetic.dump").toAbsolutePath();
-        var created = new ArrayList<String>();
         long totalStart = System.nanoTime();
-        try {
-            createDatabase(source); created.add(source);
-            createDatabase(target); created.add(target);
+        String report;
+        try (var cleanup = new DrillDatabaseCleanup(database -> databaseStatement("DROP DATABASE " + database))) {
+            // Register only databases successfully created by this invocation.
+            createDatabase(source); cleanup.created(source);
+            createDatabase(target); cleanup.created(target);
             var sourceData = dataSource(source);
             var targetData = dataSource(target);
             Flyway.configure().dataSource(sourceData).load().migrate();
@@ -144,23 +145,16 @@ class PostgresBackupRestoreDrillTest {
             timings.put("validation_and_cleanup_ms", elapsed(started));
             timings.put("total_drill_ms", elapsed(totalStart));
             timings.put("archive_bytes", Files.size(archive));
-            String report = "Synthetic local full-database restore drill PASSED\n"
+            report = "Synthetic local full-database restore drill PASSED\n"
                 + "Source and target: newly created loopback databases; no production data\n"
                 + "Tables verified before recovery cleanup: " + snapshot.size() + "\n"
                 + "Archive SHA-256: " + digest(Files.readAllBytes(archive)) + "\n"
                 + timings + "\n"
                 + "Limits: service-layer validation; no HTTP/email/provider recovery or production RPO/RTO proof\n";
-            Files.writeString(output.resolve("result.txt"), report);
-            System.out.println(report);
-        } finally {
-            // Only databases successfully created by this invocation can enter the cleanup list.
-            java.sql.SQLException cleanupFailure = null;
-            for (String database : created) {
-                try { databaseStatement("DROP DATABASE " + database); }
-                catch (java.sql.SQLException failure) { cleanupFailure = failure; }
-            }
-            if (cleanupFailure != null) throw cleanupFailure;
         }
+        // A cleanup-only failure must not leave a success report behind.
+        Files.writeString(output.resolve("result.txt"), report);
+        System.out.println(report);
     }
 
     private Fixture seed(AnnotationConfigApplicationContext context) {
