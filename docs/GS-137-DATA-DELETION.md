@@ -52,9 +52,38 @@ Before finalizing the public notice or admitting pilot users, record the actual 
 
 Account deletion does not remove already-delivered support messages or provider backups. Support must verify the requester, search attributable messages and remove available copies according to the provider controls. Do not send a deletion confirmation email containing a pantry snapshot or keep deleted accounts for analytics.
 
-**Restore procedure:** keep restored databases isolated from traffic and outbound mail. Reconcile every account deletion after the snapshot before enabling the application. This requires an access-controlled operator deletion record outside the restored snapshot, with the minimum identifiers needed to reconcile it, an explicit retention policy, and controlled disposal when all affected backups/exports have expired. This operator record and its policy are not implemented by this change and must be approved and established before using backups for the pilot. If a complete reconciliation record is unavailable, do not serve the restored data. Verify the reconciliation with a disposable-account restore rehearsal and record the outcome. Do not silently restore deleted users or promise immediate backup erasure.
+### Restore procedure — invalidate authentication before serving traffic
+
+Track the authentication restore requirement in [issue #145](https://github.com/chankiahuja/Grocery-Suggestor/issues/145). A snapshot can contain a session subsequently logged out or a challenge subsequently consumed. Account-existence checks and V7's session foreign key cannot detect these reversals for accounts that still exist. An unchanged OTP secret can make a restored code usable until its original expiry. Rotating an OTP secret alone does not revoke restored session cookies.
+
+1. Stop **all application instances and mail workers** before restoring. Keep the restored database isolated from user traffic and outbound mail. Restrict database access to the recovery operator so no old process can save an in-memory session or activate queued authentication work during cleanup.
+2. Verify the destination database and schema explicitly. Restore the intended snapshot, then reconcile **every account deletion after the snapshot** before enabling the application. This requires an access-controlled operator deletion record outside the restored snapshot, with the minimum identifiers needed to reconcile it, an explicit retention policy, and controlled disposal when all affected backups/exports have expired. This operator record and its policy are not implemented by this change and must be approved and established before using backups for the pilot. If a complete reconciliation record is unavailable, **do not serve the restored data**.
+3. Invalidate **all restored sessions and email challenges**, including those for accounts that remain. Execute the [operator-only cleanup SQL](../backend/src/main/resources/db/operations/invalidate_restored_auth.sql) against the verified restored schema while every application instance and worker remains stopped:
+
+   ```sql
+   BEGIN;
+   DELETE FROM spring_session;
+   DELETE FROM email_challenges;
+   COMMIT;
+   ```
+
+   Deleting sessions cascades to `spring_session_attributes`, removing stored authentication contexts, CSRF tokens and recent-verification timestamps. Retain the abuse-prevention counters in `auth_rate_limits`. The cleanup is repeat-safe while the target remains offline. If any statement fails, roll back and resolve the failure; keep traffic disabled.
+4. Before starting any instance, verify that `spring_session`, `spring_session_attributes` and `email_challenges` are empty. Verify deletion reconciliation separately. Stop recovery if either check fails. Record the recovery target, time and outcomes without recording cookies, OTPs or other credentials.
+5. Start fresh application processes after cleanup; never reuse a process carrying pre-restore session state or queued mail work. Use restricted access and disposable test accounts to confirm that a cookie revoked after the snapshot is unauthorized, a previously consumed code cannot verify, and a newly requested code permits fresh sign-in. Reopen traffic only after those checks pass. All users must sign in again after recovery.
+
+This is an explicit recovery operation, not a Flyway migration or a normal-startup hook. Normal restart persistence stays intact. Verify the complete procedure with a disposable-account restore rehearsal and record the outcome. Do not silently restore deleted users or promise immediate backup erasure.
 
 ## Verification
+
+For issue #145, `RestoredAuthenticationTest` snapshots and restores only the three authentication tables in an isolated database/schema, with mocked mail delivery and a stable test OTP secret. Its control confirms that the unexpired logged-out cookie and consumed code become usable after restoring the snapshot. It then restores the same snapshot, executes the operator SQL twice, verifies removal of sessions/attributes/challenges, rejects both old credentials, and permits a fresh email login while accounts remain intact.
+
+Checks on 10 November 2026, branch `GS-145`:
+
+- From `backend`, `.\mvnw.cmd '-Dtest=RestoredAuthenticationTest,AuthFlowTest' test`: **20 passed** against isolated H2 databases.
+- `.\mvnw.cmd '-Dtest=RestoredAuthenticationTest' test` with `RESTORE_AUTH_DB_URL`, `RESTORE_AUTH_DB_USER`, and `RESTORE_AUTH_DB_PASSWORD` targeting a newly created temporary schema in `pantrypal_auth_test`: **one passed on PostgreSQL 17.11**; seven Flyway migrations validated/applied; the temporary schema was dropped afterward. These variables are test-only overrides and must never target the normal app or production database.
+- `git diff --check`: passed. No frontend behavior changed, so frontend checks were not rerun.
+
+This verifies authentication-table restore semantics through the real authentication controllers and JDBC sessions. It is not a provider backup restore rehearsal, a full database/process recovery, or a real email delivery test. The operator must still verify account-deletion reconciliation and the complete isolated recovery procedure before serving restored data.
 
 Focused backend tests cover associated data cleanup, all-session revocation, pending-code invalidation, repeated requests, CSRF, stale authentication with fresh OTP recovery, two-account isolation, deletion racing with a write, and rollback with a forced foreign-key failure. Notification tests check closure of every deleted-account stream and suppression of queued signals without closing another account's stream. The opt-in PostgreSQL runtime smoke checks account-data deletion after restart and rejection of a stale session insert by the V7 foreign key.
 
