@@ -32,7 +32,8 @@ public class SecurityConfig {
         return cookies;
     }
     @Bean SecurityFilterChain security(HttpSecurity http, HttpSessionSecurityContextRepository contexts,
-        HttpSessionCsrfTokenRepository csrf) throws Exception {
+        HttpSessionCsrfTokenRepository csrf, org.springframework.jdbc.core.JdbcTemplate jdbc) throws Exception {
+        http.addFilterBefore(new ActiveAccountFilter(jdbc), org.springframework.security.web.access.intercept.AuthorizationFilter.class);
         http.authorizeHttpRequests(auth -> auth
             .requestMatchers("/api/auth/**", "/api/feedback/**", "/api/healthz").permitAll()
             .requestMatchers("/api/**").authenticated()

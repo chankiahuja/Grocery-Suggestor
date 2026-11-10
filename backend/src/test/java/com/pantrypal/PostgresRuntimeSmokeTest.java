@@ -130,6 +130,15 @@ class PostgresRuntimeSmokeTest {
             assertThat(service.suggestions(ids[0]))
                 .extracting(suggestion -> suggestion.get("name"))
                 .contains("Persistent alert");
+            context.getBean(AccountDeletionService.class).delete(ids[0]);
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> jdbc.update("INSERT INTO spring_session (primary_id,session_id,creation_time,last_access_time,max_inactive_interval,expiry_time,principal_name) VALUES (?,?,0,0,600,9999999999999,?)",
+                UUID.randomUUID().toString(), UUID.randomUUID().toString(), Long.toString(ids[0])))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM accounts WHERE id=?", Integer.class, ids[0])).isZero();
+            assertThat(service.inventory(Long.valueOf(ids[0]))).isEmpty();
+            assertThat(service.lists(ids[0])).isEmpty();
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM inventory_adjustments WHERE inventory_item_id=?", Integer.class, ids[3])).isZero();
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM accounts WHERE id=?", Integer.class, ids[1])).isEqualTo(1);
         }
     }
 

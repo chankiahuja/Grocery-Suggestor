@@ -9,6 +9,21 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Check whether this session verified email within the last five minutes
+ */
+export const GetAccountDeletionStatusResponse = zod.object({
+  "recentAuthentication": zod.boolean()
+})
+
+
+/**
+ * Requires email verification within five minutes. Deletes owned inventory, adjustment history, shopping data, email challenge and all account sessions in one transaction. Mailbox/provider backups require separate operator handling. A repeated request after revocation returns 401 or 403; a lost response must not be treated as confirmed success.
+ * @summary Permanently delete the current account from active application stores
+ */
+export const DeleteAccountResponse = zod.void()
+
+
+/**
  * @summary Restore the session and obtain a CSRF token
  */
 export const GetAuthSessionResponse = zod.object({

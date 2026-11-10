@@ -24,6 +24,21 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
 class NotificationEventsTest {
+    @Test void deletionClosesEveryAccountStreamAndSuppressesQueuedSignalsWithoutClosingAnotherAccount() {
+        var queued = new ArrayDeque<Runnable>();
+        var notifications = new NotificationEvents(mock(PantryService.class), sessions(), queued::add);
+        var first = new RecordingEmitter(); var second = new RecordingEmitter(); var other = new RecordingEmitter();
+        notifications.subscribe(authentication("1"), "first", first);
+        notifications.subscribe(authentication("1"), "second", second);
+        notifications.subscribe(authentication("2"), "other", other);
+        notifications.changed(new PantryService.PantryChanged("inventory_changed", 1L, 1L));
+        notifications.deleted(new AccountDeletionService.AccountDeleted(1));
+        queued.remove().run();
+        assertThat(first.completed).isTrue(); assertThat(second.completed).isTrue();
+        assertThat(other.completed).isFalse();
+        assertThat(first.payloads).doesNotContain(Map.of("type", "inventory_changed"));
+        assertThat(second.payloads).doesNotContain(Map.of("type", "inventory_changed"));
+    }
     @Test
     void committedSignalsEnqueueWithoutSessionLookupAndRevalidateBeforeDelivery() {
         var sessions = sessions();

@@ -23,9 +23,11 @@ public class AuthController {
     private final HttpSessionSecurityContextRepository contexts;
     private final HttpSessionCsrfTokenRepository csrf;
     private final NotificationEvents notifications;
+    private final java.time.Clock clock;
     public AuthController(AuthService auth, HttpSessionSecurityContextRepository contexts, HttpSessionCsrfTokenRepository csrf,
-        NotificationEvents notifications) {
+        NotificationEvents notifications, java.time.Clock clock) {
         this.auth = auth; this.contexts = contexts; this.csrf = csrf; this.notifications = notifications;
+        this.clock = clock;
     }
     @GetMapping("/session")
     public SessionState session(HttpServletRequest request, Authentication authentication) {
@@ -56,6 +58,7 @@ public class AuthController {
         context.setAuthentication(authentication);
         SecurityContextHolder.setContext(context);
         contexts.saveContext(context, request, response);
+        request.getSession().setAttribute(AccountController.VERIFIED_AT, clock.millis());
         var token = csrf.generateToken(request);
         csrf.saveToken(token, request, response);
         return new SessionState(true, account, token.getToken());

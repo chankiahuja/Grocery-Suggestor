@@ -22,6 +22,11 @@ public class PantryService {
     static long id(Map<String,Object> row) { return ((Number) row.get("id")).longValue(); }
     static void bad(String reason) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, reason); }
     public List<Long> accountIds() { return repo.accountIds(); }
+    private void lockOwner(Long ownerId) {
+        if (ownerId != null && repo.query("SELECT id FROM accounts WHERE id=? FOR UPDATE", ownerId).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Sign in to continue");
+        }
+    }
 
     // Explicit allowlist: client keys never become SQL identifiers.
     Map<String,Object> fields(Map<String,Object> body, boolean create, boolean inventory) {
@@ -58,6 +63,7 @@ public class PantryService {
     public Map<String,Object> inventory(Long ownerId, long id) { return repo.one("SELECT " + INVENTORY_COLUMNS + " FROM inventory_items WHERE id=? AND " + ownerWhere("account_id", ownerId), id); }
     public Map<String,Object> saveInventory(Long id, Map<String,Object> body) { return saveInventory(null, id, body); }
     public Map<String,Object> saveInventory(Long ownerId, Long id, Map<String,Object> body) {
+        lockOwner(ownerId);
         var values = fields(body, id == null, true);
         if (id == null) { if (ownerId != null) values.put("account_id", ownerId); id = repo.insert("inventory_items", values); }
         else { inventory(ownerId, id); values.put("updated_at", OffsetDateTime.now(ZoneOffset.UTC)); repo.update("inventory_items", id, values, ownerId); }
@@ -66,6 +72,7 @@ public class PantryService {
     }
     public Map<String,Object> adjustInventory(long id, String idempotencyKey, Map<String,Object> body) { return adjustInventory(null, id, idempotencyKey, body); }
     public Map<String,Object> adjustInventory(Long ownerId, long id, String idempotencyKey, Map<String,Object> body) {
+        lockOwner(ownerId);
         if (idempotencyKey == null || idempotencyKey.isBlank() || idempotencyKey.length() > 128) bad("Idempotency-Key must be 1 to 128 characters");
         var item = repo.one("SELECT * FROM inventory_items WHERE id=? AND " + ownerWhere("account_id", ownerId) + " FOR UPDATE", id);
         Object operationValue = body.get("operation");
@@ -110,6 +117,7 @@ public class PantryService {
     }
     public Map<String,Object> undoInventoryAdjustment(long id, Map<String,Object> body) { return undoInventoryAdjustment(null, id, body); }
     public Map<String,Object> undoInventoryAdjustment(Long ownerId, long id, Map<String,Object> body) {
+        lockOwner(ownerId);
         Object key = body.get("idempotencyKey");
         if (!(key instanceof String s) || s.isBlank() || s.length() > 128) bad("idempotencyKey must be 1 to 128 characters");
         // All stock writers acquire this row lock (explicitly or through UPDATE).
@@ -137,7 +145,7 @@ public class PantryService {
         return Map.of("status", "undone", "inventory", inventory(ownerId, id));
     }
     public void deleteInventory(long id) { deleteInventory(null, id); }
-    public void deleteInventory(Long ownerId, long id) { inventory(ownerId, id); repo.execute("DELETE FROM inventory_items WHERE id=? AND " + ownerWhere("account_id", ownerId), id); events.publishEvent(new PantryChanged("inventory_changed", id, ownerId)); }
+    public void deleteInventory(Long ownerId, long id) { lockOwner(ownerId); inventory(ownerId, id); repo.execute("DELETE FROM inventory_items WHERE id=? AND " + ownerWhere("account_id", ownerId), id); events.publishEvent(new PantryChanged("inventory_changed", id, ownerId)); }
     boolean expired(Map<String,Object> item) {
         return number(item, "quantity") > 0 && item.get("expiresAt") != null
             && LocalDate.parse(item.get("expiresAt").toString()).isBefore(Instant.ofEpochMilli(clock.millis()).atZone(ZoneOffset.UTC).toLocalDate());
@@ -197,6 +205,7 @@ public class PantryService {
     }
     public Map<String,Object> createList(Map<String,Object> body) { return createList(null, body); }
     public Map<String,Object> createList(Long ownerId, Map<String,Object> body) {
+        lockOwner(ownerId);
         if (!(body.get("name") instanceof String name) || name.isBlank()) bad("name is required");
         Map<String,Object> values = new LinkedHashMap<>(); values.put("name", body.get("name")); if (ownerId != null) values.put("account_id", ownerId);
         long id = repo.insert("shopping_lists", values);
@@ -204,9 +213,10 @@ public class PantryService {
         list.put("itemCount", 0); list.put("purchasedCount", 0); return list;
     }
     public void deleteList(long id) { deleteList(null, id); }
-    public void deleteList(Long ownerId, long id) { list(ownerId, id); repo.execute("DELETE FROM shopping_lists WHERE id=? AND " + ownerWhere("account_id", ownerId), id); }
+    public void deleteList(Long ownerId, long id) { lockOwner(ownerId); list(ownerId, id); repo.execute("DELETE FROM shopping_lists WHERE id=? AND " + ownerWhere("account_id", ownerId), id); }
     public Map<String,Object> addItem(long listId, Map<String,Object> body) { return addItem(null, listId, body); }
     public Map<String,Object> addItem(Long ownerId, long listId, Map<String,Object> body) {
+        lockOwner(ownerId);
         list(ownerId, listId); var values = fields(body, true, false);
         values.remove("purchased");
         if (values.get("inventory_item_id") != null) inventory(ownerId, ((Number)values.get("inventory_item_id")).longValue());
@@ -217,6 +227,7 @@ public class PantryService {
     }
     public Map<String,Object> updateItem(long listId, long id, Map<String,Object> body) { return updateItem(null, listId, id, body); }
     public Map<String,Object> updateItem(Long ownerId, long listId, long id, Map<String,Object> body) {
+        lockOwner(ownerId);
         repo.one("SELECT * FROM shopping_list_items WHERE id=? AND shopping_list_id=? AND " + ownerWhere("account_id", ownerId), id, listId);
         var values = fields(body, false, false); values.keySet().retainAll(Set.of("quantity", "notes", "purchased"));
         repo.update("shopping_list_items", id, values, ownerId);
@@ -224,12 +235,14 @@ public class PantryService {
     }
     public void deleteItem(long listId, long id) { deleteItem(null, listId, id); }
     public void deleteItem(Long ownerId, long listId, long id) {
+        lockOwner(ownerId);
         repo.one("SELECT * FROM shopping_list_items WHERE id=? AND shopping_list_id=? AND " + ownerWhere("account_id", ownerId), id, listId);
         repo.execute("DELETE FROM shopping_list_items WHERE id=? AND " + ownerWhere("account_id", ownerId), id);
     }
     public Map<String,Object> generateList() { return generateList(null, Map.of()); }
     public Map<String,Object> generateList(Map<String,Object> request) { return generateList(null, request); }
     public Map<String,Object> generateList(Long ownerId, Map<String,Object> request) {
+        lockOwner(ownerId);
         var suggestions = suggestions(ownerId).stream().filter(s -> List.of("critical", "low").contains(s.get("urgency"))).toList();
         if (suggestions.isEmpty()) bad("No low-stock suggestions are available.");
         var selected = new LinkedHashMap<Long, Map<String,Object>>();
@@ -270,6 +283,7 @@ public class PantryService {
     }
     public Map<String,Object> purchase(long listId) { return purchase(null, listId); }
     public Map<String,Object> purchase(Long ownerId, long listId) {
+        lockOwner(ownerId);
         repo.one("SELECT * FROM shopping_lists WHERE id=? AND " + ownerWhere("account_id", ownerId) + " FOR UPDATE", listId);
         var items = repo.query("SELECT * FROM shopping_list_items WHERE shopping_list_id=? AND " + ownerWhere("account_id", ownerId) + " AND purchased=TRUE AND restocked=FALSE AND inventory_item_id IS NOT NULL", listId);
         for (var item : items) {

@@ -14,7 +14,7 @@ class FrontendRoutingTest {
     @Autowired MockMvc mvc;
 
     @Test void clientRoutesForwardToReact() throws Exception {
-        for (String path : new String[]{"/", "/login", "/signup", "/dashboard", "/inventory", "/shopping-lists", "/shopping-lists/12"}) {
+        for (String path : new String[]{"/", "/login", "/signup", "/privacy", "/account", "/contact", "/dashboard", "/inventory", "/shopping-lists", "/shopping-lists/12"}) {
             mvc.perform(get(path)).andExpect(status().isOk()).andExpect(forwardedUrl("/index.html"));
         }
     }

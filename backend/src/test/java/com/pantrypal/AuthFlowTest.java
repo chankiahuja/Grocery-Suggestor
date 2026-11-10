@@ -41,6 +41,8 @@ class AuthFlowTest {
     @Autowired ObjectMapper json;
     @Autowired JdbcTemplate jdbc;
     @Autowired AuthService auth;
+    @Autowired AccountDeletionService deletion;
+    @Autowired PantryService pantry;
     @Autowired @Qualifier("loginMailExecutor") ThreadPoolTaskExecutor loginMailExecutor;
     @MockitoBean OtpMailSender mail;
     @MockitoBean Clock clock;
@@ -95,6 +97,103 @@ class AuthFlowTest {
         JsonNode verify(String email, JsonNode challenge, String code, int expected) throws Exception {
             return post("/api/auth/verify", Map.of("email", email, "challengeId", challenge.get("challengeId").asText(), "code", code), expected);
         }
+    }
+
+    @Test void deletionErasesAssociatedDataAndAllSessionsButPreservesAnotherAccount() throws Exception {
+        var owner = new Browser(); owner.session();
+        var challenge = owner.requestCode("delete@example.com");
+        long accountId = owner.verify("delete@example.com", challenge, codes.get("delete@example.com"), 200).get("account").get("id").asLong();
+        var secondSession = new Browser(); secondSession.session();
+        now.addAndGet(31_000);
+        var secondCode = secondSession.post("/api/auth/code", Map.of("email", "delete@example.com", "intent", "login"), 200);
+        secondSession.verify("delete@example.com", secondCode, codes.get("delete@example.com"), 200);
+        var other = new Browser(); other.session();
+        var otherCode = other.requestCode("survivor@example.com");
+        long otherId = other.verify("survivor@example.com", otherCode, codes.get("survivor@example.com"), 200).get("account").get("id").asLong();
+        long otherItem = PantryService.id(pantry.saveInventory(otherId, null, Map.of("name", "Preserve me", "category", "Pantry", "quantity", 7, "unit", "each", "minThreshold", 1)));
+        long otherList = PantryService.id(pantry.createList(otherId, Map.of("name", "Preserve list")));
+        try {
+            long item = PantryService.id(pantry.saveInventory(accountId, null, Map.of("name", "Delete me", "category", "Pantry", "quantity", 2, "unit", "each", "minThreshold", 1)));
+            pantry.adjustInventory(accountId, item, "history", Map.of("operation", "consume", "amount", 1));
+            long list = PantryService.id(pantry.createList(accountId, Map.of("name", "Delete list")));
+            pantry.addItem(accountId, list, Map.of("name", "Delete row", "category", "Pantry", "quantity", 1, "unit", "each", "inventoryItemId", item));
+            now.addAndGet(31_000);
+            var pending = owner.post("/api/auth/code", Map.of("email", "delete@example.com", "intent", "login"), 200);
+            String pendingCode = codes.get("delete@example.com");
+            mvc.perform(delete("/api/account").cookie(owner.cookie).header("X-CSRF-TOKEN", owner.csrf)).andExpect(status().isNoContent());
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM accounts WHERE id=?", Integer.class, accountId)).isZero();
+            for (String table : List.of("inventory_items", "shopping_lists", "shopping_list_items"))
+                assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM " + table + " WHERE account_id=?", Integer.class, accountId)).isZero();
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM inventory_adjustments WHERE inventory_item_id=?", Integer.class, item)).isZero();
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM spring_session WHERE principal_name=?", Integer.class, Long.toString(accountId))).isZero();
+            assertThatThrownBy(() -> jdbc.update("INSERT INTO spring_session (primary_id,session_id,creation_time,last_access_time,max_inactive_interval,expiry_time,principal_name) VALUES (?,?,0,0,600,9999999999999,?)",
+                UUID.randomUUID().toString(), UUID.randomUUID().toString(), Long.toString(accountId)))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM email_challenges WHERE email='delete@example.com'", Integer.class)).isZero();
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM auth_rate_limits WHERE bucket_key=?", Integer.class, "request-email:" + AuthRateLimiter.digest("delete@example.com"))).isZero();
+            mvc.perform(get("/api/inventory").cookie(secondSession.cookie)).andExpect(status().isUnauthorized());
+            mvc.perform(get("/api/account/deletion-status").cookie(owner.cookie)).andExpect(status().isUnauthorized());
+            mvc.perform(delete("/api/account").cookie(owner.cookie).header("X-CSRF-TOKEN", owner.csrf)).andExpect(status().is4xxClientError());
+            verify(notifications).deleted(new AccountDeletionService.AccountDeleted(accountId));
+            var anonymous = new Browser(); anonymous.session();
+            anonymous.verify("delete@example.com", pending, pendingCode, 400);
+            assertThat(other.session().get("authenticated").asBoolean()).isTrue();
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM accounts WHERE id=?", Integer.class, otherId)).isEqualTo(1);
+            assertThat(PantryService.number(pantry.inventory(otherId, otherItem), "quantity")).isEqualTo(7);
+            assertThat(pantry.list(otherId, otherList).get("name")).isEqualTo("Preserve list");
+            assertThatThrownBy(() -> pantry.createList(accountId, Map.of("name", "Stale write"))).isInstanceOf(ResponseStatusException.class);
+        } finally { deletion.delete(otherId); }
+    }
+
+    @Test void deletionRequiresCsrfAndRecentAuthenticationAndFreshOtpRestoresEligibility() throws Exception {
+        var browser = new Browser(); browser.session();
+        var code = browser.requestCode("recent@example.com");
+        browser.verify("recent@example.com", code, codes.get("recent@example.com"), 200);
+        mvc.perform(delete("/api/account").cookie(browser.cookie)).andExpect(status().isForbidden());
+        now.addAndGet(AccountController.RECENT_AUTH_MS);
+        mvc.perform(get("/api/account/deletion-status").cookie(browser.cookie)).andExpect(jsonPath("$.recentAuthentication").value(false));
+        mvc.perform(delete("/api/account").cookie(browser.cookie).header("X-CSRF-TOKEN", browser.csrf)).andExpect(status().isForbidden());
+        assertThat(browser.session().get("authenticated").asBoolean()).isTrue();
+        var fresh = browser.post("/api/auth/code", Map.of("email", "recent@example.com", "intent", "login"), 200);
+        browser.verify("recent@example.com", fresh, codes.get("recent@example.com"), 200);
+        mvc.perform(delete("/api/account").cookie(browser.cookie).header("X-CSRF-TOKEN", browser.csrf)).andExpect(status().isNoContent());
+    }
+
+    @Test void failedDeletionRollsBackDataSessionsAndChallengeAndCanBeRetried() throws Exception {
+        var browser = new Browser(); browser.session();
+        var code = browser.requestCode("rollback@example.com");
+        long id = browser.verify("rollback@example.com", code, codes.get("rollback@example.com"), 200).get("account").get("id").asLong();
+        pantry.saveInventory(id, null, Map.of("name", "Keep on failure", "category", "Pantry", "quantity", 1, "unit", "each", "minThreshold", 1));
+        jdbc.execute("CREATE TABLE deletion_failure_probe (account_id BIGINT REFERENCES accounts(id))");
+        jdbc.update("INSERT INTO deletion_failure_probe VALUES (?)", id);
+        try {
+            assertThatThrownBy(() -> deletion.delete(id)).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+            assertThat(pantry.inventory(Long.valueOf(id))).hasSize(1);
+            assertThat(browser.session().get("authenticated").asBoolean()).isTrue();
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM email_challenges WHERE email='rollback@example.com'", Integer.class)).isEqualTo(1);
+            verify(notifications, never()).deleted(new AccountDeletionService.AccountDeleted(id));
+        } finally { jdbc.execute("DROP TABLE deletion_failure_probe"); }
+        mvc.perform(delete("/api/account").cookie(browser.cookie).header("X-CSRF-TOKEN", browser.csrf)).andExpect(status().isNoContent());
+    }
+
+    @Test void concurrentOwnedWritesCannotSurviveDeletion() throws Exception {
+        var browser = new Browser(); browser.session();
+        var code = browser.requestCode("racing@example.com");
+        long id = browser.verify("racing@example.com", code, codes.get("racing@example.com"), 200).get("account").get("id").asLong();
+        var executor = Executors.newFixedThreadPool(2);
+        var start = new CountDownLatch(1);
+        try {
+            var write = executor.submit(() -> {
+                start.await();
+                try { pantry.createList(id, Map.of("name", "Racing list")); }
+                catch (ResponseStatusException rejected) { assertThat(rejected.getStatusCode().value()).isEqualTo(401); }
+                return null;
+            });
+            var erase = executor.submit(() -> { start.await(); deletion.delete(id); return null; });
+            start.countDown(); write.get(10, TimeUnit.SECONDS); erase.get(10, TimeUnit.SECONDS);
+            assertThat(pantry.lists(id)).isEmpty();
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM accounts WHERE id=?", Integer.class, id)).isZero();
+        } finally { executor.shutdownNow(); }
     }
 
     @Test void sessionIsRotatedPersistedRestoredAndRevokedByLogout() throws Exception {

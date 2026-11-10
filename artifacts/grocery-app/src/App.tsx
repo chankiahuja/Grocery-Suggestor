@@ -16,6 +16,8 @@ const ComparePrices = lazy(() => import("@/pages/compare-prices"));
 const Auth = lazy(() => import("@/pages/auth"));
 const Landing = lazy(() => import("@/pages/landing"));
 const Contact = lazy(() => import("@/pages/contact"));
+const Privacy = lazy(() => import("@/pages/privacy"));
+const AccountSettings = lazy(() => import("@/pages/account"));
 
 const queryClient = new QueryClient();
 
@@ -28,6 +30,8 @@ export function AppRoutes({ preview }: { preview?: boolean } = {}) {
           <Route path="/signup" component={Auth} />
           <Route path="/" component={Landing} />
           <Route path="/contact" component={Contact} />
+          <Route path="/privacy" component={Privacy} />
+          <Route path="/account" component={AccountSettings} />
           <Route path="/dashboard" component={Dashboard} />
           <Route path="/inventory" component={Inventory} />
           <Route path="/shopping-lists" component={ShoppingLists} />

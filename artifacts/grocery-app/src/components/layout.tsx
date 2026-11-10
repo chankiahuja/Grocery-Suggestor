@@ -132,6 +132,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <DropdownMenuItem className="pantry-account-menu-item" onSelect={() => setFeedbackOpen(true)}>
                   <MessageSquareText aria-hidden="true" /> Share feedback
                 </DropdownMenuItem>
+                <DropdownMenuItem className="pantry-account-menu-item" onSelect={() => navigate("/account")}>
+                  <UserRound aria-hidden="true" /> Account settings
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem className="pantry-account-menu-item pantry-account-logout" disabled={loggingOut} onSelect={() => void handleLogout()}>
                   <LogOut aria-hidden="true" /> {loggingOut ? "Logging out…" : "Log out"}
@@ -197,6 +200,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </span>
           <span>Thoughtful shopping. Less waste.</span>
           <Link href="/contact">Contact &amp; Feedback</Link>
+          <Link href="/privacy">Privacy notice</Link>
         </footer>
       </main>
     </div>

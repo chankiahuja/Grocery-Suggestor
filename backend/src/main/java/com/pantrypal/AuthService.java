@@ -180,6 +180,9 @@ public class AuthService {
             if (!"signup".equals(row.get("intent"))) throw invalid();
             jdbc.update("INSERT INTO accounts(email,display_name) VALUES (?,?)", email, row.get("display_name"));
         }
+        // Populate the string FK before any authenticated Spring Session can be saved.
+        // Existing accounts were backfilled by V7; new accounts obtain their ID here.
+        jdbc.update("UPDATE accounts SET session_principal=CAST(id AS VARCHAR(100)) WHERE email=? AND session_principal IS NULL", email);
         return accountByEmail(email);
     }
     private ResponseStatusException invalid() { return new ResponseStatusException(HttpStatus.BAD_REQUEST, "We couldn't verify this code. Check your email and code, or request another. If you haven't registered, create an account first."); }

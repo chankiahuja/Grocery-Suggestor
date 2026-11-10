@@ -119,6 +119,8 @@ The runtime smoke starts the real `postgres` profile twice, applies and validate
 
 ## Troubleshooting
 
+Before enabling account deletion for pilot users, complete the provider and backup/export release gates in the [account deletion inventory and restore procedure](GS-137-DATA-DELETION.md). Active-store deletion does not erase existing mail or backup copies. Never restore a snapshot to a serving environment without reconciling deletions made after that snapshot.
+
 - Port 5432 occupied: stop the other database or change the Compose host mapping and native DB_URL together.
 - Flyway complains about non-empty schema: use a fresh `pantrypal` database; do not baseline the former schema blindly.
 - Maven wrapper fails to download: check network access to Maven Central and JAVA_HOME/JDK configuration.
