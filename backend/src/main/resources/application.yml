@@ -19,6 +19,8 @@ spring:
       initialize-schema: never
   profiles:
     default: local
+    group:
+      production: postgres
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/pantrypal}
     username: ${DB_USER:pantrypal}

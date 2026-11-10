@@ -1,0 +1,62 @@
+services:
+  - type: web
+    name: pantrypal-staging
+    runtime: docker
+    plan: 0.5c-512mb
+    region: oregon
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/healthz
+    autoDeployTrigger: commit
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: production
+      - key: DB_HOST
+        fromDatabase:
+          name: pantrypal-staging-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: pantrypal-staging-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: pantrypal-staging-db
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: pantrypal-staging-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: pantrypal-staging-db
+          property: password
+      - key: AUTH_OTP_SECRET
+        generateValue: true
+      - key: AUTH_COOKIE_SECURE
+        value: "true"
+      - key: MAIL_HOST
+        value: smtp-relay.brevo.com
+      - key: MAIL_PORT
+        value: "587"
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: MAIL_SMTP_AUTH
+        value: "true"
+      - key: MAIL_STARTTLS
+        value: "true"
+      - key: MAIL_FROM
+        sync: false
+      - key: PANTRYPAL_SUPPORT_EMAIL
+        sync: false
+
+databases:
+  - name: pantrypal-staging-db
+    databaseName: pantrypal
+    user: pantrypal_staging
+    plan: 0.5c-1g
+    region: oregon
+    postgresMajorVersion: "17"
+    diskSizeGB: 1
