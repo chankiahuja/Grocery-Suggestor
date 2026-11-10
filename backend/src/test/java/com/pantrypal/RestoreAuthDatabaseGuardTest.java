@@ -1,6 +1,10 @@
 package com.pantrypal;
 
 import java.util.concurrent.atomic.AtomicBoolean;
+import com.zaxxer.hikari.HikariDataSource;
+import org.springframework.beans.factory.config.BeanPostProcessor;
+import org.springframework.boot.autoconfigure.AutoConfigurations;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import javax.sql.DataSource;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,6 +18,77 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 class RestoreAuthDatabaseGuardTest {
+    // Use Boot's real Hikari binding, without the mocked datasource configuration below.
+    private ApplicationContextRunner hikariRunner(AtomicBoolean datasourceInitialized) {
+        return new ApplicationContextRunner()
+            .withConfiguration(AutoConfigurations.of(DataSourceAutoConfiguration.class))
+            .withInitializer(new RestoreAuthDatabaseGuard())
+            .withInitializer(context -> context.getBeanFactory().addBeanPostProcessor(new BeanPostProcessor() {
+                @Override public Object postProcessBeforeInitialization(Object bean, String name) {
+                    if (bean instanceof DataSource) datasourceInitialized.set(true);
+                    return bean;
+                }
+            }));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"false", "true"})
+    void hikariCannotRedirectTheSelectedTargetEvenWithOptIn(String optIn) {
+        var initialized = new AtomicBoolean();
+        hikariRunner(initialized).withPropertyValues(
+                "spring.datasource.url=jdbc:h2:mem:restore_guard_selected",
+                "spring.datasource.hikari.jdbc-url=jdbc:postgresql://must-not-connect.invalid/shared?password=do-not-log-me",
+                "spring.datasource.hikari.driver-class-name=org.postgresql.Driver",
+                RestoreAuthDatabaseGuard.OPT_IN + "=" + optIn)
+            .run(context -> {
+                assertThat(context).hasFailed();
+                assertThat(context.getStartupFailure()).isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("conflicting Hikari override")
+                    .hasMessageNotContaining("must-not-connect.invalid")
+                    .hasMessageNotContaining("do-not-log-me");
+                assertThat(initialized).isFalse();
+            });
+    }
+
+    @Test void optedInPostgresSchemaCannotBeReplacedByAnotherHikariSchema() {
+        var initialized = new AtomicBoolean();
+        hikariRunner(initialized).withPropertyValues(
+                "spring.datasource.url=jdbc:postgresql://must-not-connect.invalid/test?currentSchema=isolated",
+                "spring.datasource.hikari.jdbc-url=jdbc:postgresql://must-not-connect.invalid/test?currentSchema=shared",
+                "spring.datasource.driver-class-name=org.postgresql.Driver",
+                RestoreAuthDatabaseGuard.OPT_IN + "=true")
+            .run(context -> {
+                assertThat(context).hasFailed();
+                assertThat(context.getStartupFailure()).hasMessageContaining("conflicting Hikari override");
+                assertThat(initialized).isFalse();
+            });
+    }
+
+    @Test void realHikariUsesTheSelectedInMemoryUrl() {
+        var initialized = new AtomicBoolean();
+        String url = "jdbc:h2:mem:restore_guard_hikari";
+        hikariRunner(initialized).withPropertyValues("spring.datasource.url=" + url,
+                "spring.datasource.hikari.jdbc-url=" + url, "spring.datasource.driver-class-name=org.h2.Driver")
+            .run(context -> {
+                assertThat(context).hasNotFailed();
+                assertThat(initialized).isTrue();
+                assertThat(context.getBean(HikariDataSource.class).getJdbcUrl()).isEqualTo(url);
+            });
+    }
+
+    @Test void realHikariPreservesAnExplicitlySelectedPostgresSchemaWithoutConnecting() {
+        var initialized = new AtomicBoolean();
+        String url = "jdbc:postgresql://must-not-connect.invalid/test?currentSchema=isolated";
+        hikariRunner(initialized).withPropertyValues("spring.datasource.url=" + url,
+                "spring.datasource.hikari.jdbc-url=" + url, "spring.datasource.driver-class-name=org.postgresql.Driver",
+                RestoreAuthDatabaseGuard.OPT_IN + "=true")
+            .run(context -> {
+                assertThat(context).hasNotFailed();
+                assertThat(initialized).isTrue();
+                assertThat(context.getBean(HikariDataSource.class).getJdbcUrl()).isEqualTo(url);
+            });
+    }
+
     static final AtomicBoolean datasourceCreated = new AtomicBoolean();
     static final AtomicBoolean migrationsInitialized = new AtomicBoolean();
     private final ApplicationContextRunner runner = new ApplicationContextRunner()

@@ -77,6 +77,8 @@ This is an explicit recovery operation, not a Flyway migration or a normal-start
 
 `RestoredAuthenticationTest` registers `RestoreAuthDatabaseGuard` as a Spring context initializer. It validates the resolved `spring.datasource.url` before context refresh, datasource bean creation or Flyway initialization. Only in-memory H2 is allowed automatically. PostgreSQL, file-backed H2 and other targets require the explicit test-only opt-in `RESTORE_AUTH_ALLOW_EXTERNAL_DATABASE=true`; without it, startup fails before database initialization. Error messages omit the URL because it may contain credentials.
 
+The initializer also checks the relaxed-bound `spring.datasource.hikari.jdbc-url` override. If configured, it must exactly match the selected `spring.datasource.url`, including `currentSchema`; a conflict blocks startup even with external access enabled. Remove conflicting ambient Hikari settings rather than enabling opt-in to bypass them.
+
 The opt-in acknowledges destructive test operations; it **does not create a schema or verify isolation**. For PostgreSQL, create a unique temporary schema inside the isolated `pantrypal_auth_test` database first, then explicitly select it with `currentSchema`. Never select a shared schema, the normal app database or production. From `backend`, with disposable test credentials:
 
 ```powershell
@@ -102,6 +104,12 @@ Guard verification on 10 November 2026, branch `GS-146`:
 - The same command with explicit external opt-in and a newly created temporary PostgreSQL schema in `pantrypal_auth_test`: **eight passed on PostgreSQL 17.11**. The temporary schema was dropped afterward.
 - A separate invocation of the real `RestoredAuthenticationTest` with a dummy external URL and opt-in disabled failed at the registered initializer as expected, before Hikari startup. No connection to that dummy target was attempted.
 - Guard checks exercise resolved URL placeholders, direct datasource property overrides, persistent H2 rejection, explicit external opt-in, and credential-free guard errors. Datasource and Flyway bean probes remain uncreated for rejected targets. Frontend checks were not rerun because this change affects only tests and documentation.
+
+Hikari override follow-up verification on 10 November 2026:
+
+- `.\mvnw.cmd '-Dtest=RestoreAuthDatabaseGuardTest,RestoredAuthenticationTest' test`: **13 passed** (12 guard checks and the H2 restore regression). New checks use `DataSourceAutoConfiguration` with real Hikari binding: conflicting URLs are blocked before datasource initialization with opt-in both disabled and enabled, including a redirect from the selected PostgreSQL schema to another schema. Matching URLs preserve Hikari's selected target. Guard errors omit connection details.
+- `.\mvnw.cmd '-Dtest=RestoredAuthenticationTest' "-Dspring.datasource.hikari.jdbc-url=$restoreTestUrl" test`, with `$restoreTestUrl` and `RESTORE_AUTH_DB_URL` set to the same newly created temporary schema in `pantrypal_auth_test` and external opt-in enabled: **one passed on PostgreSQL 17.11**. All seven migrations applied to the selected schema; the temporary schema was dropped afterward. Hikari auto-configuration unit checks do not open external connections; this separate run verifies the actual PostgreSQL workflow.
+- The initial sandboxed Maven invocation could not access its local repository; the same focused command passed with the required repository access. Frontend checks were not rerun because no frontend behavior changed.
 
 ## Verification
 
