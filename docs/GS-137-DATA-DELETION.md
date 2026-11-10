@@ -14,7 +14,7 @@ Scope: [issue #137](https://github.com/chankiahuja/Grocery-Suggestor/issues/137)
 | `auth_rate_limits` | SHA-256-derived email/IP bucket identities | Delete request/verify email buckets; shared IP abuse counters cannot be attributed to one account and remain |
 | `spring_session`, `spring_session_attributes` | Account principal, security context, CSRF and recent-auth timestamp | Delete all principal sessions; attributes cascade; invalidate current request session |
 | Process memory | Notification subscribers, account alert snapshot, queued mail work | Disconnect subscribers and drop snapshot after commit; queued mail may already be in flight but cannot restore the removed challenge |
-| Browser | React Query data, adjustment feedback, account-specific notification read markers | Clear queries and current account marker; full navigation unmounts account state. Other tabs/devices clear state when they next discover session revocation; offline browser copies cannot be remotely erased |
+| Browser | React Query data, adjustment feedback, account-specific notification read markers | The browser completing deletion clears queries and attempts to remove its account-specific notification read marker; full navigation unmounts account state. Other devices clear signed-in state and the query cache when they detect session revocation, but their notification read markers in localStorage may remain until site data is cleared. Tabs sharing the deleting browser's localStorage share its marker removal. Displayed or offline browser copies cannot be remotely erased |
 | Wishlist/preferences | No separate persistent wishlist or preference table in the active Spring schema | Do not claim storage that does not exist; reassess when implemented |
 | Feedback/support email | Submitted text, optional reply email and mail-provider metadata | Not stored in the application database. Operator must locate and remove attributable mailbox/provider copies; anonymous feedback may not be attributable |
 | Logs, exports, backups | Provider-dependent access logs and possible historical snapshots | Must be inspected and handled by the operator; application deletion cannot promise immediate erasure here |
@@ -73,6 +73,36 @@ Track the authentication restore requirement in [issue #145](https://github.com/
 
 This is an explicit recovery operation, not a Flyway migration or a normal-startup hook. Normal restart persistence stays intact. Verify the complete procedure with a disposable-account restore rehearsal and record the outcome. Do not silently restore deleted users or promise immediate backup erasure.
 
+### Restore regression database safety
+
+`RestoredAuthenticationTest` registers `RestoreAuthDatabaseGuard` as a Spring context initializer. It validates the resolved `spring.datasource.url` before context refresh, datasource bean creation or Flyway initialization. Only in-memory H2 is allowed automatically. PostgreSQL, file-backed H2 and other targets require the explicit test-only opt-in `RESTORE_AUTH_ALLOW_EXTERNAL_DATABASE=true`; without it, startup fails before database initialization. Error messages omit the URL because it may contain credentials.
+
+The opt-in acknowledges destructive test operations; it **does not create a schema or verify isolation**. For PostgreSQL, create a unique temporary schema inside the isolated `pantrypal_auth_test` database first, then explicitly select it with `currentSchema`. Never select a shared schema, the normal app database or production. From `backend`, with disposable test credentials:
+
+```powershell
+$env:RESTORE_AUTH_DB_URL = 'jdbc:postgresql://localhost:5432/pantrypal_auth_test?currentSchema=pp_restore_<unique_id>'
+$env:RESTORE_AUTH_DB_USER = '<test database user>'
+$env:RESTORE_AUTH_DB_PASSWORD = '<test database password>'
+$env:RESTORE_AUTH_ALLOW_EXTERNAL_DATABASE = 'true'
+try {
+    .\mvnw.cmd '-Dtest=RestoredAuthenticationTest' test
+} finally {
+    Remove-Item Env:RESTORE_AUTH_ALLOW_EXTERNAL_DATABASE
+    Remove-Item Env:RESTORE_AUTH_DB_URL
+    Remove-Item Env:RESTORE_AUTH_DB_USER
+    Remove-Item Env:RESTORE_AUTH_DB_PASSWORD
+}
+```
+
+After the test process exits, remove only the temporary schema created for that run, including after a failed run. Keep the opt-in scoped to this one invocation. A lifecycle-method check such as `@BeforeEach` is too late: Spring can initialize the datasource and run migrations before any test method executes.
+
+Guard verification on 10 November 2026, branch `GS-146`:
+
+- `.\mvnw.cmd '-Dtest=RestoreAuthDatabaseGuardTest,RestoredAuthenticationTest' test`: **eight passed** with default in-memory H2 (seven guard checks plus the restore regression).
+- The same command with explicit external opt-in and a newly created temporary PostgreSQL schema in `pantrypal_auth_test`: **eight passed on PostgreSQL 17.11**. The temporary schema was dropped afterward.
+- A separate invocation of the real `RestoredAuthenticationTest` with a dummy external URL and opt-in disabled failed at the registered initializer as expected, before Hikari startup. No connection to that dummy target was attempted.
+- Guard checks exercise resolved URL placeholders, direct datasource property overrides, persistent H2 rejection, explicit external opt-in, and credential-free guard errors. Datasource and Flyway bean probes remain uncreated for rejected targets. Frontend checks were not rerun because this change affects only tests and documentation.
+
 ## Verification
 
 For issue #145, `RestoredAuthenticationTest` snapshots and restores only the three authentication tables in an isolated database/schema, with mocked mail delivery and a stable test OTP secret. Its control confirms that the unexpired logged-out cookie and consumed code become usable after restoring the snapshot. It then restores the same snapshot, executes the operator SQL twice, verifies removal of sessions/attributes/challenges, rejects both old credentials, and permits a fresh email login while accounts remain intact.
@@ -80,7 +110,7 @@ For issue #145, `RestoredAuthenticationTest` snapshots and restores only the thr
 Checks on 10 November 2026, branch `GS-145`:
 
 - From `backend`, `.\mvnw.cmd '-Dtest=RestoredAuthenticationTest,AuthFlowTest' test`: **20 passed** against isolated H2 databases.
-- `.\mvnw.cmd '-Dtest=RestoredAuthenticationTest' test` with `RESTORE_AUTH_DB_URL`, `RESTORE_AUTH_DB_USER`, and `RESTORE_AUTH_DB_PASSWORD` targeting a newly created temporary schema in `pantrypal_auth_test`: **one passed on PostgreSQL 17.11**; seven Flyway migrations validated/applied; the temporary schema was dropped afterward. These variables are test-only overrides and must never target the normal app or production database.
+- `.\mvnw.cmd '-Dtest=RestoredAuthenticationTest' test` with `RESTORE_AUTH_DB_URL`, `RESTORE_AUTH_DB_USER`, and `RESTORE_AUTH_DB_PASSWORD` targeting a newly created temporary schema in `pantrypal_auth_test`: **one passed on PostgreSQL 17.11**; seven Flyway migrations validated/applied; the temporary schema was dropped afterward. Subsequent runs also require `RESTORE_AUTH_ALLOW_EXTERNAL_DATABASE=true`, as described above. These variables are test-only overrides and must never target the normal app or production database.
 - `git diff --check`: passed. No frontend behavior changed, so frontend checks were not rerun.
 
 This verifies authentication-table restore semantics through the real authentication controllers and JDBC sessions. It is not a provider backup restore rehearsal, a full database/process recovery, or a real email delivery test. The operator must still verify account-deletion reconciliation and the complete isolated recovery procedure before serving restored data.
