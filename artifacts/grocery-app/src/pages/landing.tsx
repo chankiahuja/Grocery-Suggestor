@@ -42,7 +42,7 @@ export default function Landing() {
               <Link className="landing-button" href="/signup">Create account <ArrowUpRight size={16} /></Link>
             </div>
             <p className="landing-access-note">Sign in with a one-time code by email.</p>
-            <Link className="landing-demo-link" href="/login">Explore the sample dashboard <ArrowUpRight size={14} /></Link>
+            <Link className="landing-demo-link" href="/login">Sign in to PantryPal <ArrowUpRight size={14} /></Link>
           </div>
           <div className="landing-visual">
             <img
@@ -59,7 +59,7 @@ export default function Landing() {
           <div className="landing-feature-grid">
             <article><span className="landing-feature-number">01</span><h3>Home inventory</h3><p>See what you have and what&apos;s running low.</p></article>
             <article><span className="landing-feature-number">02</span><h3>Shopping list</h3><p>Put everything you need to restock on one list.</p></article>
-            <article><span className="landing-feature-number">03</span><h3>Wishlist</h3><p>Save items for later and move them to your list when ready.</p></article>
+            <article><span className="landing-feature-number">03</span><h3>Stock and expiry alerts</h3><p>See reminders for low stock, out-of-stock items and approaching or passed expiry dates.</p></article>
           </div>
         </section>
       </main>
