@@ -1,6 +1,6 @@
 # PostgreSQL backup and recovery readiness
 
-Tracks [issue #136](https://github.com/chankiahuja/Grocery-Suggestor/issues/136). A local synthetic drill is separate from production backup coverage. Do not close the issue until an actual production backup has been restored and validated in an isolated environment.
+Tracks [issue #136](https://github.com/chankiahuja/pantry-pal/issues/136). A local synthetic drill is separate from production backup coverage. Do not close the issue until an actual production backup has been restored and validated in an isolated environment.
 
 ## Current coverage and release requirements
 

@@ -1,6 +1,6 @@
 # Account deletion and privacy readiness
 
-Scope: [issue #137](https://github.com/chankiahuja/Grocery-Suggestor/issues/137). Provider verification, mailbox cleanup and a restore rehearsal remain release gates; implementing active-store deletion does not establish those outcomes.
+Scope: [issue #137](https://github.com/chankiahuja/pantry-pal/issues/137). Provider verification, mailbox cleanup and a restore rehearsal remain release gates; implementing active-store deletion does not establish those outcomes.
 
 ## Data inventory
 
@@ -56,7 +56,7 @@ Account deletion does not remove already-delivered support messages or provider 
 
 For the full PostgreSQL export/restore drill, measured local recovery checks and remaining production backup requirements, see the [backup and recovery runbook](GS-136-BACKUP-RESTORE.md).
 
-Track the authentication restore requirement in [issue #145](https://github.com/chankiahuja/Grocery-Suggestor/issues/145). A snapshot can contain a session subsequently logged out or a challenge subsequently consumed. Account-existence checks and V7's session foreign key cannot detect these reversals for accounts that still exist. An unchanged OTP secret can make a restored code usable until its original expiry. Rotating an OTP secret alone does not revoke restored session cookies.
+Track the authentication restore requirement in [issue #145](https://github.com/chankiahuja/pantry-pal/issues/145). A snapshot can contain a session subsequently logged out or a challenge subsequently consumed. Account-existence checks and V7's session foreign key cannot detect these reversals for accounts that still exist. An unchanged OTP secret can make a restored code usable until its original expiry. Rotating an OTP secret alone does not revoke restored session cookies.
 
 1. Stop **all application instances and mail workers** before restoring. Keep the restored database isolated from user traffic and outbound mail. Restrict database access to the recovery operator so no old process can save an in-memory session or activate queued authentication work during cleanup.
 2. Verify the destination database and schema explicitly. Restore the intended snapshot, then reconcile **every account deletion after the snapshot** before enabling the application. This requires an access-controlled operator deletion record outside the restored snapshot, with the minimum identifiers needed to reconcile it, an explicit retention policy, and controlled disposal when all affected backups/exports have expired. This operator record and its policy are not implemented by this change and must be approved and established before using backups for the pilot. If a complete reconciliation record is unavailable, **do not serve the restored data**.

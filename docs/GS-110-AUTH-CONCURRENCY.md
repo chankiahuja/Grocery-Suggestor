@@ -1,6 +1,6 @@
 # GS-110: auth bursts without connection-pool starvation
 
-Verified locally on 2026-11-08 for [issue #110](https://github.com/chankiahuja/Grocery-Suggestor/issues/110). The change is based on checkout `437ed43`; the affected auth sources are identical to the issue's reported `7e24733` revision.
+Verified locally on 2026-11-08 for [issue #110](https://github.com/chankiahuja/pantry-pal/issues/110). The change is based on checkout `437ed43`; the affected auth sources are identical to the issue's reported `7e24733` revision.
 
 ## Cause and change
 
