@@ -72,12 +72,46 @@ Ignored output lives under `backend/target/backup-drill/<uuid>/`: a synthetic cu
 
 The archive does not include cluster roles or ownership grants (`pg_dump` is a single-database export). Restore permissions and provisioning are separate production checks. This drill checks services and database data, not browser flows, external mail, old-cookie rejection or a newly issued OTP. The separate [authentication restore regression](GS-137-DATA-DELETION.md#restore-regression-database-safety) covers cookie/code behavior; it is not a substitute for this full export/restore.
 
+## Offline deletion reconciliation command
+
+Before serving any restored database, run the recovery-only reconciliation command while every application instance and mail worker is stopped. This command is intentionally not an HTTP endpoint, normal-startup hook, Flyway migration or Render job. It starts the packaged Spring application with no web server, disables automatic Flyway migration, validates the existing schema, applies the deletion service to accounts still present in the restore, skips accounts already absent from the restore, and exits.
+
+The deletion record must be an access-controlled file retained outside the backup snapshot. Create it as UTF-8 tab-separated text with this exact header and one record per line:
+
+```text
+account_id	deleted_at	backup_id
+123	2026-11-10T12:01:00Z	prod-2026-11-10T12:00Z
+```
+
+Use stable account IDs only; do not put email addresses, session values, OTPs or pantry data in the file. Every record must reference the selected backup ID and have a deletion timestamp strictly after the selected snapshot time. Duplicate account IDs are rejected before any deletion begins. Keep the source file access-controlled until its retention period has ended.
+
+If the authoritative deletion record confirms that no account was deleted after the snapshot, the file may contain only the header. In that case, add `--recovery.confirm-zero-deletions=true` to the command. The flag is accepted only for an otherwise valid header-only file and is an operator attestation based on the independent completeness check; it is not evidence that the file itself is complete. Omitting the flag keeps an empty record file invalid.
+
+Build the normal backend artifact, set `DB_URL`, `DB_USER` and `DB_PASSWORD` to the isolated restored PostgreSQL target, then run from the repository root. The database must already be restored and schema-compatible; the command never runs pending migrations:
+
+```powershell
+java -jar backend/target/pantrypal-api-0.1.0.jar `
+  --recovery.reconcile=true `
+  --recovery.confirm-isolated=true `
+  --recovery.deletions-file='C:/secure/recovery/deletions.tsv' `
+  --recovery.snapshot-at='2026-11-10T12:00:00Z' `
+  --recovery.backup-id='prod-2026-11-10T12:00Z' `
+  --spring.profiles.active=postgres `
+  --spring.flyway.enabled=false
+```
+
+The command validates Flyway against the target without changing it. For each supplied and validated record, `AccountDeletionService.delete` removes the account-owned data transactionally. If the account ID is missing from the restore, the result is `already_absent` and no deletion call is attempted; this is expected for an account created and deleted after the snapshot. A successful run prints counts for `deleted` and `already_absent` and exits. The command validates the supplied file's structure, scope and timestamps; it cannot detect a deletion row omitted from that file. Before running it, the recovery operator must compare the file against the authoritative deletion record and document that completeness check. Any malformed, duplicated, out-of-scope or schema-invalid input, or any deletion failure, must stop recovery; keep traffic disabled and resolve the failure before retrying.
+
+After the independent completeness check and command both succeed, run the [restored-auth cleanup](GS-137-DATA-DELETION.md#restore-procedure--invalidate-authentication-before-serving-traffic), verify the restored sessions, session attributes and email challenges are empty, and retain a sanitized recovery report with the backup ID, snapshot time, completeness-check reference, counts, result and operator/time. Do not reopen traffic until completeness, reconciliation and authentication cleanup all pass.
+
+The local PostgreSQL drill validates the same present-account deletion and absent-account skip behavior with synthetic data. It does not create the production deletion record or prove that a production operator has access to a complete record.
+
 ## Production recovery procedure
 
 1. Declare the incident and record the start time, incident owner and acceptable recovery point. Stop all application instances and mail workers; keep user traffic and outbound mail disabled.
 2. Verify backup identity, age, integrity and selected recovery point. Record expected data loss. Restore to a newly provisioned, isolated database/environment; never overwrite the active production database during the drill. Match PostgreSQL/client versions and restore required roles/permissions separately.
 3. Validate schema/Flyway compatibility using the application version intended for recovery. Resolve migration/version mismatches before admitting traffic. Compare representative account, inventory, adjustment, shopping and alert data using an approved validation fixture; avoid copying real user data into logs or public reports.
-4. Apply the [account deletion and authentication recovery procedure](GS-137-DATA-DELETION.md#restore-procedure--invalidate-authentication-before-serving-traffic). Reconcile every deletion after the backup using the approved record outside the restored snapshot, then clear all restored sessions/challenges. If the record is missing or incomplete, do not reopen the restored data.
+4. Run the [offline deletion reconciliation command](#offline-deletion-reconciliation-command) using the approved record outside the restored snapshot, then apply the [account deletion and authentication recovery procedure](GS-137-DATA-DELETION.md#restore-procedure--invalidate-authentication-before-serving-traffic). If the record is missing or incomplete, or either operation fails, do not reopen the restored data.
 5. Start fresh application processes against the verified target with outbound mail restricted to the test transport. Verify revoked cookies and used codes fail, fresh sign-in succeeds, ownership holds, shopping state is correct, repeated purchase completion does not restock twice, and inventory-derived alerts agree with the recovery point. Alerts are reconstructed; SSE connections and browser notification markers are not backed up by PostgreSQL.
 6. Record provisioning, restore, reconciliation, validation and total recovery time, missing post-backup writes, cleanup results and any gaps. Compare the measured totals with the accepted RPO/RTO. A production restore drill must stay isolated; actual incident cutover requires a separately reviewed target and routing change.
 7. Dispose of the recovered test environment and exports according to the configured retention/access policy. Preserve a sanitized recovery report without credentials, session values, OTPs or user pantry data.
