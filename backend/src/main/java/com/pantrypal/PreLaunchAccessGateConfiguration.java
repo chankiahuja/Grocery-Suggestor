@@ -34,6 +34,9 @@ class PreLaunchAccessGateConfiguration {
         if (username == null || username.isBlank()) {
             throw new IllegalStateException("Pre-launch access gate requires an operator username.");
         }
+        if (username.indexOf(':') >= 0) {
+            throw new IllegalStateException("Pre-launch access gate username must not contain ':'.");
+        }
         if (password == null || password.length() < 20) {
             throw new IllegalStateException("Pre-launch access gate requires a password of at least 20 characters.");
         }

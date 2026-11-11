@@ -59,6 +59,8 @@ class PreLaunchAccessGateTest {
     @Test void gateConfigurationFailsSafelyWhenCredentialsAreMissingOrWeak() {
         assertThatThrownBy(() -> PreLaunchAccessGateConfiguration.validate("", "long-enough-password-123"))
             .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> PreLaunchAccessGateConfiguration.validate("ops:validation", "long-enough-password-123"))
+            .isInstanceOf(IllegalStateException.class);
         assertThatThrownBy(() -> PreLaunchAccessGateConfiguration.validate("operator", "short"))
             .isInstanceOf(IllegalStateException.class);
     }
