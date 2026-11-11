@@ -29,6 +29,7 @@ final class PreLaunchAccessGateFilter extends OncePerRequestFilter {
         this.password = password.getBytes(StandardCharsets.UTF_8);
     }
 
+    /** Allows health probes, or forwards requests only after constant-time credential checks. */
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
@@ -41,12 +42,14 @@ final class PreLaunchAccessGateFilter extends OncePerRequestFilter {
         response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");
     }
 
+    /** Resolves the path without a servlet context prefix for the health exception. */
     private static String requestPath(HttpServletRequest request) {
         String contextPath = request.getContextPath();
         String requestUri = request.getRequestURI();
         return requestUri.startsWith(contextPath) ? requestUri.substring(contextPath.length()) : requestUri;
     }
 
+    /** Parses the Basic header without exposing credentials or accepting malformed values. */
     private boolean hasValidCredentials(HttpServletRequest request) {
         String header = request.getHeader(HttpHeaders.AUTHORIZATION);
         if (header == null || header.length() <= 6 || !header.regionMatches(true, 0, "Basic ", 0, 6)) {

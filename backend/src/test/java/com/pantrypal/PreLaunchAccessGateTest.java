@@ -54,6 +54,18 @@ class PreLaunchAccessGateTest {
             .andExpect(status().isOk());
         mvc.perform(get("/api/auth/session").header("Authorization", valid))
             .andExpect(status().isOk()).andExpect(jsonPath("$.authenticated").value(false));
+        mvc.perform(get("/api/inventory").header("Authorization", valid))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.error").value("Sign in to continue"))
+            .andExpect(header().doesNotExist("WWW-Authenticate"));
+    }
+
+    @Test
+    void validOperatorCredentialsDoNotGrantPantryPalAccountAccess() throws Exception {
+        mvc.perform(get("/api/inventory").header("Authorization", basic("validation-operator", "Correct-Horse-Battery-2026!")))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.error").value("Sign in to continue"))
+            .andExpect(header().doesNotExist("WWW-Authenticate"));
     }
 
     @Test void gateConfigurationFailsSafelyWhenCredentialsAreMissingOrWeak() {

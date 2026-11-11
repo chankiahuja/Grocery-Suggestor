@@ -12,6 +12,7 @@ import org.springframework.context.annotation.Configuration;
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 class PreLaunchAccessGateConfiguration {
+    /** Builds the outer validation gate from protected deployment properties. */
     @Bean
     @ConditionalOnProperty(prefix = "pantrypal.prelaunch-gate", name = "enabled", havingValue = "true")
     PreLaunchAccessGateFilter preLaunchAccessGateFilter(
@@ -21,6 +22,7 @@ class PreLaunchAccessGateConfiguration {
         return new PreLaunchAccessGateFilter(username, password);
     }
 
+    /** Prevents Spring Boot from registering the gate outside the Spring Security chain. */
     @Bean
     @ConditionalOnProperty(prefix = "pantrypal.prelaunch-gate", name = "enabled", havingValue = "true")
     FilterRegistrationBean<PreLaunchAccessGateFilter> disableContainerRegistration(
@@ -30,6 +32,7 @@ class PreLaunchAccessGateConfiguration {
         return registration;
     }
 
+    /** Rejects credentials that cannot be represented by the Basic-auth delimiter format. */
     static void validate(String username, String password) {
         if (username == null || username.isBlank()) {
             throw new IllegalStateException("Pre-launch access gate requires an operator username.");
