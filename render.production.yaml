@@ -1,0 +1,68 @@
+# Preparation-only production Blueprint for mypantrypal.in.
+# Create this as a separate Render Blueprint after the plan is reviewed.
+services:
+  - type: web
+    name: pantrypal-production
+    runtime: docker
+    plan: 0.5c-512mb
+    region: oregon
+    branch: main
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/healthz
+    autoDeployTrigger: off
+    domains:
+      - mypantrypal.in
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: production
+      - key: DB_HOST
+        fromDatabase:
+          name: pantrypal-production-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: pantrypal-production-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: pantrypal-production-db
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: pantrypal-production-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: pantrypal-production-db
+          property: password
+      - key: AUTH_OTP_SECRET
+        sync: false
+      - key: AUTH_COOKIE_SECURE
+        value: "true"
+      - key: PANTRYPAL_SMTP_REQUIRED
+        value: "true"
+      - key: MAIL_HOST
+        value: smtp-relay.brevo.com
+      - key: MAIL_PORT
+        value: "587"
+      - key: MAIL_SMTP_AUTH
+        value: "true"
+      - key: MAIL_STARTTLS
+        value: "true"
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      - key: PANTRYPAL_SUPPORT_EMAIL
+        sync: false
+
+databases:
+  - name: pantrypal-production-db
+    databaseName: pantrypal
+    user: pantrypal_production
+    plan: 0.1c-256mb
+    region: oregon
+    postgresMajorVersion: "17"
