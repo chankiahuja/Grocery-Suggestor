@@ -113,7 +113,7 @@ References: [Render custom domains](https://render.com/docs/custom-domains) and 
 4. Obtain explicit approval for the preview and the minimum estimated cost of about $13.30/month plus excess usage.
 5. Click **Deploy Blueprint**. This action starts paid resource provisioning. Do not treat the file, branch, or preview review as provisioning approval.
 6. Immediately after deployment starts, open the production Blueprint **Settings** page and set **Auto Sync** to **No**. Verify the setting after provisioning. Enter the protected secret values through Render; never commit them.
-7. Validate the deployment on its Render hostname before DNS cutover: `/api/healthz`, HTTPS redirect, secure cookies, email OTP delivery through Brevo, support-mail delivery, database migrations, and a minimal authenticated pantry flow.
+7. Validate the deployment on its Render hostname before DNS cutover: `/api/healthz`, HTTPS redirect, secure cookies, email OTP delivery through Brevo, support-mail delivery, database migrations, and a minimal authenticated pantry flow. Before admitting pilot users, require that the production backup and restore evidence required by [#136](https://github.com/chankiahuja/pantry-pal/issues/136) is completed and reviewed, including a successful logical export, export verification, and test restore. Keep the actual backup execution and restore validation under #136; this preparation branch does not perform those actions.
 8. Apply the approved BigRock DNS changes and Render domain verification. Re-run the health, authentication, and support-mail checks on `mypantrypal.in`.
 9. Keep staging at its existing URL and `GS-134`; do not repoint staging or use it as the production hostname.
 
@@ -122,7 +122,7 @@ References: [Render custom domains](https://render.com/docs/custom-domains) and 
 ### Cutover
 
 - Freeze the production release commit on `main` and record it.
-- Confirm the production service is healthy on its Render hostname and the database backup/restore plan is available.
+- Confirm the production service is healthy on its Render hostname and that the production backup and restore evidence required by [#136](https://github.com/chankiahuja/pantry-pal/issues/136) is completed and reviewed. The evidence must include a successful logical export, verification of that export, and a successful test restore before admitting pilot users.
 - Save the pre-cutover BigRock DNS snapshot, including each affected record's name, type, value/target, and TTL, with the cutover evidence before changing DNS.
 - Put the approved DNS records in BigRock, verify Render TLS, and test the apex and `www` behavior.
 - Run the smoke checks again on `mypantrypal.in` and monitor logs, health checks, login delivery, and support delivery.
