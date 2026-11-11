@@ -9,7 +9,7 @@ Status: preparation only. This document and [`render.production.yaml`](../render
 - Production web and database resources are planned for Render's `singapore` region; staging remains in Oregon.
 - The existing staging Blueprint and resources remain unchanged.
 - Staging continues to use `GS-134` and production will use `main`.
-- The production Blueprint disables auto-deploys so a deploy is a deliberate operator action.
+- `autoDeployTrigger: off` disables service auto-deploys; separately, Blueprint Auto Sync must be set to **No** after provisioning and remain disabled.
 - Do not provision until the release has been updated and reviewed on `main`.
 
 The production Blueprint is intentionally separate from [`render.yaml`](../render.yaml). Create a new Render Blueprint using [`render.production.yaml`](../render.production.yaml); do not change or sync the staging Blueprint to create production.
@@ -21,15 +21,23 @@ The following estimate uses Render's current plan IDs and pricing checked on 202
 | Resource | Proposed name | Region | Plan ID | Expected cost |
 | --- | --- | --- | --- | ---: |
 | Docker web service | `pantrypal-production` | Singapore | `0.5c-512mb` | about $7/month |
-| Render Postgres | `pantrypal-production-db` | Singapore | `0.1c-256mb` | about $6/month |
+| Render Postgres | `pantrypal-production-db` | Singapore | `0.1c-256mb`, 1 GB disk | about $6/month |
 | Hobby workspace | existing workspace | n/a | `Hobby` | $0/month |
 | **Pilot compute subtotal** |  |  |  | **about $13/month** |
 
-The web plan is the current 0.5 CPU/512 MB paid pilot size. The database plan is the current 0.1 CPU/256 MB size; it includes the initial database storage allowance. Additional Postgres storage, bandwidth beyond the workspace allowance, build minutes beyond the allowance, and extra custom domains can add usage charges. Compute is billed while the resources are active and is prorated by the second; the billing trigger is provisioning or activating these paid resources, not this file, branch, or documentation.
+The web plan is the current 0.5 CPU/512 MB paid pilot size. The database plan is the current 0.1 CPU/256 MB size with `diskSizeGB: 1`, explicitly selecting the 1 GB storage allowance instead of the 15 GB default allocation for this plan. Additional Postgres storage, bandwidth beyond the workspace allowance, build minutes beyond the allowance, and extra custom domains can add usage charges. Compute is billed while the resources are active and is prorated by the second; the billing trigger is provisioning or activating these paid resources, not this file, branch, or documentation.
 
 Render's legacy labels may show the web plan as Starter and the database plan as Basic-256mb. The Blueprint uses the current IDs: `0.5c-512mb` and `0.1c-256mb`.
 
 References: [Render pricing](https://render.com/pricing), [compute plans](https://render.com/docs/compute-plans), and [Blueprint YAML reference](https://render.com/docs/blueprint-spec).
+
+## Blueprint Auto Sync control
+
+`autoDeployTrigger: off` controls automatic deploys for the web service. It does not control Render Blueprint Auto Sync. Render Blueprint Auto Sync is a separate dashboard setting and is enabled by default for a new Blueprint.
+
+Immediately after creating the production Blueprint, open its **Settings** page and set **Auto Sync** to **No**. Verify the setting after provisioning and before every production change. Keep it disabled for the life of the pilot. Review the complete sync preview, confirm that it contains only the intended production changes, and use **Manual Sync** for each approved synchronization. A push to `main` must not be allowed to apply Blueprint changes without that review.
+
+This control is intentionally operational rather than encoded in `render.production.yaml`: Render manages Blueprint Auto Sync in the Blueprint dashboard, while the YAML `autoDeployTrigger: off` field controls service deploy behavior. See [Render Blueprint Auto Sync guidance](https://render.com/docs/infrastructure-as-code#disabling-automatic-sync).
 
 ## Protected environment-variable checklist
 
@@ -57,11 +65,18 @@ Before provisioning, confirm the sender, support mailbox, Brevo account, databas
 Do not make these changes during preparation. Apply them only after the production service is provisioned, its Render hostname is known, and the cutover review is approved.
 
 1. In Render, add `mypantrypal.in` to the **Custom Domains** section of `pantrypal-production`. Record the generated `onrender.com` hostname and the verification state.
-2. In BigRock DNS management, preserve all existing Titan and Brevo records. Do not change nameservers.
-3. Remove only conflicting web-host records for the selected hostname, and remove `AAAA` records for the domain while configuring Render; Render currently uses IPv4.
-4. For the apex `@`, use the Render-recommended root-domain record. If BigRock supports `ANAME`/`ALIAS` or CNAME flattening, point it to the production `onrender.com` hostname. Otherwise use Render's documented load-balancer `A` record `216.24.57.1`.
-5. For `www`, add a `CNAME` to the production `onrender.com` hostname if `www` is retained. Confirm the desired redirect direction before applying it; adding an apex domain in Render normally creates the corresponding `www` redirect.
-6. Return to Render and click **Verify** after DNS propagation. Render automatically issues and renews the TLS certificate. Confirm `https://mypantrypal.in` works, HTTP redirects to HTTPS, and `https://mypantrypal.in/api/healthz` returns the expected health response.
+2. Before removing or changing anything, export or transcribe the current BigRock web DNS records into the cutover checklist. For every affected record, capture the exact name/host, record type, value/target, and TTL. Include the current apex, `www`, redirect, `A`, `CNAME`, and `AAAA` records as applicable. Preserve this snapshot with the rollback evidence; do not rely on DNS history or memory.
+
+   | Name/host | Type | Current value/target | TTL | Change made |
+   | --- | --- | --- | --- | --- |
+   | `@` |  |  |  |  |
+   | `www` |  |  |  |  |
+
+3. In BigRock DNS management, preserve all existing Titan and Brevo records. Do not change nameservers.
+4. Remove only conflicting web-host records for the selected hostname, and remove `AAAA` records for the domain while configuring Render; Render currently uses IPv4.
+5. For the apex `@`, use the Render-recommended root-domain record. If BigRock supports `ANAME`/`ALIAS` or CNAME flattening, point it to the production `onrender.com` hostname. Otherwise use Render's documented load-balancer `A` record `216.24.57.1`.
+6. For `www`, add a `CNAME` to the production `onrender.com` hostname if `www` is retained. Confirm the desired redirect direction before applying it; adding an apex domain in Render normally creates the corresponding `www` redirect.
+7. Return to Render and click **Verify** after DNS propagation. Render automatically issues and renews the TLS certificate. Confirm `https://mypantrypal.in` works, HTTP redirects to HTTPS, and `https://mypantrypal.in/api/healthz` returns the expected health response.
 
 Preserve the existing Titan MX records and all Brevo SPF/DKIM/DMARC authentication records. The web-domain cutover must not change mail routing or email authentication.
 
@@ -70,10 +85,10 @@ References: [Render custom domains](https://render.com/docs/custom-domains) and 
 ## Provisioning and validation sequence
 
 1. Update `main` to the reviewed release that production is meant to run. Verify the release commit, migrations, security settings, SMTP configuration, health endpoint, and rollback artifact before provisioning.
-2. Review this document and the full [`render.production.yaml`](../render.production.yaml). Confirm the names are new, both production resources use Singapore, the production database has `ipAllowList: []`, the branch is `main`, the plans are the intended paid pilot sizes, `autoDeployTrigger` is `off`, and the staging Blueprint remains untouched.
-3. Create a separate Render Blueprint from `render.production.yaml` and inspect the sync preview. Stop if the preview proposes changing `pantrypal-staging`, using `GS-134` for production, or creating an unexpected resource.
+2. Review this document and the full [`render.production.yaml`](../render.production.yaml). Confirm the names are new, both production resources use Singapore, the production database has `diskSizeGB: 1` and `ipAllowList: []`, the branch is `main`, the plans are the intended paid pilot sizes, `autoDeployTrigger` is `off`, and the staging Blueprint remains untouched.
+3. Create a separate Render Blueprint from `render.production.yaml`, immediately set Blueprint **Auto Sync** to **No**, and inspect the sync preview. Stop if the preview proposes changing `pantrypal-staging`, using `GS-134` for production, or creating an unexpected resource.
 4. Review the paid-resource confirmation and estimated monthly cost. Do not approve it until the production plan is explicitly accepted.
-5. Provision the separate production resources only after that review. Enter the protected secret values through Render; never commit them.
+5. Provision the separate production resources only after that review. Confirm Auto Sync remains **No** after provisioning. Enter the protected secret values through Render; never commit them.
 6. Validate the deployment on its Render hostname before DNS cutover: `/api/healthz`, HTTPS redirect, secure cookies, email OTP delivery through Brevo, support-mail delivery, database migrations, and a minimal authenticated pantry flow.
 7. Apply the approved BigRock DNS changes and Render domain verification. Re-run the health, authentication, and support-mail checks on `mypantrypal.in`.
 8. Keep staging at its existing URL and `GS-134`; do not repoint staging or use it as the production hostname.
@@ -84,9 +99,10 @@ References: [Render custom domains](https://render.com/docs/custom-domains) and 
 
 - Freeze the production release commit on `main` and record it.
 - Confirm the production service is healthy on its Render hostname and the database backup/restore plan is available.
+- Save the pre-cutover BigRock DNS snapshot, including each affected record's name, type, value/target, and TTL, with the cutover evidence before changing DNS.
 - Put the approved DNS records in BigRock, verify Render TLS, and test the apex and `www` behavior.
 - Run the smoke checks again on `mypantrypal.in` and monitor logs, health checks, login delivery, and support delivery.
-- Leave the staging service and URL unchanged for comparison and fallback.
+- Leave Blueprint Auto Sync set to **No** and the staging service and URL unchanged for comparison and fallback.
 
 ### Rollback
 
