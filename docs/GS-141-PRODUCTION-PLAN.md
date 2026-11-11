@@ -31,6 +31,18 @@ Render's legacy labels may show the web plan as Starter and the database plan as
 
 References: [Render pricing](https://render.com/pricing), [compute plans](https://render.com/docs/compute-plans), and [Blueprint YAML reference](https://render.com/docs/blueprint-spec).
 
+## Database storage capacity control
+
+The production database intentionally starts at `diskSizeGB: 1` with storage autoscaling left disabled. This keeps the paid pilot's initial allocation and billing predictable; enabling autoscaling would permanently grow the disk when usage reaches roughly 90%, with a 1 GB disk growing to 5 GB and adding storage charges. Storage can grow but cannot be reduced in place.
+
+Before provisioning, assign an operator to monitor the production database's **Metrics/Storage** graph. Configure the workspace's Render email or Slack notifications for storage warnings where the dashboard exposes them. Treat the following thresholds as operational alerts:
+
+- At **70%** usage, review growth, remove unnecessary data or indexes where safe, and schedule a manual disk increase before the next growth review.
+- At **80%** usage, treat the alert as urgent: stop nonessential writes, confirm the backup is current, and increase the database disk in Render to the next supported size (normally 5 GB). Record the new allocation and expected charge before approving the change.
+- Never wait for the 90% autoscaling threshold or the hard limit. A database that exceeds its allocation can become unhealthy and be suspended, causing application connection failures.
+
+If the database is suspended, pause writes first, resume it in Render, increase storage immediately, and then validate database health, application connectivity, migrations, authentication, and a minimal pantry flow. Record the incident and update the growth estimate. This is an operator-controlled capacity plan; it is not proof that the 1 GB allocation is sufficient and it does not authorize provisioning or a paid storage increase from this preparation branch.
+
 ## Blueprint Auto Sync control
 
 `autoDeployTrigger: off` controls automatic deploys for the web service. It does not control Render Blueprint Auto Sync. Render Blueprint Auto Sync is a separate dashboard setting and is enabled by default for a new Blueprint.
