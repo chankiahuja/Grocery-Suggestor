@@ -90,6 +90,8 @@ describe("Compare Prices demo", () => {
       "/compare-prices",
     );
     assert.ok(screen.getByText("Illustrative prices only."));
+    assert.ok(screen.getByText("Local Store"));
+    assert.equal(screen.queryByText("BigBasket"), null);
     assert.ok(screen.getByText("₹762"));
     assert.ok(screen.getByText("Lowest sample subtotal"));
     assert.equal(

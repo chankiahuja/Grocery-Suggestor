@@ -33,7 +33,7 @@ const quotes: StoreQuote[] = [
   { name: "Blinkit", price: 789, matched: 3 },
   { name: "Zepto", price: 762, matched: 3, best: true },
   { name: "Instamart", price: 815, matched: 3 },
-  { name: "BigBasket", price: 779, matched: 3 },
+  { name: "Local Store", price: 779, matched: 3 },
 ];
 
 function formatPrice(price: number) {
