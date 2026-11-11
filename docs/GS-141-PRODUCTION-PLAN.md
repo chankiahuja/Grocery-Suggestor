@@ -35,7 +35,11 @@ References: [Render pricing](https://render.com/pricing), [compute plans](https:
 
 The production database intentionally starts at `diskSizeGB: 1` with storage autoscaling left disabled. This keeps the paid pilot's initial allocation and billing predictable; enabling autoscaling would permanently grow the disk when usage reaches roughly 90%, with a 1 GB disk growing to 5 GB and adding storage charges. Storage can grow but cannot be reduced in place.
 
-Before provisioning, assign an operator to monitor the production database's **Metrics/Storage** graph. Configure the workspace's Render email or Slack notifications for storage warnings where the dashboard exposes them. Treat the following thresholds as operational alerts:
+Before provisioning, assign an operator and record the initial database storage reading. During the first 30 days, the operator must check the production database's **Metrics/Storage** graph once every day and record the reading. After 30 days, continue daily checks while the measured seven-day growth is at least 1% of the allocation per week; otherwise, a weekly check is sufficient. Resume daily checks after any release, import, restore, or other operation expected to increase storage materially.
+
+Calculate the forecast to 80% from the recorded readings: `(80% of allocated storage - current usage) / average daily growth`. If the forecast is 14 days or less, treat it as an urgent capacity alert and increase storage before the forecast date. Render email or Slack notifications may be configured as supplemental signals where the dashboard exposes them, but the runbook must not treat Render's documented persistent-disk notification as a tested Postgres-storage alert. Record the check schedule, readings, growth calculation, and any notification test in the production readiness evidence.
+
+Treat the following thresholds as operational alerts:
 
 - At **70%** usage, review growth, remove unnecessary data or indexes where safe, and schedule a manual disk increase before the next growth review.
 - At **80%** usage, treat the alert as urgent: stop nonessential writes, confirm the backup is current, and increase the database disk in Render to the next supported size (normally 5 GB). Record the new allocation and expected charge before approving the change.
