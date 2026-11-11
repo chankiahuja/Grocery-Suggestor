@@ -1,6 +1,6 @@
 # GS-102: concurrent adjustments with active notification streams
 
-Verified locally on 2026-11-07 for [issue #102](https://github.com/chankiahuja/Grocery-Suggestor/issues/102). The failure reproduces on PostgreSQL and H2. Moving committed refresh signals to a bounded delivery worker removes the reproduced pool starvation without increasing the connection pool.
+Verified locally on 2026-11-07 for [issue #102](https://github.com/chankiahuja/pantry-pal/issues/102). The failure reproduces on PostgreSQL and H2. Moving committed refresh signals to a bounded delivery worker removes the reproduced pool starvation without increasing the connection pool.
 
 ## Reproduction and diagnosis
 

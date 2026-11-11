@@ -1,6 +1,6 @@
 # GS-104: frontend bundle size and route loading
 
-Verified on 2026-11-07 for [issue #104](https://github.com/chankiahuja/Grocery-Suggestor/issues/104).
+Verified on 2026-11-07 for [issue #104](https://github.com/chankiahuja/pantry-pal/issues/104).
 
 ## Measurements
 

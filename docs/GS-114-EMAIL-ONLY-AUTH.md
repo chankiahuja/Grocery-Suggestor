@@ -1,6 +1,6 @@
 # GS-114: email-only signup and login
 
-Implementation of [issue #114](https://github.com/chankiahuja/Grocery-Suggestor/issues/114).
+Implementation of [issue #114](https://github.com/chankiahuja/pantry-pal/issues/114).
 
 ## Launch behavior
 

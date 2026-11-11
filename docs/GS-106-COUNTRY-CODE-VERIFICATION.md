@@ -1,6 +1,6 @@
 # GS-106: country calling codes in mobile preview
 
-Implemented using [the supplied reference folder](../pantry-pal-country-code-frontend-files) for [issue #106](https://github.com/chankiahuja/Grocery-Suggestor/issues/106).
+Implemented using [the supplied reference folder](../pantry-pal-country-code-frontend-files) for [issue #106](https://github.com/chankiahuja/pantry-pal/issues/106).
 
 ## Behavior
 

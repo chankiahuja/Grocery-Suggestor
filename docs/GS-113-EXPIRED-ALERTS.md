@@ -1,6 +1,6 @@
 # GS-113: expired inventory attention
 
-Implementation of [issue #113](https://github.com/chankiahuja/Grocery-Suggestor/issues/113).
+Implementation of [issue #113](https://github.com/chankiahuja/pantry-pal/issues/113).
 
 ## Behavior
 

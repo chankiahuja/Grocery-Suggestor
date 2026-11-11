@@ -1,6 +1,6 @@
 # Quick-adjustment workflow verification (GS-16.6)
 
-Tracking: [issue #39](https://github.com/chankiahuja/Grocery-Suggestor/issues/39), part of [GS-16](https://github.com/chankiahuja/Grocery-Suggestor/issues/17).
+Tracking: [issue #39](https://github.com/chankiahuja/pantry-pal/issues/39), part of [GS-16](https://github.com/chankiahuja/pantry-pal/issues/17).
 
 ## Coverage
 

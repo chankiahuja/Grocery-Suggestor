@@ -1,6 +1,6 @@
 # Pilot acceptance checks — 10 November 2026
 
-Related: [issue #138](https://github.com/chankiahuja/Grocery-Suggestor/issues/138).
+Related: [issue #138](https://github.com/chankiahuja/pantry-pal/issues/138).
 
 Status: **partial verification; final acceptance remains open**. Automated regression checks and public staging page checks passed. Authenticated PostgreSQL browser flows, verified mail delivery, and the full browser/device matrix remain outstanding.
 
