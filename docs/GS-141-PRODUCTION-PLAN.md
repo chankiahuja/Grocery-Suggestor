@@ -22,18 +22,25 @@ The following estimate uses Render's current plan IDs and pricing checked on 202
 | --- | --- | --- | --- | ---: |
 | Docker web service | `pantrypal-production` | Singapore | `0.5c-512mb` | about $7/month |
 | Render Postgres | `pantrypal-production-db` | Singapore | `0.1c-256mb`, 1 GB disk | about $6/month |
+| Render Postgres storage | `pantrypal-production-db` | Singapore | required 1 GB allocation | about $0.30/month |
 | Hobby workspace | existing workspace | n/a | `Hobby` | $0/month |
-| **Pilot compute subtotal** |  |  |  | **about $13/month** |
+| **Minimum pilot estimate** |  |  |  | **about $13.30/month** |
 
-The web plan is the current 0.5 CPU/512 MB paid pilot size. The database plan is the current 0.1 CPU/256 MB size with `diskSizeGB: 1`, explicitly selecting the 1 GB storage allowance instead of the 15 GB default allocation for this plan. Additional Postgres storage, bandwidth beyond the workspace allowance, build minutes beyond the allowance, and extra custom domains can add usage charges. Compute is billed while the resources are active and is prorated by the second; the billing trigger is provisioning or activating these paid resources, not this file, branch, or documentation.
+The web plan is the current 0.5 CPU/512 MB paid pilot size. The database plan is the current 0.1 CPU/256 MB size with `diskSizeGB: 1`, explicitly selecting the 1 GB storage allowance instead of the 15 GB default allocation for this plan. The minimum estimate is about $13.30/month: $7 web compute, $6 database compute, and $0.30 for the required 1 GB database storage. Additional Postgres storage, bandwidth beyond the workspace allowance, build minutes beyond the allowance, and extra custom domains can add usage charges. Compute is billed while the resources are active and is prorated by the second; the billing trigger is provisioning or activating these paid resources, not this file, branch, or documentation.
 
 Render's legacy labels may show the web plan as Starter and the database plan as Basic-256mb. The Blueprint uses the current IDs: `0.5c-512mb` and `0.1c-256mb`.
 
 References: [Render pricing](https://render.com/pricing), [compute plans](https://render.com/docs/compute-plans), and [Blueprint YAML reference](https://render.com/docs/blueprint-spec).
 
+## Backup expectations
+
+The planned paid Hobby PostgreSQL database has a three-day point-in-time recovery (PITR) window. PITR cannot restore the approximately latest 10 minutes of changes, so it is not a substitute for a current logical export or a tested restore procedure. Retain logical exports for seven days and record the export timestamp and verification result.
+
+The actual production backup configuration, export schedule, retention implementation, and restore validation remain under [#136](https://github.com/chankiahuja/pantry-pal/issues/136). Do not treat this preparation Blueprint or its cost estimate as evidence that production backups or restores have been configured or tested.
+
 ## Database storage capacity control
 
-The production database intentionally starts at `diskSizeGB: 1` with storage autoscaling left disabled. This keeps the paid pilot's initial allocation and billing predictable; enabling autoscaling would permanently grow the disk when usage reaches roughly 90%, with a 1 GB disk growing to 5 GB and adding storage charges. Storage can grow but cannot be reduced in place.
+The production database intentionally starts at `diskSizeGB: 1` with `storageAutoscalingEnabled: false`. This keeps the paid pilot's initial allocation and billing predictable; enabling autoscaling would permanently grow the disk when usage reaches roughly 90%, with a 1 GB disk growing to 5 GB and adding storage charges. Storage can grow but cannot be reduced in place.
 
 Before provisioning, assign an operator and record the initial database storage reading. During the first 30 days, the operator must check the production database's **Metrics/Storage** graph once every day and record the reading. After 30 days, continue daily checks while the measured seven-day growth is at least 1% of the allocation per week; otherwise, a weekly check is sufficient. Resume daily checks after any release, import, restore, or other operation expected to increase storage materially.
 
@@ -51,7 +58,7 @@ If the database is suspended, pause writes first, resume it in Render, increase 
 
 `autoDeployTrigger: off` controls automatic deploys for the web service. It does not control Render Blueprint Auto Sync. Render Blueprint Auto Sync is a separate dashboard setting and is enabled by default for a new Blueprint.
 
-Immediately after creating the production Blueprint, open its **Settings** page and set **Auto Sync** to **No**. Verify the setting after provisioning and before every production change. Keep it disabled for the life of the pilot. Review the complete sync preview, confirm that it contains only the intended production changes, and use **Manual Sync** for each approved synchronization. A push to `main` must not be allowed to apply Blueprint changes without that review.
+After the initial production Blueprint is deployed, immediately open its **Settings** page and set **Auto Sync** to **No**. Verify the setting after provisioning and before every production change. Keep it disabled for the life of the pilot. Review the complete sync preview, confirm that it contains only the intended production changes, and use **Manual Sync** for each approved synchronization. A push to `main` must not be allowed to apply Blueprint changes without that review.
 
 This control is intentionally operational rather than encoded in `render.production.yaml`: Render manages Blueprint Auto Sync in the Blueprint dashboard, while the YAML `autoDeployTrigger: off` field controls service deploy behavior. See [Render Blueprint Auto Sync guidance](https://render.com/docs/infrastructure-as-code#disabling-automatic-sync).
 
@@ -101,13 +108,14 @@ References: [Render custom domains](https://render.com/docs/custom-domains) and 
 ## Provisioning and validation sequence
 
 1. Update `main` to the reviewed release that production is meant to run. Verify the release commit, migrations, security settings, SMTP configuration, health endpoint, and rollback artifact before provisioning.
-2. Review this document and the full [`render.production.yaml`](../render.production.yaml). Confirm the names are new, both production resources use Singapore, the production database has `diskSizeGB: 1` and `ipAllowList: []`, the branch is `main`, the plans are the intended paid pilot sizes, `autoDeployTrigger` is `off`, and the staging Blueprint remains untouched.
-3. Create a separate Render Blueprint from `render.production.yaml`, immediately set Blueprint **Auto Sync** to **No**, and inspect the sync preview. Stop if the preview proposes changing `pantrypal-staging`, using `GS-134` for production, or creating an unexpected resource.
-4. Review the paid-resource confirmation and estimated monthly cost. Do not approve it until the production plan is explicitly accepted.
-5. Provision the separate production resources only after that review. Confirm Auto Sync remains **No** after provisioning. Enter the protected secret values through Render; never commit them.
-6. Validate the deployment on its Render hostname before DNS cutover: `/api/healthz`, HTTPS redirect, secure cookies, email OTP delivery through Brevo, support-mail delivery, database migrations, and a minimal authenticated pantry flow.
-7. Apply the approved BigRock DNS changes and Render domain verification. Re-run the health, authentication, and support-mail checks on `mypantrypal.in`.
-8. Keep staging at its existing URL and `GS-134`; do not repoint staging or use it as the production hostname.
+2. In Render, choose the production repository, branch `main`, and Blueprint file [`render.production.yaml`](../render.production.yaml). Confirm the names are new, both production resources use Singapore, the production database has `diskSizeGB: 1`, `storageAutoscalingEnabled: false`, and `ipAllowList: []`, the plans are the intended paid pilot sizes, `autoDeployTrigger` is `off`, and the staging Blueprint remains untouched.
+3. Review Render's complete Blueprint preview and cost confirmation. Stop if the preview proposes changing `pantrypal-staging`, using `GS-134` for production, creating an unexpected resource, or charging a different amount from the approved estimate.
+4. Obtain explicit approval for the preview and the minimum estimated cost of about $13.30/month plus excess usage.
+5. Click **Deploy Blueprint**. This action starts paid resource provisioning. Do not treat the file, branch, or preview review as provisioning approval.
+6. Immediately after deployment starts, open the production Blueprint **Settings** page and set **Auto Sync** to **No**. Verify the setting after provisioning. Enter the protected secret values through Render; never commit them.
+7. Validate the deployment on its Render hostname before DNS cutover: `/api/healthz`, HTTPS redirect, secure cookies, email OTP delivery through Brevo, support-mail delivery, database migrations, and a minimal authenticated pantry flow.
+8. Apply the approved BigRock DNS changes and Render domain verification. Re-run the health, authentication, and support-mail checks on `mypantrypal.in`.
+9. Keep staging at its existing URL and `GS-134`; do not repoint staging or use it as the production hostname.
 
 ## Cutover and rollback
 

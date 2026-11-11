@@ -65,6 +65,7 @@ databases:
     user: pantrypal_production
     plan: 0.1c-256mb
     diskSizeGB: 1
+    storageAutoscalingEnabled: false
     region: singapore
     ipAllowList: []
     postgresMajorVersion: "17"
