@@ -40,6 +40,12 @@ services:
         sync: false
       - key: AUTH_COOKIE_SECURE
         value: "true"
+      - key: PANTRYPAL_PRELAUNCH_GATE_ENABLED
+        value: "true"
+      - key: PANTRYPAL_PRELAUNCH_GATE_USERNAME
+        sync: false
+      - key: PANTRYPAL_PRELAUNCH_GATE_PASSWORD
+        sync: false
       - key: PANTRYPAL_SMTP_REQUIRED
         value: "true"
       - key: MAIL_HOST

@@ -3,6 +3,7 @@ package com.pantrypal;
 import java.time.Clock;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -35,7 +36,12 @@ public class SecurityConfig {
     @Bean
     @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
     SecurityFilterChain security(HttpSecurity http, HttpSessionSecurityContextRepository contexts,
-        HttpSessionCsrfTokenRepository csrf, org.springframework.jdbc.core.JdbcTemplate jdbc) throws Exception {
+        HttpSessionCsrfTokenRepository csrf, org.springframework.jdbc.core.JdbcTemplate jdbc,
+        ObjectProvider<PreLaunchAccessGateFilter> preLaunchGate) throws Exception {
+        var gate = preLaunchGate.getIfAvailable();
+        if (gate != null) {
+            http.addFilterBefore(gate, org.springframework.security.web.context.SecurityContextHolderFilter.class);
+        }
         http.addFilterBefore(new ActiveAccountFilter(jdbc), org.springframework.security.web.access.intercept.AuthorizationFilter.class);
         http.authorizeHttpRequests(auth -> auth
             .requestMatchers("/api/auth/**", "/api/feedback/**", "/api/healthz").permitAll()
