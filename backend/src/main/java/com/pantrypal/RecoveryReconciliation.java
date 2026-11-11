@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import org.flywaydb.core.api.MigrationInfo;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -21,6 +22,18 @@ final class RecoveryReconciliation {
     record Outcome(long accountId, String status) {}
 
     private RecoveryReconciliation() {}
+
+    /** Rejects restored schemas whose history contains migrations newer than this artifact. */
+    static void rejectFutureMigrations(MigrationInfo[] migrations) {
+        for (MigrationInfo migration : migrations) {
+            var state = migration.getState();
+            if (state != null && state.name().startsWith("FUTURE")) {
+                throw new IllegalStateException(
+                    "Restored database has a future Flyway migration; stop before reconciliation: "
+                        + migration.getVersion());
+            }
+        }
+    }
 
     static List<DeletionRecord> read(Path file) throws IOException {
         var lines = Files.readAllLines(file, StandardCharsets.UTF_8);
