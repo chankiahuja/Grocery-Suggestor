@@ -26,6 +26,14 @@ class RecoveryReconciliationTest {
         Files.deleteIfExists(file);
     }
 
+    @Test void rejectsRowsWithAnExtraTrailingTab() throws Exception {
+        var file = Files.createTempFile("recovery-deletions", ".tsv");
+        Files.writeString(file, RecoveryReconciliation.HEADER + "\n42\t2026-11-10T12:01:00Z\tbackup-1\t\n");
+        assertThatThrownBy(() -> RecoveryReconciliation.read(file))
+            .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("three tab-separated fields");
+        Files.deleteIfExists(file);
+    }
+
     @Test void rejectsDuplicateOrOutOfScopeRecordsBeforeMutation() {
         var record = new RecoveryReconciliation.DeletionRecord(42, SNAPSHOT.plusSeconds(1), "backup-1");
         assertThatThrownBy(() -> RecoveryReconciliation.validate(List.of(record, record), SNAPSHOT, "backup-1"))
@@ -41,6 +49,12 @@ class RecoveryReconciliationTest {
         assertThatThrownBy(() -> RecoveryReconciliation.validate(List.of(), SNAPSHOT, "backup-1"))
             .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("zero-deletion confirmation");
         RecoveryReconciliation.validate(List.of(), SNAPSHOT, "backup-1", true);
+    }
+
+    @Test void rejectsZeroDeletionConfirmationWhenRecordsExist() {
+        var record = new RecoveryReconciliation.DeletionRecord(42, SNAPSHOT.plusSeconds(1), "backup-1");
+        assertThatThrownBy(() -> RecoveryReconciliation.validate(List.of(record), SNAPSHOT, "backup-1", true))
+            .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("only for a header-only");
     }
 
     @Test void deletesPresentAccountAndSkipsAbsentAccount() {

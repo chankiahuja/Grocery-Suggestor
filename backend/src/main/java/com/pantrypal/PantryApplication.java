@@ -15,6 +15,8 @@ public class PantryApplication {
             application.setAdditionalProfiles("recovery");
             application.setDefaultProperties(java.util.Map.of("spring.flyway.enabled", "false"));
             application.addInitializers(new RecoveryFlywayGuard());
+            application.addInitializers(new RecoveryDatasourceGuard());
+            application.addInitializers(new RecoveryWebApplicationTypeGuard());
         }
         application.run(args);
     }

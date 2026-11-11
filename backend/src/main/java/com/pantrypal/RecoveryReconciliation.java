@@ -28,9 +28,9 @@ final class RecoveryReconciliation {
             throw new IllegalArgumentException("Deletion record file must start with: " + HEADER);
         var records = new ArrayList<DeletionRecord>();
         for (int lineNumber = 1; lineNumber < lines.size(); lineNumber++) {
-            String line = lines.get(lineNumber).trim();
-            if (line.isEmpty()) continue;
-            String[] fields = line.split("\\t", -1);
+            String rawLine = lines.get(lineNumber);
+            if (rawLine.isBlank()) continue;
+            String[] fields = rawLine.split("\\t", -1);
             if (fields.length != 3)
                 throw new IllegalArgumentException("Line " + (lineNumber + 1) + " must contain three tab-separated fields");
             long accountId;
@@ -62,6 +62,8 @@ final class RecoveryReconciliation {
                     "Deletion record file contains no records; pass an explicit zero-deletion confirmation after checking the authoritative record");
             return;
         }
+        if (confirmZeroDeletions)
+            throw new IllegalArgumentException("Zero-deletion confirmation is valid only for a header-only record file");
         Set<Long> seen = new HashSet<>();
         for (DeletionRecord record : records) {
             if (!backupId.equals(record.backupId()))
