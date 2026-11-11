@@ -35,6 +35,7 @@ class RecoveryReconciliationConfig {
             Path file = Path.of(required(arguments, "recovery.deletions-file"));
             Instant snapshotAt = Instant.parse(required(arguments, "recovery.snapshot-at"));
             String backupId = required(arguments, "recovery.backup-id");
+            boolean confirmZeroDeletions = isTrue(arguments, "recovery.confirm-zero-deletions");
             if (Boolean.parseBoolean(environment.getProperty("spring.flyway.enabled", "true")))
                 throw new IllegalArgumentException("Recovery reconciliation requires spring.flyway.enabled=false");
 
@@ -44,7 +45,7 @@ class RecoveryReconciliationConfig {
                 throw new IllegalStateException("Restored database has pending migrations; stop and resolve before reconciliation");
 
             var records = RecoveryReconciliation.read(file);
-            RecoveryReconciliation.validate(records, snapshotAt, backupId);
+            RecoveryReconciliation.validate(records, snapshotAt, backupId, confirmZeroDeletions);
             var outcomes = RecoveryReconciliation.reconcile(records, jdbc, deletion);
             long deleted = outcomes.stream().filter(outcome -> "deleted".equals(outcome.status())).count();
             long absent = outcomes.size() - deleted;

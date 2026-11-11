@@ -37,6 +37,12 @@ class RecoveryReconciliationTest {
             .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("not after");
     }
 
+    @Test void acceptsHeaderOnlyFileOnlyWithExplicitZeroDeletionConfirmation() {
+        assertThatThrownBy(() -> RecoveryReconciliation.validate(List.of(), SNAPSHOT, "backup-1"))
+            .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("zero-deletion confirmation");
+        RecoveryReconciliation.validate(List.of(), SNAPSHOT, "backup-1", true);
+    }
+
     @Test void deletesPresentAccountAndSkipsAbsentAccount() {
         var jdbc = mock(JdbcTemplate.class);
         var deletion = mock(AccountDeletionService.class);

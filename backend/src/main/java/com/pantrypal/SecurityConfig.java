@@ -2,6 +2,7 @@ package com.pantrypal;
 
 import java.time.Clock;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -31,7 +32,9 @@ public class SecurityConfig {
         cookies.setCookieMaxAge(7 * 24 * 60 * 60);
         return cookies;
     }
-    @Bean SecurityFilterChain security(HttpSecurity http, HttpSessionSecurityContextRepository contexts,
+    @Bean
+    @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
+    SecurityFilterChain security(HttpSecurity http, HttpSessionSecurityContextRepository contexts,
         HttpSessionCsrfTokenRepository csrf, org.springframework.jdbc.core.JdbcTemplate jdbc) throws Exception {
         http.addFilterBefore(new ActiveAccountFilter(jdbc), org.springframework.security.web.access.intercept.AuthorizationFilter.class);
         http.authorizeHttpRequests(auth -> auth

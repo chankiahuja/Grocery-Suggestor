@@ -79,11 +79,13 @@ Before serving any restored database, run the recovery-only reconciliation comma
 The deletion record must be an access-controlled file retained outside the backup snapshot. Create it as UTF-8 tab-separated text with this exact header and one record per line:
 
 ```text
-account_id\tdeleted_at\tbackup_id
-123\t2026-11-10T12:01:00Z\tprod-2026-11-10T12:00Z
+account_id	deleted_at	backup_id
+123	2026-11-10T12:01:00Z	prod-2026-11-10T12:00Z
 ```
 
 Use stable account IDs only; do not put email addresses, session values, OTPs or pantry data in the file. Every record must reference the selected backup ID and have a deletion timestamp strictly after the selected snapshot time. Duplicate account IDs are rejected before any deletion begins. Keep the source file access-controlled until its retention period has ended.
+
+If the authoritative deletion record confirms that no account was deleted after the snapshot, the file may contain only the header. In that case, add `--recovery.confirm-zero-deletions=true` to the command. The flag is accepted only for an otherwise valid header-only file and is an operator attestation based on the independent completeness check; it is not evidence that the file itself is complete. Omitting the flag keeps an empty record file invalid.
 
 Build the normal backend artifact, set `DB_URL`, `DB_USER` and `DB_PASSWORD` to the isolated restored PostgreSQL target, then run from the repository root. The database must already be restored and schema-compatible; the command never runs pending migrations:
 
@@ -98,9 +100,9 @@ java -jar backend/target/pantrypal-api-0.1.0.jar `
   --spring.flyway.enabled=false
 ```
 
-The command validates Flyway against the target without changing it. For each validated record, `AccountDeletionService.delete` removes the account-owned data transactionally. If the account ID is missing from the restore, the result is `already_absent` and no deletion call is attempted; this is expected for an account created and deleted after the snapshot. A successful run prints counts for `deleted` and `already_absent` and exits. Any invalid record, schema mismatch, deletion failure or incomplete input fails the command; keep traffic disabled and resolve the failure before retrying.
+The command validates Flyway against the target without changing it. For each supplied and validated record, `AccountDeletionService.delete` removes the account-owned data transactionally. If the account ID is missing from the restore, the result is `already_absent` and no deletion call is attempted; this is expected for an account created and deleted after the snapshot. A successful run prints counts for `deleted` and `already_absent` and exits. The command validates the supplied file's structure, scope and timestamps; it cannot detect a deletion row omitted from that file. Before running it, the recovery operator must compare the file against the authoritative deletion record and document that completeness check. Any malformed, duplicated, out-of-scope or schema-invalid input, or any deletion failure, must stop recovery; keep traffic disabled and resolve the failure before retrying.
 
-After the command succeeds, run the [restored-auth cleanup](GS-137-DATA-DELETION.md#restore-procedure--invalidate-authentication-before-serving-traffic), verify the restored sessions, session attributes and email challenges are empty, and retain a sanitized recovery report with the backup ID, snapshot time, counts, result and operator/time. Do not reopen traffic until both reconciliation and authentication cleanup pass.
+After the independent completeness check and command both succeed, run the [restored-auth cleanup](GS-137-DATA-DELETION.md#restore-procedure--invalidate-authentication-before-serving-traffic), verify the restored sessions, session attributes and email challenges are empty, and retain a sanitized recovery report with the backup ID, snapshot time, completeness-check reference, counts, result and operator/time. Do not reopen traffic until completeness, reconciliation and authentication cleanup all pass.
 
 The local PostgreSQL drill validates the same present-account deletion and absent-account skip behavior with synthetic data. It does not create the production deletion record or prove that a production operator has access to a complete record.
 

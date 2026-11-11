@@ -50,9 +50,18 @@ final class RecoveryReconciliation {
     }
 
     static void validate(List<DeletionRecord> records, Instant snapshotAt, String backupId) {
-        if (records.isEmpty()) throw new IllegalArgumentException("Deletion record file contains no records");
+        validate(records, snapshotAt, backupId, false);
+    }
+
+    static void validate(List<DeletionRecord> records, Instant snapshotAt, String backupId, boolean confirmZeroDeletions) {
         if (snapshotAt == null || backupId == null || backupId.isBlank())
             throw new IllegalArgumentException("Snapshot time and backup ID are required");
+        if (records.isEmpty()) {
+            if (!confirmZeroDeletions)
+                throw new IllegalArgumentException(
+                    "Deletion record file contains no records; pass an explicit zero-deletion confirmation after checking the authoritative record");
+            return;
+        }
         Set<Long> seen = new HashSet<>();
         for (DeletionRecord record : records) {
             if (!backupId.equals(record.backupId()))
