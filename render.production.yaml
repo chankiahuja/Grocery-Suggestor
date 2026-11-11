@@ -5,7 +5,7 @@ services:
     name: pantrypal-production
     runtime: docker
     plan: 0.5c-512mb
-    region: oregon
+    region: singapore
     branch: main
     dockerfilePath: ./backend/Dockerfile
     dockerContext: .
@@ -64,5 +64,6 @@ databases:
     databaseName: pantrypal
     user: pantrypal_production
     plan: 0.1c-256mb
-    region: oregon
+    region: singapore
+    ipAllowList: []
     postgresMajorVersion: "17"

@@ -6,6 +6,7 @@ Status: preparation only. This document and [`render.production.yaml`](../render
 
 - Production hostname: `mypantrypal.in`.
 - Production gets its own Render Blueprint, web service, and PostgreSQL database.
+- Production web and database resources are planned for Render's `singapore` region; staging remains in Oregon.
 - The existing staging Blueprint and resources remain unchanged.
 - Staging continues to use `GS-134` and production will use `main`.
 - The production Blueprint disables auto-deploys so a deploy is a deliberate operator action.
@@ -17,12 +18,12 @@ The production Blueprint is intentionally separate from [`render.yaml`](../rende
 
 The following estimate uses Render's current plan IDs and pricing checked on 2026-11-11. Confirm the dashboard preview and current pricing immediately before provisioning.
 
-| Resource | Proposed name | Plan ID | Expected cost |
-| --- | --- | --- | ---: |
-| Docker web service | `pantrypal-production` | `0.5c-512mb` | about $7/month |
-| Render Postgres | `pantrypal-production-db` | `0.1c-256mb` | about $6/month |
-| Hobby workspace | existing workspace | `Hobby` | $0/month |
-| **Pilot compute subtotal** |  |  | **about $13/month** |
+| Resource | Proposed name | Region | Plan ID | Expected cost |
+| --- | --- | --- | --- | ---: |
+| Docker web service | `pantrypal-production` | Singapore | `0.5c-512mb` | about $7/month |
+| Render Postgres | `pantrypal-production-db` | Singapore | `0.1c-256mb` | about $6/month |
+| Hobby workspace | existing workspace | n/a | `Hobby` | $0/month |
+| **Pilot compute subtotal** |  |  |  | **about $13/month** |
 
 The web plan is the current 0.5 CPU/512 MB paid pilot size. The database plan is the current 0.1 CPU/256 MB size; it includes the initial database storage allowance. Additional Postgres storage, bandwidth beyond the workspace allowance, build minutes beyond the allowance, and extra custom domains can add usage charges. Compute is billed while the resources are active and is prorated by the second; the billing trigger is provisioning or activating these paid resources, not this file, branch, or documentation.
 
@@ -69,7 +70,7 @@ References: [Render custom domains](https://render.com/docs/custom-domains) and 
 ## Provisioning and validation sequence
 
 1. Update `main` to the reviewed release that production is meant to run. Verify the release commit, migrations, security settings, SMTP configuration, health endpoint, and rollback artifact before provisioning.
-2. Review this document and the full [`render.production.yaml`](../render.production.yaml). Confirm the names are new, the branch is `main`, the plans are the intended paid pilot sizes, `autoDeployTrigger` is `off`, and the staging Blueprint remains untouched.
+2. Review this document and the full [`render.production.yaml`](../render.production.yaml). Confirm the names are new, both production resources use Singapore, the production database has `ipAllowList: []`, the branch is `main`, the plans are the intended paid pilot sizes, `autoDeployTrigger` is `off`, and the staging Blueprint remains untouched.
 3. Create a separate Render Blueprint from `render.production.yaml` and inspect the sync preview. Stop if the preview proposes changing `pantrypal-staging`, using `GS-134` for production, or creating an unexpected resource.
 4. Review the paid-resource confirmation and estimated monthly cost. Do not approve it until the production plan is explicitly accepted.
 5. Provision the separate production resources only after that review. Enter the protected secret values through Render; never commit them.
