@@ -1706,6 +1706,7 @@ describe("inventory units and card labels", () => {
     const { queryClient } = renderApp();
 
     await openInventory();
+    await screen.findByTestId("inventory-item-1");
     assert.ok(screen.getByTestId("input-search"));
     assert.ok(screen.getByText("2 pieces"));
     assert.ok(screen.getByText("Minimum: 1 piece"));
