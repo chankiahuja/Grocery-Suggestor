@@ -22,9 +22,9 @@ public class MailSecurityConfig {
                 return;
             }
 
-            if (!username.isBlank() && smtpAuth && !startTlsEnabled && !startTlsRequired) {
+            if (smtpAuth && (!startTlsEnabled || !startTlsRequired)) {
                 throw new IllegalStateException(
-                        "External SMTP authentication requires STARTTLS. Set MAIL_STARTTLS=true or use the local Mailpit default.");
+                        "External SMTP authentication requires both STARTTLS flags to be true. Set MAIL_STARTTLS=true or use the local Mailpit default.");
             }
         };
     }
@@ -44,9 +44,9 @@ public class MailSecurityConfig {
             boolean smtpAuth, boolean startTlsEnabled, boolean startTlsRequired) {
         if (host == null || host.isBlank() || port <= 0) return false;
         if (isLocalMailpit(host, port)) return true;
-        if (smtpAuth && (username == null || username.isBlank() || password == null || password.isBlank())) {
-            return false;
-        }
-        return !smtpAuth || startTlsEnabled || startTlsRequired;
+        return smtpAuth
+                && username != null && !username.isBlank()
+                && password != null && !password.isBlank()
+                && startTlsEnabled && startTlsRequired;
     }
 }

@@ -63,6 +63,17 @@ class FeedbackControllerTest {
 
         assertThat(controller.config().supportEmail()).isNull();
         assertThat(controller.config().responseTime()).isNull();
+        verifyNoInteractions(mailSender);
+    }
+
+    @Test
+    void hidesSupportAddressWhenExternalSmtpUsernameIsMissing() {
+        var controller = new FeedbackController(
+            mailSender, mock(AuthRateLimiter.class), "support@example.test", "two days", "PantryPal <from@example.test>",
+            "smtp.example.test", 2525, "", "protected-test-password", true, true, true);
+
+        assertThat(controller.config().supportEmail()).isNull();
+        verifyNoInteractions(mailSender);
     }
 
     @Test
@@ -94,10 +105,40 @@ class FeedbackControllerTest {
     }
 
     @Test
-    void acceptsExternalSmtpWhenStarttlsIsRequiredOnly() {
+    void rejectsExternalSmtpWhenAuthenticationIsDisabled() {
+        var controller = new FeedbackController(
+            mailSender, mock(AuthRateLimiter.class), "support@example.test", "two days", "PantryPal <from@example.test>",
+            "smtp.example.test", 2525, "brevo-login", "protected-test-password", false, true, true);
+
+        assertThat(controller.config().supportEmail()).isNull();
+        verifyNoInteractions(mailSender);
+    }
+
+    @Test
+    void rejectsExternalSmtpWhenStarttlsIsNotRequired() {
+        var controller = new FeedbackController(
+            mailSender, mock(AuthRateLimiter.class), "support@example.test", "two days", "PantryPal <from@example.test>",
+            "smtp.example.test", 2525, "brevo-login", "protected-test-password", true, true, false);
+
+        assertThat(controller.config().supportEmail()).isNull();
+        verifyNoInteractions(mailSender);
+    }
+
+    @Test
+    void rejectsExternalSmtpWhenStarttlsIsNotEnabled() {
         var controller = new FeedbackController(
             mailSender, mock(AuthRateLimiter.class), "support@example.test", "two days", "PantryPal <from@example.test>",
             "smtp.example.test", 2525, "brevo-login", "protected-test-password", true, false, true);
+
+        assertThat(controller.config().supportEmail()).isNull();
+        verifyNoInteractions(mailSender);
+    }
+
+    @Test
+    void localMailpitRemainsAvailableWithoutExternalCredentialsOrTls() {
+        var controller = new FeedbackController(
+            mailSender, mock(AuthRateLimiter.class), "support@example.test", "two days", "PantryPal <from@example.test>",
+            "localhost", 1025, "", "", false, false, false);
 
         assertThat(controller.config().supportEmail()).isEqualTo("support@example.test");
         assertThat(controller.config().responseTime()).isEqualTo("two days");
