@@ -1511,8 +1511,13 @@ describe("dashboard inventory attention refresh", () => {
       return originalFetch(input, init);
     };
     renderApp();
-    await screen.findByTestId("button-generate-shopping-list");
-    fireEvent.click(screen.getByTestId("button-generate-shopping-list"));
+    const generateButton = await screen.findByTestId(
+      "button-generate-shopping-list",
+    );
+    await waitFor(() =>
+      assert.equal((generateButton as HTMLButtonElement).disabled, false),
+    );
+    fireEvent.click(generateButton);
     await screen.findByRole("heading", { name: "Review shopping list" });
     assert.equal(screen.getAllByTestId("preview-item-1").length, 1);
     fireEvent.click(screen.getByRole("button", { name: "Create shopping list" }));

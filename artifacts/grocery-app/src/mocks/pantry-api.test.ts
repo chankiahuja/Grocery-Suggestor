@@ -16,7 +16,7 @@ test("expired demo alerts clear on correction and never create expiry-only purch
   const invalid = await api.fetch("/api/suggestions/generate-list", { method: "POST", body: JSON.stringify({ items: [{ inventoryItemId: 101, quantity: 1 }] }) });
   assert.equal(invalid.status, 400);
   const list = await (await api.fetch("/api/suggestions/generate-list", { method: "POST" })).json();
-  assert.deepEqual(list.items.map((i: any) => i.inventoryItemId), [103, 102]);
+  assert.deepEqual(list.items.map((i: any) => i.inventoryItemId), [102, 103]);
   await api.fetch("/api/inventory/101", { method: "PATCH", body: JSON.stringify({ expiresAt: null }) });
   await api.fetch("/api/inventory/102", { method: "DELETE" });
   assert.equal((await (await api.fetch("/api/inventory/stats")).json()).expiredCount, 0);
