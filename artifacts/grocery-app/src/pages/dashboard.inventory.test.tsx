@@ -1452,7 +1452,8 @@ describe("dashboard inventory attention refresh", () => {
     changeInput("input-item-name", "Rice");
     changeInput("input-item-category", "Grains");
     changeInput("input-item-quantity", "1");
-    changeInput("input-item-unit", "bags");
+    changeInput("input-item-unit", "Custom");
+    changeInput("input-item-custom-unit", "bags");
     changeInput("input-item-threshold", "2");
     fireEvent.click(screen.getByTestId("button-save-item"));
 
@@ -1713,7 +1714,8 @@ describe("inventory units and card labels", () => {
 
     fireEvent.click(screen.getByTestId("button-edit-1"));
     await screen.findByTestId("dialog-inventory-item");
-    changeInput("input-item-unit", "2");
+    changeInput("input-item-unit", "Custom");
+    changeInput("input-item-custom-unit", "2");
     fireEvent.click(screen.getByTestId("button-save-item"));
     await screen.findByText("Choose a unit or enter a custom text unit");
     assert.equal(api.items[0]?.unit, "piece");
