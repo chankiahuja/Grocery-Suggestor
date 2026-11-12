@@ -1715,6 +1715,8 @@ describe("inventory units and card labels", () => {
     fireEvent.click(screen.getByTestId("button-edit-1"));
     await screen.findByTestId("dialog-inventory-item");
     changeInput("input-item-unit", "Custom");
+    changeInput("input-item-custom-unit", "grams");
+    assert.equal((screen.getByTestId("input-item-custom-unit") as HTMLInputElement).value, "grams");
     changeInput("input-item-custom-unit", "2");
     fireEvent.click(screen.getByTestId("button-save-item"));
     await screen.findByText("Choose a unit or enter a custom text unit");

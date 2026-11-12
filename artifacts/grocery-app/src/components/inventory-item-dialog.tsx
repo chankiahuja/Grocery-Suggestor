@@ -71,6 +71,7 @@ const formSchema = z.object({
 });
 
 type FormValues = z.infer<typeof formSchema>;
+type UnitMode = "preset" | "custom";
 
 interface InventoryItemDialogProps {
   open: boolean;
@@ -91,6 +92,12 @@ export function InventoryItemDialog({
   const createItem = useCreateInventoryItem();
   const updateItem = useUpdateInventoryItem();
 
+  const [unitMode, setUnitMode] = useState<UnitMode>(() =>
+    item?.unit && INVENTORY_UNIT_OPTIONS.includes(item.unit as typeof INVENTORY_UNIT_OPTIONS[number])
+      ? "preset"
+      : "custom",
+  );
+
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -104,9 +111,6 @@ export function InventoryItemDialog({
     },
   });
 
-  const selectedUnit = form.watch("unit");
-  const isPresetUnit = INVENTORY_UNIT_OPTIONS.includes(selectedUnit as typeof INVENTORY_UNIT_OPTIONS[number]);
-
   useEffect(() => {
     if (!open) return;
 
@@ -119,6 +123,11 @@ export function InventoryItemDialog({
       expiresAt: item?.expiresAt || "",
       notes: item?.notes || "",
     });
+    setUnitMode(
+      item?.unit && INVENTORY_UNIT_OPTIONS.includes(item.unit as typeof INVENTORY_UNIT_OPTIONS[number])
+        ? "preset"
+        : "custom",
+    );
   }, [form, item, open]);
 
   const onSubmit = async (values: FormValues) => {
@@ -248,8 +257,16 @@ export function InventoryItemDialog({
                     <FormLabel>Unit</FormLabel>
                     <FormControl>
                       <select
-                        value={isPresetUnit ? field.value : "Custom"}
-                        onChange={(event) => field.onChange(event.target.value === "Custom" ? "" : event.target.value)}
+                        value={unitMode === "preset" ? field.value : "Custom"}
+                        onChange={(event) => {
+                          if (event.target.value === "Custom") {
+                            setUnitMode("custom");
+                            field.onChange("");
+                          } else {
+                            setUnitMode("preset");
+                            field.onChange(event.target.value);
+                          }
+                        }}
                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                         data-testid="input-item-unit"
                       >
@@ -258,7 +275,7 @@ export function InventoryItemDialog({
                         <option value="Custom">Custom</option>
                       </select>
                     </FormControl>
-                    {!isPresetUnit && (
+                    {unitMode === "custom" && (
                       <Input
                         value={field.value}
                         onChange={field.onChange}
