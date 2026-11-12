@@ -41,12 +41,12 @@ public class MailSecurityConfig {
 
     /** Reports whether the configured transport has enough information for a delivery attempt. */
     static boolean isConfigured(String host, int port, String username, String password,
-            boolean smtpAuth, boolean startTlsEnabled) {
+            boolean smtpAuth, boolean startTlsEnabled, boolean startTlsRequired) {
         if (host == null || host.isBlank() || port <= 0) return false;
         if (isLocalMailpit(host, port)) return true;
         if (smtpAuth && (username == null || username.isBlank() || password == null || password.isBlank())) {
             return false;
         }
-        return !smtpAuth || startTlsEnabled;
+        return !smtpAuth || startTlsEnabled || startTlsRequired;
     }
 }

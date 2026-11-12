@@ -43,7 +43,8 @@ public class FeedbackController {
         @Value("${spring.mail.username:}") String mailUsername,
         @Value("${spring.mail.password:}") String mailPassword,
         @Value("${spring.mail.properties.mail.smtp.auth:false}") boolean smtpAuth,
-        @Value("${spring.mail.properties.mail.smtp.starttls.enable:false}") boolean startTlsEnabled
+        @Value("${spring.mail.properties.mail.smtp.starttls.enable:false}") boolean startTlsEnabled,
+        @Value("${spring.mail.properties.mail.smtp.starttls.required:false}") boolean startTlsRequired
     ) {
         this.mailSender = mailSender;
         this.rateLimiter = rateLimiter;
@@ -58,7 +59,7 @@ public class FeedbackController {
         }
         this.from = from;
         this.mailConfigured = MailSecurityConfig.isConfigured(
-            mailHost, mailPort, mailUsername, mailPassword, smtpAuth, startTlsEnabled);
+            mailHost, mailPort, mailUsername, mailPassword, smtpAuth, startTlsEnabled, startTlsRequired);
     }
 
     @GetMapping("/config")

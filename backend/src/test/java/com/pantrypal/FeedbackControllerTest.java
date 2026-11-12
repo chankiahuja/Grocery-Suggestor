@@ -59,7 +59,7 @@ class FeedbackControllerTest {
     void hidesSupportAddressWhenExternalSmtpCredentialsAreMissing() {
         var controller = new FeedbackController(
             mailSender, mock(AuthRateLimiter.class), "support@example.test", "two days", "PantryPal <from@example.test>",
-            "smtp.example.test", 2525, "", "", true, true);
+            "smtp.example.test", 2525, "", "", true, true, false);
 
         assertThat(controller.config().supportEmail()).isNull();
         assertThat(controller.config().responseTime()).isNull();
@@ -69,7 +69,7 @@ class FeedbackControllerTest {
     void incompleteExternalSmtpReturnsUnavailableWithoutSendingMail() throws Exception {
         var controller = new FeedbackController(
             mailSender, mock(AuthRateLimiter.class), "support@example.test", "two days", "PantryPal <from@example.test>",
-            "smtp.example.test", 2525, "brevo-login", "", true, true);
+            "smtp.example.test", 2525, "brevo-login", "", true, true, false);
         var isolatedMvc = MockMvcBuilders.standaloneSetup(controller).build();
 
         isolatedMvc.perform(get("/api/feedback/config"))
@@ -87,7 +87,17 @@ class FeedbackControllerTest {
     void acceptsCompleteExternalSmtpConfiguration() {
         var controller = new FeedbackController(
             mailSender, mock(AuthRateLimiter.class), "support@example.test", "two days", "PantryPal <from@example.test>",
-            "smtp.example.test", 2525, "brevo-login", "protected-test-password", true, true);
+            "smtp.example.test", 2525, "brevo-login", "protected-test-password", true, true, false);
+
+        assertThat(controller.config().supportEmail()).isEqualTo("support@example.test");
+        assertThat(controller.config().responseTime()).isEqualTo("two days");
+    }
+
+    @Test
+    void acceptsExternalSmtpWhenStarttlsIsRequiredOnly() {
+        var controller = new FeedbackController(
+            mailSender, mock(AuthRateLimiter.class), "support@example.test", "two days", "PantryPal <from@example.test>",
+            "smtp.example.test", 2525, "brevo-login", "protected-test-password", true, false, true);
 
         assertThat(controller.config().supportEmail()).isEqualTo("support@example.test");
         assertThat(controller.config().responseTime()).isEqualTo("two days");
