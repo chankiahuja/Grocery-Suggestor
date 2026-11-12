@@ -1722,7 +1722,10 @@ describe("inventory units and card labels", () => {
     await screen.findByText("Choose a unit or enter a custom text unit");
     assert.equal(api.items[0]?.unit, "piece");
     assert.ok(screen.getByTestId("input-item-unit").querySelector('option[value="Custom"]'));
-    assert.ok(screen.getByTestId("input-item-custom-unit"));
+    const customUnitInput = screen.getByTestId("input-item-custom-unit");
+    assert.ok(customUnitInput);
+    assert.equal(customUnitInput.getAttribute("aria-label"), "Custom unit");
+    assert.equal(customUnitInput.getAttribute("aria-invalid"), "true");
     queryClient.clear();
   });
 });

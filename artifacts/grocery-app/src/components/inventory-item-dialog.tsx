@@ -252,7 +252,7 @@ export function InventoryItemDialog({
               <FormField
                 control={form.control}
                 name="unit"
-                render={({ field }) => (
+                render={({ field, fieldState }) => (
                   <FormItem>
                     <FormLabel>Unit</FormLabel>
                     <FormControl>
@@ -280,6 +280,8 @@ export function InventoryItemDialog({
                         value={field.value}
                         onChange={field.onChange}
                         placeholder="Enter a custom text unit"
+                        aria-label="Custom unit"
+                        aria-invalid={fieldState.invalid}
                         data-testid="input-item-custom-unit"
                       />
                     )}
