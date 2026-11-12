@@ -516,8 +516,73 @@ describe("expired inventory attention", () => {
     fireEvent.click(screen.getByRole("link", { name: "Inventory" }));
     await screen.findByTestId("inventory-item-101");
     const card = screen.getByTestId("inventory-item-101");
+    assert.ok(card.className.includes("inventory-item-expiring"));
     assert.ok(within(card).getByText("Expiring Soon"));
     assert.ok(within(card).getByText("Low Stock"));
+  });
+
+  it("handles the combined Milk alert across dashboard, notifications, review, and read state", async (context) => {
+    context.mock.timers.enable({ apis: ["Date"], now: new Date("2026-11-12T12:00:00Z") });
+    const api = new MockPantryApi();
+    api.state.inventory = [
+      dashboardItem(101, "Milk", "Dairy", 1.5, 1.5, 2),
+    ];
+    api.state.inventory[0].unit = "litres";
+    globalThis.fetch = api.fetch;
+    const { queryClient } = renderApp();
+
+    await waitFor(() => assert.equal(screen.getByTestId("stat-low-stock").textContent?.trim(), "1"));
+    assert.equal(screen.getByTestId("stat-expiring").textContent?.trim(), "1");
+    assert.equal(screen.getByTestId("category-attention-dairy-total").textContent, "1");
+    assert.equal(screen.getByTestId("category-attention-dairy-low-count").textContent, "1");
+    assert.equal(screen.getByTestId("category-attention-dairy-expiring-count").textContent, "1");
+
+    const bell = screen.getByTestId("notification-bell");
+    fireEvent.click(bell);
+    const panel = screen.getByTestId("notification-panel");
+    assert.equal(within(panel).getAllByRole("link", { name: "Milk" }).length, 1);
+    assert.ok(panel.textContent?.includes("Expires on 2026-11-14"));
+    assert.ok(panel.textContent?.includes("minimum is 1.5 litres"));
+    await waitFor(() => assert.equal(bell.textContent?.includes("1"), false));
+    fireEvent.click(within(panel).getByRole("button", { name: "Close notifications" }));
+
+    await queryClient.refetchQueries({ queryKey: getGetGrocerySuggestionsQueryKey() });
+    assert.equal(bell.textContent?.includes("1"), false);
+    fireEvent.click(screen.getByTestId("button-generate-shopping-list"));
+    await screen.findByRole("heading", { name: "Review shopping list" });
+    assert.equal(screen.getAllByTestId("preview-item-101").length, 1);
+    assert.ok(screen.getByTestId("preview-item-101").textContent?.includes("Expires on 2026-11-14"));
+    const quantity = screen.getByLabelText("Milk quantity") as HTMLInputElement;
+    fireEvent.change(quantity, { target: { value: "2" } });
+    assert.equal(quantity.value, "2");
+    fireEvent.click(screen.getByRole("button", { name: "Remove Milk from shopping list review" }));
+    assert.equal(screen.queryByTestId("preview-item-101"), null);
+
+    api.state.inventory[0].expiresAt = "2026-11-15";
+    await queryClient.refetchQueries({ queryKey: getGetGrocerySuggestionsQueryKey() });
+    await waitFor(() => assert.ok(bell.textContent?.includes("1")));
+  });
+
+  it("keeps zero-stock upcoming items out of expiry counts and filters", async (context) => {
+    context.mock.timers.enable({ apis: ["Date"], now: new Date("2026-11-12T12:00:00Z") });
+    const api = new MockPantryApi();
+    api.state.inventory = [
+      dashboardItem(101, "Empty milk", "Dairy", 0, 2, 2),
+      dashboardItem(102, "Fresh milk", "Dairy", 5, 2, 2),
+    ];
+    globalThis.fetch = api.fetch;
+    renderApp();
+    await waitFor(() => assert.equal(screen.getByTestId("stat-expiring").textContent?.trim(), "1"));
+    fireEvent.click(screen.getByRole("link", { name: "View Expiring Soon in inventory" }));
+    await screen.findByText("No items match these filters.");
+    assert.equal(screen.queryByTestId("inventory-item-101"), null);
+    fireEvent.click(screen.getByRole("link", { name: "Dashboard" }));
+    await screen.findByTestId("stat-out-of-stock");
+    fireEvent.click(screen.getByRole("link", { name: "View Out of Stock in inventory" }));
+    await screen.findByTestId("inventory-item-101");
+    const card = screen.getByTestId("inventory-item-101");
+    assert.ok(within(card).getByText("Out of Stock"));
+    assert.equal(within(card).queryByText("Expiring Soon"), null);
   });
 
   it("filters expired inventory while leaving empty past-dated items as out of stock", async () => {
@@ -1324,7 +1389,7 @@ describe("dashboard inventory attention refresh", () => {
     const { queryClient } = renderApp();
 
     const expected = [
-      { category: "produce", attention: 3, out: 1, low: 1, expiring: 3 },
+      { category: "produce", attention: 2, out: 1, low: 1, expiring: 2 },
       { category: "dairy", attention: 1, out: 0, low: 1, expiring: 1 },
       { category: "bakery", attention: 1, out: 0, low: 0, expiring: 1 },
     ];
@@ -1403,6 +1468,57 @@ describe("dashboard inventory attention refresh", () => {
     fireEvent.click(screen.getByTestId("button-complete-purchase"));
     await waitFor(() => assert.equal(api.items[0]?.quantity, 2));
     assert.equal(api.items[1]?.quantity, 1);
+  });
+
+  it("deduplicates the legacy expired-and-low response before shopping review and submission", async () => {
+    const api = new GroceryApiMock();
+    api.items = [dashboardItem(1, "Milk", "Dairy", 1, 2, -1)];
+    let generatedBody: { items: { inventoryItemId: number; quantity: number }[] } | undefined;
+    const legacySuggestions = [
+      {
+        inventoryItemId: 1,
+        name: "Milk",
+        category: "Dairy",
+        currentQuantity: 1,
+        minThreshold: 2,
+        unit: "each",
+        reason: "Expired on 2026-11-11",
+        urgency: "expired",
+      },
+      {
+        inventoryItemId: 1,
+        name: "Milk",
+        category: "Dairy",
+        currentQuantity: 1,
+        minThreshold: 2,
+        unit: "each",
+        reason: "1 each left (minimum is 2 each)",
+        urgency: "low",
+      },
+    ];
+    const originalFetch = api.fetch;
+    globalThis.fetch = async (input, init) => {
+      const url = new URL(typeof input === "string" ? input : input.toString(), "http://localhost");
+      if (url.pathname === "/api/suggestions" && (init?.method ?? "GET") === "GET") {
+        return new Response(JSON.stringify(legacySuggestions), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.pathname === "/api/suggestions/generate-list") {
+        generatedBody = JSON.parse(String(init?.body));
+      }
+      return originalFetch(input, init);
+    };
+    renderApp();
+    await screen.findByTestId("button-generate-shopping-list");
+    fireEvent.click(screen.getByTestId("button-generate-shopping-list"));
+    await screen.findByRole("heading", { name: "Review shopping list" });
+    assert.equal(screen.getAllByTestId("preview-item-1").length, 1);
+    fireEvent.click(screen.getByRole("button", { name: "Create shopping list" }));
+    await screen.findByRole("heading", { name: "Low-stock shopping list" });
+    assert.equal(generatedBody?.items.length, 1);
+    assert.equal(generatedBody?.items[0]?.inventoryItemId, 1);
   });
 
   it("hides cached category cards while inventory is being refreshed", async () => {

@@ -72,8 +72,8 @@ export function getCategoryAttention(
       (a, b) =>
         b.expired - a.expired ||
         b.outOfStock - a.outOfStock ||
-        b.lowStock - a.lowStock ||
         b.expiringSoon - a.expiringSoon ||
+        b.lowStock - a.lowStock ||
         a.category.localeCompare(b.category)
     );
 }

@@ -137,8 +137,8 @@ export function NotificationCenter() {
   const grouped = [
     { urgency: "expired" as const, items: suggestions.filter((s) => s.urgency === "expired") },
     { urgency: "critical" as const, items: criticals },
-    { urgency: "low" as const, items: lows },
     { urgency: "expiring_soon" as const, items: expiring },
+    { urgency: "low" as const, items: lows },
   ].filter((g) => g.items.length > 0);
 
   return (

@@ -42,7 +42,7 @@ describe('isExpiringSoon', () => {
 });
 
 describe('getCategoryAttention', () => {
-  it('counts stock and expiry conditions without counting overlapping items twice', () => {
+  it('counts conditions once and orders categories by expiry priority before low stock', () => {
     const result = getCategoryAttention(
       [
         item(1, 'Out', 0, 2, '2026-01-03'),
@@ -68,6 +68,14 @@ describe('getCategoryAttention', () => {
         expired: 0,
       },
       {
+        category: 'Expiry',
+        attentionItems: 1,
+        outOfStock: 0,
+        lowStock: 0,
+        expiringSoon: 1,
+        expired: 0,
+      },
+      {
         category: 'Mixed',
         attentionItems: 1,
         outOfStock: 0,
@@ -89,14 +97,6 @@ describe('getCategoryAttention', () => {
         outOfStock: 0,
         lowStock: 1,
         expiringSoon: 0,
-        expired: 0,
-      },
-      {
-        category: 'Expiry',
-        attentionItems: 1,
-        outOfStock: 0,
-        lowStock: 0,
-        expiringSoon: 1,
         expired: 0,
       },
     ]);
