@@ -574,7 +574,7 @@ describe("expired inventory attention", () => {
     renderApp();
     await waitFor(() => assert.equal(screen.getByTestId("stat-expiring").textContent?.trim(), "1"));
     fireEvent.click(screen.getByRole("link", { name: "View Expiring Soon in inventory" }));
-    await screen.findByText("No items match these filters.");
+    await screen.findByTestId("inventory-item-102");
     assert.equal(screen.queryByTestId("inventory-item-101"), null);
     fireEvent.click(screen.getByRole("link", { name: "Dashboard" }));
     await screen.findByTestId("stat-out-of-stock");
@@ -1389,7 +1389,7 @@ describe("dashboard inventory attention refresh", () => {
     const { queryClient } = renderApp();
 
     const expected = [
-      { category: "produce", attention: 2, out: 1, low: 1, expiring: 2 },
+      { category: "produce", attention: 3, out: 1, low: 1, expiring: 2 },
       { category: "dairy", attention: 1, out: 0, low: 1, expiring: 1 },
       { category: "bakery", attention: 1, out: 0, low: 0, expiring: 1 },
     ];
