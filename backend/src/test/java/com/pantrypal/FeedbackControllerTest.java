@@ -98,7 +98,7 @@ class FeedbackControllerTest {
     void acceptsCompleteExternalSmtpConfiguration() {
         var controller = new FeedbackController(
             mailSender, mock(AuthRateLimiter.class), "support@example.test", "two days", "PantryPal <from@example.test>",
-            "smtp.example.test", 2525, "brevo-login", "protected-test-password", true, true, false);
+            "smtp.example.test", 2525, "brevo-login", "protected-test-password", true, true, true);
 
         assertThat(controller.config().supportEmail()).isEqualTo("support@example.test");
         assertThat(controller.config().responseTime()).isEqualTo("two days");
