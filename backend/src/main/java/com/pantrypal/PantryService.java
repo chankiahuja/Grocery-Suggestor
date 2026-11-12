@@ -197,9 +197,6 @@ public class PantryService {
         double quantity = number(item, "quantity");
         return quantity > 0 && quantity <= number(item, "minThreshold");
     }
-    private boolean stockEligible(Map<String,Object> item) {
-        return number(item, "quantity") == 0 || lowStock(item);
-    }
     private String primaryUrgency(Map<String,Object> item) {
         if (expired(item)) return "expired";
         if (number(item, "quantity") == 0) return "critical";
@@ -301,7 +298,10 @@ public class PantryService {
     public Map<String,Object> generateList(Map<String,Object> request) { return generateList(null, request); }
     public Map<String,Object> generateList(Long ownerId, Map<String,Object> request) {
         lockOwner(ownerId);
-        var suggestions = suggestions(ownerId).stream().filter(s -> stockEligible(inventory(ownerId, ((Number) s.get("inventoryItemId")).longValue()))).toList();
+        var suggestions = suggestions(ownerId).stream()
+            .filter(s -> number(s, "currentQuantity") == 0
+                || number(s, "currentQuantity") <= number(s, "minThreshold"))
+            .toList();
         if (suggestions.isEmpty()) bad("No low-stock suggestions are available.");
         var selected = new LinkedHashMap<Long, Map<String,Object>>();
         Object requestedItems = request.get("items");
