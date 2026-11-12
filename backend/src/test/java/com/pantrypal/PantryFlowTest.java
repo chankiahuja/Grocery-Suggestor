@@ -98,6 +98,12 @@ class PantryFlowTest {
             .content("{\"name\":\"Rice\",\"category\":\"Grains\",\"quantity\":2,\"unit\":\"٢\",\"minThreshold\":1}"))
             .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("unit must describe a unit, not only a number"));
         mvc.perform(post("/api/inventory").contentType("application/json")
+            .content("{\"name\":\"Rice\",\"category\":\"Grains\",\"quantity\":2,\"unit\":\"²\",\"minThreshold\":1}"))
+            .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("unit must describe a unit, not only a number"));
+        mvc.perform(post("/api/inventory").contentType("application/json")
+            .content("{\"name\":\"Rice\",\"category\":\"Grains\",\"quantity\":2,\"unit\":\"Ⅳ\",\"minThreshold\":1}"))
+            .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("unit must describe a unit, not only a number"));
+        mvc.perform(post("/api/inventory").contentType("application/json")
             .content("{\"name\":\"Rice\",\"category\":\"Grains\",\"quantity\":2,\"unit\":\"\u00a0\u00a0\",\"minThreshold\":1}"))
             .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("unit is required"));
         mvc.perform(post("/api/inventory").contentType("application/json")

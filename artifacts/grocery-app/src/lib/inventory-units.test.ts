@@ -7,6 +7,8 @@ describe("inventory unit policy", () => {
     assert.equal(isInvalidUnit(""), true);
     assert.equal(isInvalidUnit("  2.5  "), true);
     assert.equal(isInvalidUnit("٢"), true);
+    assert.equal(isInvalidUnit("²"), true);
+    assert.equal(isInvalidUnit("Ⅳ"), true);
     assert.equal(isInvalidUnit("\u00a0\u00a0"), true);
     assert.equal(isInvalidUnit("\u20032\u2003"), true);
     assert.equal(isInvalidUnit("bags"), false);

@@ -38,14 +38,17 @@ public class PantryService {
         return value.substring(start, end);
     }
     static boolean numericOnlyUnit(String value) {
-        boolean hasDigit = false;
+        boolean hasNumber = false;
         for (int offset = 0; offset < value.length();) {
             int codePoint = value.codePointAt(offset);
-            if (Character.isDigit(codePoint)) hasDigit = true;
+            int type = Character.getType(codePoint);
+            if (type == Character.DECIMAL_DIGIT_NUMBER
+                || type == Character.LETTER_NUMBER
+                || type == Character.OTHER_NUMBER) hasNumber = true;
             else if (codePoint != '+' && codePoint != '-' && codePoint != '.') return false;
             offset += Character.charCount(codePoint);
         }
-        return hasDigit;
+        return hasNumber;
     }
     public List<Long> accountIds() { return repo.accountIds(); }
     private void lockOwner(Long ownerId) {
