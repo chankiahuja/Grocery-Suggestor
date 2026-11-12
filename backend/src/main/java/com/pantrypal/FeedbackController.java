@@ -28,6 +28,7 @@ public class FeedbackController {
     private final String supportEmail;
     private final String responseTime;
     private final String from;
+    private final boolean mailConfigured;
     private final JavaMailSender mailSender;
     private final AuthRateLimiter rateLimiter;
 
@@ -36,7 +37,13 @@ public class FeedbackController {
         AuthRateLimiter rateLimiter,
         @Value("${pantrypal.support.email:}") String supportEmail,
         @Value("${pantrypal.support.response-time:}") String responseTime,
-        @Value("${pantrypal.auth.mail-from}") String from
+        @Value("${pantrypal.auth.mail-from}") String from,
+        @Value("${spring.mail.host:}") String mailHost,
+        @Value("${spring.mail.port:0}") int mailPort,
+        @Value("${spring.mail.username:}") String mailUsername,
+        @Value("${spring.mail.password:}") String mailPassword,
+        @Value("${spring.mail.properties.mail.smtp.auth:false}") boolean smtpAuth,
+        @Value("${spring.mail.properties.mail.smtp.starttls.enable:false}") boolean startTlsEnabled
     ) {
         this.mailSender = mailSender;
         this.rateLimiter = rateLimiter;
@@ -50,17 +57,20 @@ public class FeedbackController {
             throw new IllegalArgumentException("PANTRYPAL_SUPPORT_RESPONSE_TIME must be a single line of at most 120 characters");
         }
         this.from = from;
+        this.mailConfigured = MailSecurityConfig.isConfigured(
+            mailHost, mailPort, mailUsername, mailPassword, smtpAuth, startTlsEnabled);
     }
 
     @GetMapping("/config")
     public ContactConfig config() {
-        return new ContactConfig(supportEmail.isEmpty() ? null : supportEmail, responseTime.isEmpty() ? null : responseTime);
+        boolean available = mailConfigured && !supportEmail.isEmpty();
+        return new ContactConfig(available ? supportEmail : null, available && !responseTime.isEmpty() ? responseTime : null);
     }
 
     @PostMapping
     public Map<String, Boolean> submit(@RequestBody Submission body, HttpServletRequest request) {
         validate(body);
-        if (!isValidEmail(supportEmail)) {
+        if (!mailConfigured || !isValidEmail(supportEmail)) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Support is not configured yet. Please try again later.");
         }
 

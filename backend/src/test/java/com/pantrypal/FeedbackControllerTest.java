@@ -55,6 +55,16 @@ class FeedbackControllerTest {
     }
 
     @Test
+    void hidesSupportAddressWhenExternalSmtpCredentialsAreMissing() {
+        var controller = new FeedbackController(
+            mailSender, mock(AuthRateLimiter.class), "support@example.test", "two days", "PantryPal <from@example.test>",
+            "smtp.example.test", 2525, "", "", true, true);
+
+        assertThat(controller.config().supportEmail()).isNull();
+        assertThat(controller.config().responseTime()).isNull();
+    }
+
+    @Test
     void acceptsAnonymousSubmissionOnlyWithCsrfAndSendsCategorizedMail() throws Exception {
         var browser = new AnonymousBrowser();
         browser.start();

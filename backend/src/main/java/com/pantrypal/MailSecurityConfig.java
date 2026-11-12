@@ -38,4 +38,15 @@ public class MailSecurityConfig {
                 || "mailpit".equals(normalized)
                 || port == 1025 && ("localhost".equals(normalized) || "mailpit".equals(normalized) || "127.0.0.1".equals(normalized) || "::1".equals(normalized));
     }
+
+    /** Reports whether the configured transport has enough information for a delivery attempt. */
+    static boolean isConfigured(String host, int port, String username, String password,
+            boolean smtpAuth, boolean startTlsEnabled) {
+        if (host == null || host.isBlank() || port <= 0) return false;
+        if (isLocalMailpit(host, port)) return true;
+        if (smtpAuth && (username == null || username.isBlank() || password == null || password.isBlank())) {
+            return false;
+        }
+        return !smtpAuth || startTlsEnabled;
+    }
 }
