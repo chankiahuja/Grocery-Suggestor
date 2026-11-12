@@ -87,8 +87,8 @@ Render Manual Sync does not update existing environment variables marked `sync: 
 | `AUTH_COOKIE_SECURE` | Must be `true` behind Render TLS | fixed value |
 | `PANTRYPAL_SMTP_REQUIRED` | Must be `true` for production | fixed value |
 | `MAIL_HOST` | Brevo SMTP endpoint `smtp-relay.brevo.com` | fixed value |
-| `MAIL_PORT` | Brevo submission port `587` | fixed value |
-| `MAIL_SMTP_AUTH` / `MAIL_STARTTLS` | Required for authenticated Brevo delivery | fixed `true` values |
+| `MAIL_PORT` | Brevo submission port `587` for the paid production service | fixed value |
+| `MAIL_SMTP_AUTH` / `MAIL_STARTTLS` | Required for authenticated Brevo delivery; STARTTLS is enabled and required | fixed `true` values |
 
 Before provisioning, confirm the sender, support mailbox, Brevo account, database connection references, and `AUTH_OTP_SECRET` policy. Do not use staging credentials or a local `.env` value for production.
 

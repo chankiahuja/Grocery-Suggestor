@@ -31,6 +31,22 @@ class OtpMailTransportTest {
     }
 
     @Test
+    void productionEnablesSmtpServerIdentityChecking() throws Exception {
+        var loader = new YamlPropertySourceLoader();
+        var production = loader.load("production", new ClassPathResource("application-production.yml")).get(0);
+
+        assertThat(production.getProperty("spring.mail.port")).hasToString("${MAIL_PORT:587}");
+        assertThat(production.getProperty("spring.mail.properties.mail.smtp.auth"))
+            .hasToString("${MAIL_SMTP_AUTH:true}");
+        assertThat(production.getProperty("spring.mail.properties.mail.smtp.starttls.enable"))
+            .hasToString("${MAIL_STARTTLS:true}");
+        assertThat(production.getProperty("spring.mail.properties.mail.smtp.starttls.required"))
+            .hasToString("${MAIL_STARTTLS:true}");
+        assertThat(production.getProperty("spring.mail.properties.mail.smtp.ssl.checkserveridentity"))
+            .isEqualTo(true);
+    }
+
+    @Test
     @Timeout(20)
     void configuredReadTimeoutBoundsAnUnresponsiveSmtpServer() throws Exception {
         try (var server = new ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))) {

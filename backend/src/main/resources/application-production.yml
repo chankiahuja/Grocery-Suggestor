@@ -15,6 +15,7 @@ spring:
       mail.smtp.auth: ${MAIL_SMTP_AUTH:true}
       mail.smtp.starttls.enable: ${MAIL_STARTTLS:true}
       mail.smtp.starttls.required: ${MAIL_STARTTLS:true}
+      mail.smtp.ssl.checkserveridentity: true
 pantrypal:
   auth:
     cookie-secure: true

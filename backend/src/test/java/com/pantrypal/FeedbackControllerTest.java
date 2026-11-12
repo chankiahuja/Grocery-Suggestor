@@ -19,6 +19,7 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -52,6 +53,95 @@ class FeedbackControllerTest {
         JsonNode config = json.readTree(result.getResponse().getContentAsString());
         assertThat(config.get("supportEmail").asText()).isEqualTo("support@example.test");
         assertThat(config.get("responseTime").asText()).isEqualTo("We aim to respond within two business days.");
+    }
+
+    @Test
+    void hidesSupportAddressWhenExternalSmtpCredentialsAreMissing() {
+        var controller = new FeedbackController(
+            mailSender, mock(AuthRateLimiter.class), "support@example.test", "two days", "PantryPal <from@example.test>",
+            "smtp.example.test", 2525, "", "", true, true, false);
+
+        assertThat(controller.config().supportEmail()).isNull();
+        assertThat(controller.config().responseTime()).isNull();
+        verifyNoInteractions(mailSender);
+    }
+
+    @Test
+    void hidesSupportAddressWhenExternalSmtpUsernameIsMissing() {
+        var controller = new FeedbackController(
+            mailSender, mock(AuthRateLimiter.class), "support@example.test", "two days", "PantryPal <from@example.test>",
+            "smtp.example.test", 2525, "", "protected-test-password", true, true, true);
+
+        assertThat(controller.config().supportEmail()).isNull();
+        verifyNoInteractions(mailSender);
+    }
+
+    @Test
+    void incompleteExternalSmtpReturnsUnavailableWithoutSendingMail() throws Exception {
+        var controller = new FeedbackController(
+            mailSender, mock(AuthRateLimiter.class), "support@example.test", "two days", "PantryPal <from@example.test>",
+            "smtp.example.test", 2525, "brevo-login", "", true, true, false);
+        var isolatedMvc = MockMvcBuilders.standaloneSetup(controller).build();
+
+        isolatedMvc.perform(get("/api/feedback/config"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.supportEmail").doesNotExist())
+            .andExpect(jsonPath("$.responseTime").doesNotExist());
+        isolatedMvc.perform(post("/api/feedback")
+                .contentType("application/json")
+                .content("{\"category\":\"other\",\"message\":\"A message\"}"))
+            .andExpect(status().isServiceUnavailable());
+        verifyNoInteractions(mailSender);
+    }
+
+    @Test
+    void acceptsCompleteExternalSmtpConfiguration() {
+        var controller = new FeedbackController(
+            mailSender, mock(AuthRateLimiter.class), "support@example.test", "two days", "PantryPal <from@example.test>",
+            "smtp.example.test", 2525, "brevo-login", "protected-test-password", true, true, true);
+
+        assertThat(controller.config().supportEmail()).isEqualTo("support@example.test");
+        assertThat(controller.config().responseTime()).isEqualTo("two days");
+    }
+
+    @Test
+    void rejectsExternalSmtpWhenAuthenticationIsDisabled() {
+        var controller = new FeedbackController(
+            mailSender, mock(AuthRateLimiter.class), "support@example.test", "two days", "PantryPal <from@example.test>",
+            "smtp.example.test", 2525, "brevo-login", "protected-test-password", false, true, true);
+
+        assertThat(controller.config().supportEmail()).isNull();
+        verifyNoInteractions(mailSender);
+    }
+
+    @Test
+    void rejectsExternalSmtpWhenStarttlsIsNotRequired() {
+        var controller = new FeedbackController(
+            mailSender, mock(AuthRateLimiter.class), "support@example.test", "two days", "PantryPal <from@example.test>",
+            "smtp.example.test", 2525, "brevo-login", "protected-test-password", true, true, false);
+
+        assertThat(controller.config().supportEmail()).isNull();
+        verifyNoInteractions(mailSender);
+    }
+
+    @Test
+    void rejectsExternalSmtpWhenStarttlsIsNotEnabled() {
+        var controller = new FeedbackController(
+            mailSender, mock(AuthRateLimiter.class), "support@example.test", "two days", "PantryPal <from@example.test>",
+            "smtp.example.test", 2525, "brevo-login", "protected-test-password", true, false, true);
+
+        assertThat(controller.config().supportEmail()).isNull();
+        verifyNoInteractions(mailSender);
+    }
+
+    @Test
+    void localMailpitRemainsAvailableWithoutExternalCredentialsOrTls() {
+        var controller = new FeedbackController(
+            mailSender, mock(AuthRateLimiter.class), "support@example.test", "two days", "PantryPal <from@example.test>",
+            "localhost", 1025, "", "", false, false, false);
+
+        assertThat(controller.config().supportEmail()).isEqualTo("support@example.test");
+        assertThat(controller.config().responseTime()).isEqualTo("two days");
     }
 
     @Test
