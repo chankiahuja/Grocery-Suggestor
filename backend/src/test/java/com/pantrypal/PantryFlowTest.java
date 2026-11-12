@@ -40,6 +40,20 @@ class PantryFlowTest {
         assertThat(service.purchase(listId).get("updatedInventoryItems")).isEqualTo(0);
         assertThat(PantryService.number(service.inventory(milk),"quantity")).isEqualTo(2);
     }
+    @Test void shoppingListsPreserveNumericUnitsAndLegacyGeneratedUnits() {
+        long listId = PantryService.id(service.createList(Map.of("name", "Numeric units")));
+        var direct = service.addItem(listId, Map.of("name", "Legacy sugar", "category", "Pantry", "quantity", 2, "unit", "2"));
+        assertThat(direct.get("unit")).isEqualTo("2");
+
+        long legacyId = repository.insert("inventory_items", Map.of(
+            "name", "Legacy rice", "category", "Grains", "quantity", 0, "unit", "2", "min_threshold", 1));
+        var generated = service.generateList();
+        var generatedRows = repository.query("SELECT * FROM shopping_list_items WHERE shopping_list_id=?", PantryService.id(generated));
+        assertThat(generatedRows).anySatisfy(row -> {
+            assertThat(row.get("inventoryItemId")).isEqualTo(legacyId);
+            assertThat(row.get("unit")).isEqualTo("2");
+        });
+    }
     @Test void expiryRemindersAreExcludedFromGeneratedShoppingList() {
         var cheese = item("Cheese",5);
         service.saveInventory(PantryService.id(cheese), Map.of("expiresAt", LocalDate.now(java.time.ZoneOffset.UTC).plusDays(2).toString()));
@@ -69,6 +83,43 @@ class PantryFlowTest {
         mvc.perform(post("/api/inventory").contentType("application/json").content("{\"name\":\"Milk\",\"quantity\":-1}")).andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").exists());
         mvc.perform(get("/api/inventory/999999")).andExpect(status().isNotFound());
         mvc.perform(get("/api/healthz")).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("ok"));
+    }
+    @Test void inventoryRejectsBlankAndNumericOnlyUnitsAndTrimsValidUnits() throws Exception {
+        mvc.perform(post("/api/inventory").contentType("application/json")
+            .content("{\"name\":\"Rice\",\"category\":\"Grains\",\"quantity\":2,\"unit\":\"   \",\"minThreshold\":1}"))
+            .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("unit is required"));
+        mvc.perform(post("/api/inventory").contentType("application/json")
+            .content("{\"name\":\"Rice\",\"category\":\"Grains\",\"quantity\":2,\"unit\":\"2\",\"minThreshold\":1}"))
+            .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("unit must describe a unit, not only a number"));
+        mvc.perform(post("/api/inventory").contentType("application/json")
+            .content("{\"name\":\"Rice\",\"category\":\"Grains\",\"quantity\":2,\"unit\":\"  bags  \",\"minThreshold\":1}"))
+            .andExpect(status().isCreated()).andExpect(jsonPath("$.unit").value("bags"));
+        mvc.perform(post("/api/inventory").contentType("application/json")
+            .content("{\"name\":\"Rice\",\"category\":\"Grains\",\"quantity\":2,\"unit\":\"٢\",\"minThreshold\":1}"))
+            .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("unit must describe a unit, not only a number"));
+        mvc.perform(post("/api/inventory").contentType("application/json")
+            .content("{\"name\":\"Rice\",\"category\":\"Grains\",\"quantity\":2,\"unit\":\"²\",\"minThreshold\":1}"))
+            .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("unit must describe a unit, not only a number"));
+        mvc.perform(post("/api/inventory").contentType("application/json")
+            .content("{\"name\":\"Rice\",\"category\":\"Grains\",\"quantity\":2,\"unit\":\"Ⅳ\",\"minThreshold\":1}"))
+            .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("unit must describe a unit, not only a number"));
+        for (String numericLookingUnit : new String[]{"1,000", "1 000", "1/2", "−١٫٥"}) {
+            mvc.perform(post("/api/inventory").contentType("application/json")
+                .content("{\"name\":\"Rice\",\"category\":\"Grains\",\"quantity\":2,\"unit\":\"" + numericLookingUnit + "\",\"minThreshold\":1}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("unit must describe a unit, not only a number"));
+        }
+        mvc.perform(post("/api/inventory").contentType("application/json")
+            .content("{\"name\":\"Rice\",\"category\":\"Grains\",\"quantity\":2,\"unit\":\"\ufeff\",\"minThreshold\":1}"))
+            .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("unit is required"));
+        mvc.perform(post("/api/inventory").contentType("application/json")
+            .content("{\"name\":\"Rice\",\"category\":\"Grains\",\"quantity\":2,\"unit\":\"m²\",\"minThreshold\":1}"))
+            .andExpect(status().isCreated()).andExpect(jsonPath("$.unit").value("m²"));
+        mvc.perform(post("/api/inventory").contentType("application/json")
+            .content("{\"name\":\"Rice\",\"category\":\"Grains\",\"quantity\":2,\"unit\":\"\u00a0\u00a0\",\"minThreshold\":1}"))
+            .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("unit is required"));
+        mvc.perform(post("/api/inventory").contentType("application/json")
+            .content("{\"name\":\"Rice\",\"category\":\"Grains\",\"quantity\":2,\"unit\":\"\u20032\u2003\",\"minThreshold\":1}"))
+            .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("unit must describe a unit, not only a number"));
     }
     @Test void stockFiltersMatchDistinctDashboardCounts() throws Exception {
         item("Empty milk", 0);

@@ -1452,7 +1452,8 @@ describe("dashboard inventory attention refresh", () => {
     changeInput("input-item-name", "Rice");
     changeInput("input-item-category", "Grains");
     changeInput("input-item-quantity", "1");
-    changeInput("input-item-unit", "bags");
+    changeInput("input-item-unit", "Custom");
+    changeInput("input-item-custom-unit", "bags");
     changeInput("input-item-threshold", "2");
     fireEvent.click(screen.getByTestId("button-save-item"));
 
@@ -1692,5 +1693,39 @@ describe("inventory optional field clearing", () => {
       (screen.getByTestId("input-item-notes") as HTMLTextAreaElement).value,
       "",
     );
+  });
+});
+
+describe("inventory units and card labels", () => {
+  it("offers preset guidance, rejects numeric units, and labels notes", async () => {
+    const api = new GroceryApiMock();
+    api.items = [
+      { ...dashboardItem(1, "Biscuits", "Pantry", 2, 1), unit: "piece", notes: "Keep dry" },
+    ];
+    globalThis.fetch = api.fetch;
+    const { queryClient } = renderApp();
+
+    await openInventory();
+    assert.ok(screen.getByTestId("input-search"));
+    assert.ok(screen.getByText("2 pieces"));
+    assert.ok(screen.getByText("Minimum: 1 piece"));
+    assert.ok(screen.getByText("Notes:"));
+    assert.ok(screen.getByText("Keep dry"));
+
+    fireEvent.click(screen.getByTestId("button-edit-1"));
+    await screen.findByTestId("dialog-inventory-item");
+    changeInput("input-item-unit", "Custom");
+    changeInput("input-item-custom-unit", "grams");
+    assert.equal((screen.getByTestId("input-item-custom-unit") as HTMLInputElement).value, "grams");
+    changeInput("input-item-custom-unit", "2");
+    fireEvent.click(screen.getByTestId("button-save-item"));
+    await screen.findByText("Choose a unit or enter a custom text unit");
+    assert.equal(api.items[0]?.unit, "piece");
+    assert.ok(screen.getByTestId("input-item-unit").querySelector('option[value="Custom"]'));
+    const customUnitInput = screen.getByTestId("input-item-custom-unit");
+    assert.ok(customUnitInput);
+    assert.equal(customUnitInput.getAttribute("aria-label"), "Custom unit");
+    assert.equal(customUnitInput.getAttribute("aria-invalid"), "true");
+    queryClient.clear();
   });
 });

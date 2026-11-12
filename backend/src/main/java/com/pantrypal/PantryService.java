@@ -11,6 +11,7 @@ import org.springframework.http.HttpStatus;
 @Service
 @Transactional
 public class PantryService {
+    private static final int MAX_UNIT_LENGTH = 64;
     final PantryRepository repo;
     final ApplicationEventPublisher events;
     final Clock clock;
@@ -21,6 +22,35 @@ public class PantryService {
     static double number(Map<String,Object> row, String key) { return ((Number) row.get(key)).doubleValue(); }
     static long id(Map<String,Object> row) { return ((Number) row.get("id")).longValue(); }
     static void bad(String reason) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, reason); }
+    static String trimUnit(String value) {
+        int start = 0;
+        int end = value.length();
+        while (start < end) {
+            int codePoint = value.codePointAt(start);
+            if (!Character.isWhitespace(codePoint) && !Character.isSpaceChar(codePoint) && codePoint != '\uFEFF') break;
+            start += Character.charCount(codePoint);
+        }
+        while (end > start) {
+            int codePoint = value.codePointBefore(end);
+            if (!Character.isWhitespace(codePoint) && !Character.isSpaceChar(codePoint) && codePoint != '\uFEFF') break;
+            end -= Character.charCount(codePoint);
+        }
+        return value.substring(start, end);
+    }
+    static boolean numericLookingUnit(String value) {
+        boolean hasNumber = false;
+        boolean hasLetter = false;
+        for (int offset = 0; offset < value.length();) {
+            int codePoint = value.codePointAt(offset);
+            int type = Character.getType(codePoint);
+            if (type == Character.DECIMAL_DIGIT_NUMBER
+                || type == Character.LETTER_NUMBER
+                || type == Character.OTHER_NUMBER) hasNumber = true;
+            if (Character.isLetter(codePoint)) hasLetter = true;
+            offset += Character.charCount(codePoint);
+        }
+        return hasNumber && !hasLetter;
+    }
     public List<Long> accountIds() { return repo.accountIds(); }
     private void lockOwner(Long ownerId) {
         if (ownerId != null && repo.query("SELECT id FROM accounts WHERE id=? FOR UPDATE", ownerId).isEmpty()) {
@@ -37,6 +67,13 @@ public class PantryService {
             if (!body.containsKey(key)) continue;
             Object value = body.get(key);
             if (List.of("name", "category", "unit").contains(key) && (!(value instanceof String s) || s.isBlank())) bad(key + " is required");
+            if (inventory && key.equals("unit")) {
+                String unit = trimUnit((String) value);
+                if (unit.isEmpty()) bad("unit is required");
+                if (unit.length() > MAX_UNIT_LENGTH) bad("unit must be 64 characters or fewer");
+                if (numericLookingUnit(unit)) bad("unit must describe a unit, not only a number");
+                value = unit;
+            }
             if (List.of("quantity", "minThreshold").contains(key) && (!(value instanceof Number n) || !Double.isFinite(n.doubleValue()) || n.doubleValue() < 0)) bad(key + " must be non-negative");
             if (key.equals("purchased") && !(value instanceof Boolean)) bad("purchased must be boolean");
             if (key.equals("inventoryItemId") && value != null && (!(value instanceof Number n) || n.longValue() <= 0 || n.doubleValue() != n.longValue())) bad("Invalid inventory item ID");

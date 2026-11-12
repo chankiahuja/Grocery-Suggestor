@@ -35,6 +35,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useNotifications } from "@/hooks/use-notifications";
+import { INVENTORY_UNIT_OPTIONS, isInvalidUnit } from "@/lib/inventory-units";
 
 function nullableValue(value: string | undefined) {
   return value === "" || value === undefined ? null : value;
@@ -59,13 +60,18 @@ const formSchema = z.object({
   name: z.string().min(1, "Name is required"),
   category: z.string().min(1, "Category is required"),
   quantity: nonBlankNumber("Quantity"),
-  unit: z.string().min(1, "Unit is required"),
+  unit: z.string()
+    .trim()
+    .min(1, "Unit is required")
+    .max(64, "Unit must be 64 characters or fewer")
+    .refine((value) => !isInvalidUnit(value), "Choose a unit or enter a custom text unit"),
   minThreshold: nonBlankNumber("Threshold"),
   expiresAt: z.string().optional(),
   notes: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof formSchema>;
+type UnitMode = "preset" | "custom";
 
 interface InventoryItemDialogProps {
   open: boolean;
@@ -85,6 +91,12 @@ export function InventoryItemDialog({
 
   const createItem = useCreateInventoryItem();
   const updateItem = useUpdateInventoryItem();
+
+  const [unitMode, setUnitMode] = useState<UnitMode>(() =>
+    item?.unit && INVENTORY_UNIT_OPTIONS.includes(item.unit as typeof INVENTORY_UNIT_OPTIONS[number])
+      ? "preset"
+      : "custom",
+  );
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -111,6 +123,11 @@ export function InventoryItemDialog({
       expiresAt: item?.expiresAt || "",
       notes: item?.notes || "",
     });
+    setUnitMode(
+      item?.unit && INVENTORY_UNIT_OPTIONS.includes(item.unit as typeof INVENTORY_UNIT_OPTIONS[number])
+        ? "preset"
+        : "custom",
+    );
   }, [form, item, open]);
 
   const onSubmit = async (values: FormValues) => {
@@ -235,16 +252,39 @@ export function InventoryItemDialog({
               <FormField
                 control={form.control}
                 name="unit"
-                render={({ field }) => (
+                render={({ field, fieldState }) => (
                   <FormItem>
                     <FormLabel>Unit</FormLabel>
                     <FormControl>
-                      <Input
-                        {...field}
-                        placeholder="e.g. L, kg, pcs"
+                      <select
+                        value={unitMode === "preset" ? field.value : "Custom"}
+                        onChange={(event) => {
+                          if (event.target.value === "Custom") {
+                            setUnitMode("custom");
+                            field.onChange("");
+                          } else {
+                            setUnitMode("preset");
+                            field.onChange(event.target.value);
+                          }
+                        }}
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                         data-testid="input-item-unit"
-                      />
+                      >
+                        <option value="" disabled>Choose a unit</option>
+                        {INVENTORY_UNIT_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                        <option value="Custom">Custom</option>
+                      </select>
                     </FormControl>
+                    {unitMode === "custom" && (
+                      <Input
+                        value={field.value}
+                        onChange={field.onChange}
+                        placeholder="Enter a custom text unit"
+                        aria-label="Custom unit"
+                        aria-invalid={fieldState.invalid}
+                        data-testid="input-item-custom-unit"
+                      />
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}
