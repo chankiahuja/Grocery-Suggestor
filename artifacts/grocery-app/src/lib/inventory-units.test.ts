@@ -9,10 +9,16 @@ describe("inventory unit policy", () => {
     assert.equal(isInvalidUnit("٢"), true);
     assert.equal(isInvalidUnit("²"), true);
     assert.equal(isInvalidUnit("Ⅳ"), true);
+    assert.equal(isInvalidUnit("1,000"), true);
+    assert.equal(isInvalidUnit("1 000"), true);
+    assert.equal(isInvalidUnit("1/2"), true);
+    assert.equal(isInvalidUnit("−١٫٥"), true);
+    assert.equal(isInvalidUnit("\ufeff"), true);
     assert.equal(isInvalidUnit("\u00a0\u00a0"), true);
     assert.equal(isInvalidUnit("\u20032\u2003"), true);
     assert.equal(isInvalidUnit("bags"), false);
     assert.equal(isInvalidUnit("kg / g"), false);
+    assert.equal(isInvalidUnit("m²"), false);
   });
 
   it("pluralizes supported presets without rewriting custom units", () => {

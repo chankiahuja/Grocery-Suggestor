@@ -103,6 +103,17 @@ class PantryFlowTest {
         mvc.perform(post("/api/inventory").contentType("application/json")
             .content("{\"name\":\"Rice\",\"category\":\"Grains\",\"quantity\":2,\"unit\":\"Ⅳ\",\"minThreshold\":1}"))
             .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("unit must describe a unit, not only a number"));
+        for (String numericLookingUnit : new String[]{"1,000", "1 000", "1/2", "−١٫٥"}) {
+            mvc.perform(post("/api/inventory").contentType("application/json")
+                .content("{\"name\":\"Rice\",\"category\":\"Grains\",\"quantity\":2,\"unit\":\"" + numericLookingUnit + "\",\"minThreshold\":1}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("unit must describe a unit, not only a number"));
+        }
+        mvc.perform(post("/api/inventory").contentType("application/json")
+            .content("{\"name\":\"Rice\",\"category\":\"Grains\",\"quantity\":2,\"unit\":\"\ufeff\",\"minThreshold\":1}"))
+            .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("unit is required"));
+        mvc.perform(post("/api/inventory").contentType("application/json")
+            .content("{\"name\":\"Rice\",\"category\":\"Grains\",\"quantity\":2,\"unit\":\"m²\",\"minThreshold\":1}"))
+            .andExpect(status().isCreated()).andExpect(jsonPath("$.unit").value("m²"));
         mvc.perform(post("/api/inventory").contentType("application/json")
             .content("{\"name\":\"Rice\",\"category\":\"Grains\",\"quantity\":2,\"unit\":\"\u00a0\u00a0\",\"minThreshold\":1}"))
             .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("unit is required"));

@@ -27,28 +27,29 @@ public class PantryService {
         int end = value.length();
         while (start < end) {
             int codePoint = value.codePointAt(start);
-            if (!Character.isWhitespace(codePoint) && !Character.isSpaceChar(codePoint)) break;
+            if (!Character.isWhitespace(codePoint) && !Character.isSpaceChar(codePoint) && codePoint != '\uFEFF') break;
             start += Character.charCount(codePoint);
         }
         while (end > start) {
             int codePoint = value.codePointBefore(end);
-            if (!Character.isWhitespace(codePoint) && !Character.isSpaceChar(codePoint)) break;
+            if (!Character.isWhitespace(codePoint) && !Character.isSpaceChar(codePoint) && codePoint != '\uFEFF') break;
             end -= Character.charCount(codePoint);
         }
         return value.substring(start, end);
     }
-    static boolean numericOnlyUnit(String value) {
+    static boolean numericLookingUnit(String value) {
         boolean hasNumber = false;
+        boolean hasLetter = false;
         for (int offset = 0; offset < value.length();) {
             int codePoint = value.codePointAt(offset);
             int type = Character.getType(codePoint);
             if (type == Character.DECIMAL_DIGIT_NUMBER
                 || type == Character.LETTER_NUMBER
                 || type == Character.OTHER_NUMBER) hasNumber = true;
-            else if (codePoint != '+' && codePoint != '-' && codePoint != '.') return false;
+            if (Character.isLetter(codePoint)) hasLetter = true;
             offset += Character.charCount(codePoint);
         }
-        return hasNumber;
+        return hasNumber && !hasLetter;
     }
     public List<Long> accountIds() { return repo.accountIds(); }
     private void lockOwner(Long ownerId) {
@@ -70,7 +71,7 @@ public class PantryService {
                 String unit = trimUnit((String) value);
                 if (unit.isEmpty()) bad("unit is required");
                 if (unit.length() > MAX_UNIT_LENGTH) bad("unit must be 64 characters or fewer");
-                if (numericOnlyUnit(unit)) bad("unit must describe a unit, not only a number");
+                if (numericLookingUnit(unit)) bad("unit must describe a unit, not only a number");
                 value = unit;
             }
             if (List.of("quantity", "minThreshold").contains(key) && (!(value instanceof Number n) || !Double.isFinite(n.doubleValue()) || n.doubleValue() < 0)) bad(key + " must be non-negative");

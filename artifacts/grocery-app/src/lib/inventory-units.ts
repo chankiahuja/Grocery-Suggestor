@@ -12,8 +12,8 @@ export const INVENTORY_UNIT_OPTIONS = [
   "oz",
 ] as const;
 
-const NUMERIC_UNIT_CHARACTERS = /^[+\-.\p{Number}]+$/u;
-const NUMERIC_UNIT_DIGIT = /\p{Number}/u;
+const UNICODE_NUMBER = /\p{Number}/u;
+const UNICODE_LETTER = /\p{Letter}/u;
 
 function trimUnit(value: string): string {
   return value.replace(/^[\s\p{Z}]+|[\s\p{Z}]+$/gu, "");
@@ -21,7 +21,7 @@ function trimUnit(value: string): string {
 
 export function isInvalidUnit(value: string): boolean {
   const unit = trimUnit(value);
-  return unit.length === 0 || (NUMERIC_UNIT_CHARACTERS.test(unit) && NUMERIC_UNIT_DIGIT.test(unit));
+  return unit.length === 0 || (UNICODE_NUMBER.test(unit) && !UNICODE_LETTER.test(unit));
 }
 
 const PLURAL_UNITS = new Map([
