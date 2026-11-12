@@ -41,6 +41,7 @@ class RecoveryReconciliationConfig {
 
             Flyway flyway = Flyway.configure().dataSource(dataSource).load();
             flyway.validate();
+            RecoveryReconciliation.rejectFutureMigrations(flyway.info().all());
             if (flyway.info().pending().length != 0)
                 throw new IllegalStateException("Restored database has pending migrations; stop and resolve before reconciliation");
 

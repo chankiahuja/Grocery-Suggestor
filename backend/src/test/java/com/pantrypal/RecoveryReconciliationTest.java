@@ -3,6 +3,8 @@ package com.pantrypal;
 import java.nio.file.Files;
 import java.time.Instant;
 import java.util.List;
+import org.flywaydb.core.api.MigrationInfo;
+import org.flywaydb.core.api.MigrationState;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -32,6 +34,16 @@ class RecoveryReconciliationTest {
         assertThatThrownBy(() -> RecoveryReconciliation.read(file))
             .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("three tab-separated fields");
         Files.deleteIfExists(file);
+    }
+
+    @Test void rejectsFutureFlywayMigrationsBeforeReconciliation() {
+        var future = mock(MigrationInfo.class);
+        when(future.getState()).thenReturn(MigrationState.FUTURE_SUCCESS);
+        when(future.getVersion()).thenReturn(null);
+
+        assertThatThrownBy(() -> RecoveryReconciliation.rejectFutureMigrations(new MigrationInfo[] {future}))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("future Flyway migration");
     }
 
     @Test void rejectsDuplicateOrOutOfScopeRecordsBeforeMutation() {
