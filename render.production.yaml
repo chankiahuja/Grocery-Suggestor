@@ -51,7 +51,7 @@ services:
       - key: MAIL_HOST
         value: smtp-relay.brevo.com
       - key: MAIL_PORT
-        value: "2525"
+        value: "587"
       - key: MAIL_SMTP_AUTH
         value: "true"
       - key: MAIL_STARTTLS

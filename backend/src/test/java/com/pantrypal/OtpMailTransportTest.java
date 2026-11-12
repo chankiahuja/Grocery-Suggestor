@@ -35,7 +35,7 @@ class OtpMailTransportTest {
         var loader = new YamlPropertySourceLoader();
         var production = loader.load("production", new ClassPathResource("application-production.yml")).get(0);
 
-        assertThat(production.getProperty("spring.mail.port")).hasToString("${MAIL_PORT:2525}");
+        assertThat(production.getProperty("spring.mail.port")).hasToString("${MAIL_PORT:587}");
         assertThat(production.getProperty("spring.mail.properties.mail.smtp.auth"))
             .hasToString("${MAIL_SMTP_AUTH:true}");
         assertThat(production.getProperty("spring.mail.properties.mail.smtp.starttls.enable"))
