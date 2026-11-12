@@ -67,14 +67,16 @@ export default function Dashboard() {
   const hasStockSuggestions =
     suggestions?.some(
       (suggestion) =>
-        suggestion.urgency === "critical" || suggestion.urgency === "low",
+        suggestion.currentQuantity === 0 ||
+        suggestion.currentQuantity <= suggestion.minThreshold,
     ) ?? false;
 
   const handleGenerateShoppingList = async () => {
     const items = (suggestions ?? [])
       .filter(
         (suggestion) =>
-          (suggestion.urgency === "critical" || suggestion.urgency === "low") &&
+          (suggestion.currentQuantity === 0 ||
+            suggestion.currentQuantity <= suggestion.minThreshold) &&
           suggestion.inventoryItemId != null,
       )
       .map((suggestion) => ({

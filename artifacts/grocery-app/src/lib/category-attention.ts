@@ -50,7 +50,7 @@ export function getCategoryAttention(
 
     const isOutOfStock = item.quantity === 0;
     const isLowStock = !isOutOfStock && item.quantity <= item.minThreshold;
-    const expiringSoon = isExpiringSoon(item.expiresAt, now);
+    const expiringSoon = item.quantity > 0 && isExpiringSoon(item.expiresAt, now);
     const expired = item.quantity > 0 && isExpired(item.expiresAt, now);
 
     if (isOutOfStock) {

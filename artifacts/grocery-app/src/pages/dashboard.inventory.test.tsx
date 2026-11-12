@@ -485,7 +485,7 @@ describe("expired inventory attention", () => {
     const panel = screen.getByRole("button", { name: "Close notifications" }).parentElement!.parentElement!;
     assert.equal(within(panel).queryByText("All caught up!"), null);
     const alerts = await within(panel).findAllByRole("link", { name: "Expired milk" });
-    assert.equal(alerts.length, 2);
+    assert.equal(alerts.length, 1);
     assert.equal(alerts[0].getAttribute("href"), "/inventory?item=101");
     fireEvent.click(alerts[0]);
     await screen.findByRole("heading", { name: "Inventory" });
@@ -505,6 +505,19 @@ describe("expired inventory attention", () => {
     await waitFor(() => assert.equal(screen.getByTestId("stat-expired").textContent, "0"));
     // Replenishment remains available after freshness attention clears.
     assert.equal((screen.getByTestId("button-generate-shopping-list") as HTMLButtonElement).disabled, false);
+  });
+
+  it("shows expiring as primary while retaining low stock on the inventory card", async () => {
+    const api = new MockPantryApi();
+    api.state.inventory = [dashboardItem(101, "Expiring milk", "Dairy", 1, 2, 3)];
+    globalThis.fetch = api.fetch;
+    renderApp();
+    await waitFor(() => assert.ok(screen.getByText("Expiring milk")));
+    fireEvent.click(screen.getByRole("link", { name: "Inventory" }));
+    await screen.findByTestId("inventory-item-101");
+    const card = screen.getByTestId("inventory-item-101");
+    assert.ok(within(card).getByText("Expiring Soon"));
+    assert.ok(within(card).getByText("Low Stock"));
   });
 
   it("filters expired inventory while leaving empty past-dated items as out of stock", async () => {

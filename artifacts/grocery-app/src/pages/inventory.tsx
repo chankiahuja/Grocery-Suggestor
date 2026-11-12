@@ -94,7 +94,7 @@ export default function Inventory() {
       : true;
     const matchesExpiration = stockFilter === "expired"
       ? item.quantity > 0 && isExpired(item.expiresAt, now)
-      : stockFilter !== "expiring" || isExpiringSoon(item.expiresAt, now);
+      : stockFilter !== "expiring" || (item.quantity > 0 && isExpiringSoon(item.expiresAt, now));
     return matchesSearch && matchesCategory && matchesExpiration && (!selectedItem || String(item.id) === selectedItem);
   });
 
@@ -305,20 +305,31 @@ export default function Inventory() {
                       const isLowStock = item.quantity <= item.minThreshold;
                       const isOutOfStock = item.quantity === 0;
                       const expired = item.quantity > 0 && isExpired(item.expiresAt, now);
-                      const expiringSoon = isExpiringSoon(item.expiresAt, now);
+                      const expiringSoon = item.quantity > 0 && isExpiringSoon(item.expiresAt, now);
+                      const primaryStatus = expired
+                        ? "expired"
+                        : isOutOfStock
+                          ? "out"
+                          : expiringSoon
+                            ? "expiring"
+                            : isLowStock
+                              ? "low"
+                              : "healthy";
 
                       return (
                         <div
                           key={item.id}
                           className={cn(
                             "inventory-item-card animate-slide-up",
-                            expired ? "inventory-item-expired" : isOutOfStock
-                              ? "inventory-item-out"
-                              : isLowStock
-                                ? "inventory-item-low"
-                                : expiringSoon
+                            primaryStatus === "expired"
+                              ? "inventory-item-expired"
+                              : primaryStatus === "out"
+                                ? "inventory-item-out"
+                                : primaryStatus === "expiring"
                                   ? "inventory-item-expiring"
-                                  : "inventory-item-healthy",
+                                  : primaryStatus === "low"
+                                    ? "inventory-item-low"
+                                    : "inventory-item-healthy",
                           )}
                           style={{ animationDelay: `${idx * 30}ms` }}
                           data-testid={`inventory-item-${item.id}`}
@@ -330,29 +341,34 @@ export default function Inventory() {
                                 <span className="inventory-category-badge">
                                   {item.category}
                                 </span>
-                                {isOutOfStock && (
+                                {primaryStatus === "out" && (
                                   <span className="inventory-status-badge inventory-status-out">
                                     Out of Stock
                                   </span>
                                 )}
-                                {isLowStock && !isOutOfStock && (
+                                {primaryStatus === "low" && (
                                   <span className="inventory-status-badge inventory-status-low">
                                     Low Stock
                                   </span>
                                 )}
-                                {expired && (
+                                {primaryStatus === "expired" && (
                                   <span className="inventory-status-badge inventory-status-expired">
                                     Expired
                                   </span>
                                 )}
-                                {expiringSoon && !expired && !isLowStock && !isOutOfStock && (
+                                {primaryStatus === "expiring" && (
                                   <span className="inventory-status-badge inventory-status-expiring">
                                     Expiring Soon
                                   </span>
                                 )}
-                                {!isOutOfStock && !isLowStock && !expired && !expiringSoon && (
+                                {primaryStatus === "healthy" && (
                                   <span className="inventory-status-badge inventory-status-healthy">
                                     In good shape
+                                  </span>
+                                )}
+                                {isLowStock && (primaryStatus === "expired" || primaryStatus === "expiring") && (
+                                  <span className="inventory-status-badge inventory-status-low">
+                                    Low Stock
                                   </span>
                                 )}
                               </div>

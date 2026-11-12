@@ -108,7 +108,7 @@ export class MockPantryApi {
     });
   }
   private expiring(item: InventoryItem) {
-    return isExpiringSoon(item.expiresAt);
+    return item.quantity > 0 && isExpiringSoon(item.expiresAt);
   }
   private suggestions(): GrocerySuggestion[] {
     return this.state.inventory
@@ -116,15 +116,18 @@ export class MockPantryApi {
         const urgency =
           item.quantity === 0
             ? "critical"
-            : item.quantity <= item.minThreshold
-              ? "low"
+            : item.quantity > 0 && isExpired(item.expiresAt)
+              ? "expired"
               : this.expiring(item)
                 ? "expiring_soon"
-                : null;
-        const urgencies: GrocerySuggestion["urgency"][] = [];
-        if (item.quantity > 0 && isExpired(item.expiresAt)) urgencies.push("expired");
-        if (urgency) urgencies.push(urgency);
-        return urgencies.map((urgency) => ({
+                : item.quantity <= item.minThreshold
+                  ? "low"
+                  : null;
+        if (!urgency) return [];
+        const stock = item.quantity > 0 && item.quantity <= item.minThreshold
+          ? `${item.quantity} ${item.unit} left (minimum is ${item.minThreshold} ${item.unit})`
+          : null;
+        return [{
                 inventoryItemId: item.id,
                 name: item.name,
                 category: item.category,
@@ -136,14 +139,14 @@ export class MockPantryApi {
                   urgency === "critical"
                     ? "Out of stock"
                     : urgency === "low"
-                      ? `${item.quantity} ${item.unit} left (minimum is ${item.minThreshold} ${item.unit})`
-                      : `${urgency === "expired" ? "Expired" : "Expires"} on ${item.expiresAt}`,
-              }));
+                      ? stock!
+                      : `${urgency === "expired" ? "Expired" : "Expires"} on ${item.expiresAt}${stock ? `; ${stock}` : ""}`,
+              }];
       })
       .sort(
         (a, b) =>
-          ["expired", "critical", "low", "expiring_soon"].indexOf(a.urgency) -
-          ["expired", "critical", "low", "expiring_soon"].indexOf(b.urgency),
+          ["expired", "critical", "expiring_soon", "low"].indexOf(a.urgency) -
+          ["expired", "critical", "expiring_soon", "low"].indexOf(b.urgency),
       );
   }
   readonly fetch = async (
@@ -181,7 +184,7 @@ export class MockPantryApi {
       const suggestions = this.suggestions();
       if (method === "GET" && parts.length === 1) return this.json(suggestions);
       if (method === "POST" && parts[1] === "generate-list") {
-        const stock = suggestions.filter((s) => s.urgency === "critical" || s.urgency === "low");
+        const stock = suggestions.filter((s) => s.currentQuantity === 0 || s.currentQuantity <= s.minThreshold);
         if (!stock.length)
           return this.json(
             { error: "No low-stock suggestions are available." },

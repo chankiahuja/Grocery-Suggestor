@@ -64,7 +64,7 @@ describe('getCategoryAttention', () => {
         attentionItems: 1,
         outOfStock: 1,
         lowStock: 0,
-        expiringSoon: 1,
+        expiringSoon: 0,
         expired: 0,
       },
       {
