@@ -1694,3 +1694,31 @@ describe("inventory optional field clearing", () => {
     );
   });
 });
+
+describe("inventory units and card labels", () => {
+  it("offers preset guidance, rejects numeric units, and labels notes", async () => {
+    const api = new GroceryApiMock();
+    api.items = [
+      { ...dashboardItem(1, "Biscuits", "Pantry", 2, 1), unit: "piece", notes: "Keep dry" },
+    ];
+    globalThis.fetch = api.fetch;
+    const { queryClient } = renderApp();
+
+    await openInventory();
+    assert.ok(screen.getByTestId("input-search"));
+    assert.ok(screen.getByText("2 pieces"));
+    assert.ok(screen.getByText("Minimum: 1 piece"));
+    assert.ok(screen.getByText("Notes:"));
+    assert.ok(screen.getByText("Keep dry"));
+
+    fireEvent.click(screen.getByTestId("button-edit-1"));
+    await screen.findByTestId("dialog-inventory-item");
+    changeInput("input-item-unit", "2");
+    fireEvent.click(screen.getByTestId("button-save-item"));
+    await screen.findByText("Choose a unit or enter a custom text unit");
+    assert.equal(api.items[0]?.unit, "piece");
+    assert.ok(screen.getByTestId("input-item-unit").querySelector('option[value="Custom"]'));
+    assert.ok(screen.getByTestId("input-item-custom-unit"));
+    queryClient.clear();
+  });
+});

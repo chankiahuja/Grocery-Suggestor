@@ -11,6 +11,8 @@ import org.springframework.http.HttpStatus;
 @Service
 @Transactional
 public class PantryService {
+    private static final int MAX_UNIT_LENGTH = 64;
+    private static final java.util.regex.Pattern NUMERIC_ONLY_UNIT = java.util.regex.Pattern.compile("[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)");
     final PantryRepository repo;
     final ApplicationEventPublisher events;
     final Clock clock;
@@ -37,6 +39,13 @@ public class PantryService {
             if (!body.containsKey(key)) continue;
             Object value = body.get(key);
             if (List.of("name", "category", "unit").contains(key) && (!(value instanceof String s) || s.isBlank())) bad(key + " is required");
+            if (key.equals("unit")) {
+                String unit = ((String) value).trim();
+                if (unit.isEmpty()) bad("unit is required");
+                if (unit.length() > MAX_UNIT_LENGTH) bad("unit must be 64 characters or fewer");
+                if (NUMERIC_ONLY_UNIT.matcher(unit).matches()) bad("unit must describe a unit, not only a number");
+                value = unit;
+            }
             if (List.of("quantity", "minThreshold").contains(key) && (!(value instanceof Number n) || !Double.isFinite(n.doubleValue()) || n.doubleValue() < 0)) bad(key + " must be non-negative");
             if (key.equals("purchased") && !(value instanceof Boolean)) bad("purchased must be boolean");
             if (key.equals("inventoryItemId") && value != null && (!(value instanceof Number n) || n.longValue() <= 0 || n.doubleValue() != n.longValue())) bad("Invalid inventory item ID");

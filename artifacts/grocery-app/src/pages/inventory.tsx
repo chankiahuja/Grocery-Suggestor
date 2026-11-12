@@ -41,6 +41,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { isExpired, isExpiringSoon } from "@/lib/category-attention";
 import { useUtcDate } from "@/hooks/use-utc-date";
+import { formatQuantity } from "@/lib/inventory-units";
 
 export default function Inventory() {
   const utcDay = useUtcDate();
@@ -381,12 +382,12 @@ export default function Inventory() {
                             <div className="inventory-quantity">
                               <span className="inventory-quantity-label">On hand</span>
                               <span className="inventory-quantity-value">
-                                {item.quantity} <span>{item.unit}</span>
+                                {formatQuantity(item.quantity, item.unit)}
                               </span>
                             </div>
                             <div className="inventory-item-meta">
                               <span>
-                                Minimum: {item.minThreshold} {item.unit}
+                                Minimum: {formatQuantity(item.minThreshold, item.unit)}
                               </span>
                               {item.expiresAt && (
                                 <span>
@@ -398,7 +399,7 @@ export default function Inventory() {
                             </div>
                           </div>
                           {item.notes && (
-                            <p className="inventory-item-notes">{item.notes}</p>
+                            <p className="inventory-item-notes"><span className="inventory-notes-label">Notes:</span> {item.notes}</p>
                           )}
                           <div className="inventory-adjustment-actions">
                             <Button

@@ -70,6 +70,17 @@ class PantryFlowTest {
         mvc.perform(get("/api/inventory/999999")).andExpect(status().isNotFound());
         mvc.perform(get("/api/healthz")).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("ok"));
     }
+    @Test void inventoryRejectsBlankAndNumericOnlyUnitsAndTrimsValidUnits() throws Exception {
+        mvc.perform(post("/api/inventory").contentType("application/json")
+            .content("{\"name\":\"Rice\",\"category\":\"Grains\",\"quantity\":2,\"unit\":\"   \",\"minThreshold\":1}"))
+            .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("unit is required"));
+        mvc.perform(post("/api/inventory").contentType("application/json")
+            .content("{\"name\":\"Rice\",\"category\":\"Grains\",\"quantity\":2,\"unit\":\"2\",\"minThreshold\":1}"))
+            .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("unit must describe a unit, not only a number"));
+        mvc.perform(post("/api/inventory").contentType("application/json")
+            .content("{\"name\":\"Rice\",\"category\":\"Grains\",\"quantity\":2,\"unit\":\"  bags  \",\"minThreshold\":1}"))
+            .andExpect(status().isCreated()).andExpect(jsonPath("$.unit").value("bags"));
+    }
     @Test void stockFiltersMatchDistinctDashboardCounts() throws Exception {
         item("Empty milk", 0);
         item("Low milk", 1);

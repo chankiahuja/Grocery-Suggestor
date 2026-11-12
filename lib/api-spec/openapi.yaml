@@ -861,6 +861,7 @@ components:
         unit:
           type: string
           minLength: 1
+          maxLength: 64
         minThreshold:
           type: number
           minimum: 0
@@ -888,6 +889,8 @@ components:
           minimum: 0
         unit:
           type: string
+          minLength: 1
+          maxLength: 64
         minThreshold:
           type: number
           minimum: 0
