@@ -1139,18 +1139,20 @@ describe("shopping list selection and deletion", () => {
       resolveStaleDetail = resolve;
     });
     let staleRequestStarted = false;
-    const staleRequest = queryClient.fetchQuery({
-      queryKey: detailQueryKey,
-      queryFn: () => {
-        staleRequestStarted = true;
-        return staleDetail;
-      },
-    });
+    const staleRequest = queryClient
+      .fetchQuery({
+        queryKey: detailQueryKey,
+        queryFn: () => {
+          staleRequestStarted = true;
+          return staleDetail;
+        },
+      })
+      .catch(() => undefined);
     await waitFor(() => assert.equal(staleRequestStarted, true));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await screen.findByRole("heading", { name: "Renamed list" });
     resolveStaleDetail({ ...api.state.lists[0], name: "Background refresh" });
-    await staleRequest.catch(() => undefined);
+    await staleRequest;
     assert.ok(screen.getByRole("heading", { name: "Renamed list" }));
     assert.equal(api.state.lists[0].name, "Renamed\u00a0 list");
     assert.equal(api.state.lists[0].items.length, itemCount);
