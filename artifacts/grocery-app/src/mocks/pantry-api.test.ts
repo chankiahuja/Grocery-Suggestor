@@ -49,6 +49,21 @@ test("demo rejects incompatible linked units before changing any fields", async 
   assert.equal(row.notes, "");
 });
 
+test("demo item creation validates trimmed Unicode units", async () => {
+  const api = new MockPantryApi();
+  const create = (unit: string) => api.fetch("/api/shopping-lists/20/items", {
+    method: "POST",
+    body: JSON.stringify({ name: "Custom item", category: "Pantry", quantity: 1, unit }),
+  });
+  for (const unit of ["2.5", "-2", "２", "١٢", "1/2", "   "]) {
+    assert.equal((await create(unit)).status, 400, unit);
+  }
+  const emoji = String.fromCodePoint(0x1f600);
+  const response = await create(` ${emoji.repeat(64)} `);
+  assert.equal(response.status, 201);
+  assert.equal((await response.json()).unit, emoji.repeat(64));
+});
+
 test("expired demo alerts clear on correction and never create expiry-only purchases", async () => {
   const api = new MockPantryApi();
   const template = api.state.inventory[0];

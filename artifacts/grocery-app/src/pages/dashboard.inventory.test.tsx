@@ -1211,6 +1211,36 @@ describe("shopping list selection and deletion", () => {
     assert.equal((screen.getByRole("spinbutton", { name: "Milk quantity" }) as HTMLInputElement).value, "9");
   });
 
+  it("prefills linked units, switches preset/custom modes, and validates custom units", async () => {
+    const { api } = await setup();
+    fireEvent.click(screen.getByRole("link", { name: "Weekend groceries" }));
+    await screen.findByRole("checkbox", { name: "Purchased Milk" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Milk" }));
+    await screen.findByTestId("dialog-edit-shopping-item");
+    assert.equal((screen.getByTestId("input-shopping-item-unit") as HTMLSelectElement).value, "Custom");
+    assert.equal((screen.getByTestId("input-shopping-item-custom-unit") as HTMLInputElement).value, "litres");
+    assert.equal((screen.getByTestId("input-shopping-item-unit") as HTMLSelectElement).disabled, true);
+    fireEvent.click(screen.getByTestId("button-cancel"));
+
+    fireEvent.click(screen.getByTestId("button-add-item"));
+    await screen.findByTestId("dialog-add-shopping-item");
+    fireEvent.change(screen.getByTestId("input-shopping-item-name"), { target: { value: "Custom item" } });
+    fireEvent.change(screen.getByTestId("input-shopping-item-category"), { target: { value: "Pantry" } });
+    fireEvent.change(screen.getByTestId("input-shopping-item-unit"), { target: { value: "kg" } });
+    assert.equal((screen.getByTestId("input-shopping-item-unit") as HTMLSelectElement).value, "kg");
+    fireEvent.change(screen.getByTestId("input-shopping-item-unit"), { target: { value: "Custom" } });
+    fireEvent.change(screen.getByTestId("input-shopping-item-custom-unit"), { target: { value: "2.5" } });
+    fireEvent.click(screen.getByTestId("button-add-shopping-item"));
+    await screen.findByText("Choose a unit or enter a custom text unit");
+    assert.equal(api.state.lists[0].items.length, 2);
+
+    fireEvent.change(screen.getByTestId("input-shopping-item-custom-unit"), { target: { value: "grams" } });
+    fireEvent.click(screen.getByTestId("button-add-shopping-item"));
+    await waitFor(() => assert.equal(api.state.lists[0].items.length, 3));
+    assert.equal(api.state.lists[0].items[2].unit, "grams");
+  });
+
   it("keeps an individually failed deletion selected for bulk retry", async () => {
     const { api, queryClient } = await setup();
     globalThis.fetch = async (input, init) => {

@@ -18,9 +18,11 @@ for (const [label, schema] of [
     assert.equal(schema.safeParse(label === "create"
       ? { name: "Rice", category: "Pantry", quantity: 1, unit: "   " }
       : { unit: "   " }).success, false);
-    assert.equal(schema.safeParse(label === "create"
-      ? { name: "Rice", category: "Pantry", quantity: 1, unit: "123" }
-      : { unit: "123" }).success, false);
+    for (const numeric of ["2.5", "-2", "２", "١٢", "1/2"]) {
+      assert.equal(schema.safeParse(label === "create"
+        ? { name: "Rice", category: "Pantry", quantity: 1, unit: numeric }
+        : { unit: numeric }).success, false, numeric);
+    }
     assert.equal(schema.parse(label === "create"
       ? { name: "Rice", category: "Pantry", quantity: 1, unit: "  grams per item  " }
       : { unit: "  grams per item  " }).unit, "grams per item");

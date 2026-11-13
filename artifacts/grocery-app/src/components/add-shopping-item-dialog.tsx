@@ -38,7 +38,7 @@ const formSchema = z.object({
   unit: z.string()
     .trim()
     .min(1, 'Unit is required')
-    .max(64, 'Unit must be 64 characters or fewer')
+    .refine((value) => [...value].length <= 64, 'Unit must be 64 characters or fewer')
     .refine((value) => !isInvalidUnit(value), 'Choose a unit or enter a custom text unit'),
   notes: z.string().optional(),
 });
