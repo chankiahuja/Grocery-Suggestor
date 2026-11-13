@@ -212,6 +212,7 @@ public class NotificationEvents {
         var accountClients = clients.get(accountId);
         if (accountClients == null) return;
         for (var subscriber : accountClients) {
+            beforeSubscriberSend(subscriber.sessionId, type);
             try { send(accountId, subscriber, SseEmitter.event().name("pantry-event").data(Map.of("type", type))); }
             catch (DataAccessException | CannotCreateTransactionException e) {
                 // Send nothing for an unvalidated session; retain the stream for a later retry.
@@ -221,6 +222,9 @@ public class NotificationEvents {
                 removeClient(accountId, subscriber);
             }
         }
+    }
+    void beforeSubscriberSend(String sessionId, String type) {
+        // Test seam for deterministic concurrency interleavings.
     }
     private boolean sessionActive(String sessionId) {
         if (sessionId == null) return false;

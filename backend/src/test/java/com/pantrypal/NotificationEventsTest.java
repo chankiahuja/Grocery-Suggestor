@@ -111,8 +111,19 @@ class NotificationEventsTest {
     void alreadyClosedSubscriberDoesNotRevokeItsStillActiveSession() throws Exception {
         var sessions = sessions();
         var workers = Executors.newFixedThreadPool(2);
-        var notifications = new NotificationEvents(mock(PantryService.class), sessions,
-            command -> workers.submit(command));
+        var broadcasts = new ArrayList<java.util.concurrent.Future<?>>();
+        var secondBroadcastRetainedSubscriber = new CountDownLatch(1);
+        var releaseSecondBroadcast = new CountDownLatch(1);
+        var notifications = new NotificationEvents(mock(PantryService.class), sessions, command ->
+            broadcasts.add(workers.submit(command))) {
+            @Override
+            void beforeSubscriberSend(String sessionId, String type) {
+                if ("shared-session".equals(sessionId) && "purchase_completed".equals(type)) {
+                    secondBroadcastRetainedSubscriber.countDown();
+                    await(releaseSecondBroadcast);
+                }
+            }
+        };
         var failing = new FailingEmitter();
         var surviving = new RecordingEmitter();
         notifications.subscribe(authentication("1"), "shared-session", failing);
@@ -122,17 +133,24 @@ class NotificationEventsTest {
             notifications.changed(new PantryService.PantryChanged("inventory_changed", 41L, 1L));
             assertThat(failing.sendStarted.await(5, TimeUnit.SECONDS)).isTrue();
             notifications.changed(new PantryService.PantryChanged("purchase_completed", null, 1L));
-            failing.releaseSend.countDown();
+            assertThat(secondBroadcastRetainedSubscriber.await(5, TimeUnit.SECONDS)).isTrue();
 
-            // The second broadcast observes only a closed subscriber. It must not
+            // The second broadcast has retained the failing subscriber. Close and
+            // remove it in the first broadcast before allowing the second send.
+            failing.releaseSend.countDown();
+            broadcasts.get(0).get(5, TimeUnit.SECONDS);
+            releaseSecondBroadcast.countDown();
+            broadcasts.get(1).get(5, TimeUnit.SECONDS);
+
+            // The second broadcast observed a closed subscriber. It must not
             // revoke the still-valid session or close its other stream.
-            awaitExecutor(workers);
             notifications.changed(new PantryService.PantryChanged("alerts_changed", null, 1L));
-            awaitExecutor(workers);
+            broadcasts.get(2).get(5, TimeUnit.SECONDS);
             assertThat(surviving.payloads).contains(Map.of("type", "alerts_changed"));
             assertThat(surviving.completed).isFalse();
         } finally {
             failing.releaseSend.countDown();
+            releaseSecondBroadcast.countDown();
             notifications.disconnectSession("shared-session");
             workers.shutdownNow();
             assertThat(workers.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
@@ -655,10 +673,6 @@ class NotificationEventsTest {
             Thread.currentThread().interrupt();
             throw new AssertionError(e);
         }
-    }
-
-    private void awaitExecutor(java.util.concurrent.ExecutorService workers) throws Exception {
-        workers.submit(() -> {}).get(5, TimeUnit.SECONDS);
     }
 
     private boolean isContractPayload(Object payload) {
