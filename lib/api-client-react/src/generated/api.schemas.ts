@@ -152,7 +152,10 @@ export interface InventoryItemInput {
   category: string;
   /** @minimum 0 */
   quantity: number;
-  /** @minLength 1 */
+  /**
+     * @minLength 1
+     * @maxLength 64
+     */
   unit: string;
   /** @minimum 0 */
   minThreshold: number;
@@ -168,6 +171,10 @@ export interface InventoryItemUpdate {
   category?: string;
   /** @minimum 0 */
   quantity?: number;
+  /**
+     * @minLength 1
+     * @maxLength 64
+     */
   unit?: string;
   /** @minimum 0 */
   minThreshold?: number;
@@ -193,7 +200,7 @@ export interface InventoryStats {
 }
 
 /**
- * Expired alerts are independent of stock alerts; one item may have both expired and low entries. Zero-quantity items do not receive expired alerts. Expiry-only entries do not generate shopping purchases.
+ * Each item has at most one alert, with presentation priority expired, out of stock, expiring soon, then low stock. Combined expiry and stock context is included in reason. Zero-quantity items do not receive expiry alerts. Expiry-only entries do not generate shopping purchases.
  */
 export type GrocerySuggestionUrgency = typeof GrocerySuggestionUrgency[keyof typeof GrocerySuggestionUrgency];
 
@@ -214,7 +221,7 @@ export interface GrocerySuggestion {
   minThreshold: number;
   unit: string;
   reason: string;
-  /** Expired alerts are independent of stock alerts; one item may have both expired and low entries. Zero-quantity items do not receive expired alerts. Expiry-only entries do not generate shopping purchases. */
+  /** Each item has at most one alert, with presentation priority expired, out of stock, expiring soon, then low stock. Combined expiry and stock context is included in reason. Zero-quantity items do not receive expiry alerts. Expiry-only entries do not generate shopping purchases. */
   urgency: GrocerySuggestionUrgency;
 }
 
@@ -228,7 +235,10 @@ export interface ShoppingList {
 }
 
 export interface ShoppingListInput {
-  /** @minLength 1 */
+  /**
+     * Leading and trailing boundary whitespace is removed before validation; the limit is 100 Unicode code points after trimming.
+     * @minLength 1
+     */
   name: string;
 }
 

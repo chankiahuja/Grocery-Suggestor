@@ -64,6 +64,7 @@ const { memoryLocation } = await import("wouter/memory-location");
 const {
   getGetGrocerySuggestionsQueryKey,
   getGetInventoryStatsQueryKey,
+  getGetShoppingListQueryKey,
   getListInventoryItemsQueryKey,
   getListShoppingListsQueryKey,
 } = await import("@workspace/api-client-react");
@@ -1108,6 +1109,67 @@ describe("shopping list selection and deletion", () => {
     assert.ok(await screen.findByRole("checkbox", { name: "Purchased Milk" }));
     assert.ok(screen.getByRole("button", { name: "Remove Milk from Weekend groceries" }));
     assert.ok(screen.getByRole("progressbar", { name: "Weekend groceries: 0% complete" }));
+  });
+
+  it("preserves newer item state while a rename is pending", async () => {
+    const { api, queryClient } = await setup();
+    const itemCount = api.state.lists[0].items.length;
+    fireEvent.click(screen.getByRole("link", { name: "Weekend groceries" }));
+    await screen.findByRole("checkbox", { name: "Purchased Milk" });
+    fireEvent.click(screen.getByRole("button", { name: "Edit name for Weekend groceries" }));
+    const input = await screen.findByRole("textbox", { name: "List name" });
+    assert.equal((input as HTMLInputElement).value, "Weekend groceries");
+    fireEvent.change(input, { target: { value: String.fromCodePoint(0x1f600).repeat(101) } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    assert.ok(await screen.findByRole("alert"));
+    assert.equal(api.state.lists[0].name, "Weekend groceries");
+    fireEvent.change(input, { target: { value: "\ufeffRenamed\u00a0 list\u3000" } });
+
+    const detailQueryKey = getGetShoppingListQueryKey(api.state.lists[0].id);
+    const originalFetch = api.fetch;
+    let releaseRename!: () => void;
+    const renameReleased = new Promise<void>((resolve) => {
+      releaseRename = resolve;
+    });
+    let renameStarted = false;
+    globalThis.fetch = async (request, init) => {
+      if (String(request) === `/api/shopping-lists/${api.state.lists[0].id}` && init?.method === "PATCH") {
+        renameStarted = true;
+        const response = await originalFetch(request, init);
+        const staleResponseBody = await response.text();
+        await renameReleased;
+        return new Response(staleResponseBody, {
+          status: response.status,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return originalFetch(request, init);
+    };
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => assert.equal(renameStarted, true));
+
+    api.state.lists[0].items[0].quantity = 9;
+    api.state.lists[0].items[0].purchased = true;
+    await act(async () => {
+      queryClient.setQueryData<ShoppingListWithItems>(detailQueryKey, {
+        ...queryClient.getQueryData<ShoppingListWithItems>(detailQueryKey)!,
+        items: api.state.lists[0].items.map((item) => ({ ...item })),
+      });
+    });
+    releaseRename();
+
+    await screen.findByRole("heading", { name: "Renamed list" });
+    assert.equal(
+      (screen.getByRole("spinbutton", { name: "Milk quantity" }) as HTMLInputElement).value,
+      "9",
+    );
+    assert.equal(
+      screen.getByRole("checkbox", { name: "Purchased Milk" }).getAttribute("data-state"),
+      "checked",
+    );
+    assert.equal(api.state.lists[0].name, "Renamed\u00a0 list");
+    assert.equal(api.state.lists[0].items.length, itemCount);
   });
 
   it("keeps an individually failed deletion selected for bulk retry", async () => {

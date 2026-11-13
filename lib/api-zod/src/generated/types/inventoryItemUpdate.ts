@@ -12,6 +12,10 @@ export interface InventoryItemUpdate {
   category?: string;
   /** @minimum 0 */
   quantity?: number;
+  /**
+     * @minLength 1
+     * @maxLength 64
+     */
   unit?: string;
   /** @minimum 0 */
   minThreshold?: number;

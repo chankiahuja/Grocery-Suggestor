@@ -4,6 +4,10 @@ import type {
   GrocerySuggestion,
 } from "@workspace/api-client-react";
 import { isExpired, isExpiringSoon } from "../lib/category-attention";
+import {
+  shoppingListNameError,
+  trimShoppingListBoundaryWhitespace,
+} from "../lib/shopping-list-name";
 
 export const MOCK_STORAGE_KEY = "pantrypal-demo-v1";
 type State = {
@@ -381,9 +385,13 @@ export class MockPantryApi {
             })),
           );
         if (method === "POST") {
+          if (typeof body.name !== "string")
+            return this.json({ error: "name is required" }, 400);
+          const nameError = shoppingListNameError(body.name);
+          if (nameError) return this.json({ error: nameError }, 400);
           const list: ShoppingListWithItems = {
             id: this.state.nextId++,
-            name: body.name,
+            name: trimShoppingListBoundaryWhitespace(body.name),
             items: [],
             createdAt: now,
             updatedAt: now,
@@ -400,6 +408,15 @@ export class MockPantryApi {
       if (!list) return missing();
       if (parts.length === 2) {
         if (method === "GET") return this.json(list);
+        if (method === "PATCH") {
+          if (typeof body.name !== "string")
+            return this.json({ error: "name is required" }, 400);
+          const nameError = shoppingListNameError(body.name);
+          if (nameError) return this.json({ error: nameError }, 400);
+          list.name = trimShoppingListBoundaryWhitespace(body.name);
+          list.updatedAt = now;
+          return save(list);
+        }
         if (method === "DELETE") {
           this.state.lists = this.state.lists.filter((l) => l.id !== id);
           return save(null, 204);

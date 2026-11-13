@@ -47,6 +47,10 @@ class AccountIsolationTest {
         assertThatThrownBy(() -> service.list(bob, aliceList))
             .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
             .hasMessageContaining("Resource not found");
+        assertThatThrownBy(() -> service.updateList(bob, aliceList, Map.of("name", "Bob rename")))
+            .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+            .hasMessageContaining("Resource not found");
+        assertThat(service.list(alice, aliceList).get("name")).isEqualTo("Alice List");
     }
 
     @Test

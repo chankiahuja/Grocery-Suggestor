@@ -93,6 +93,7 @@ public class PantryService {
     private static final String INVENTORY_COLUMNS = "id,name,category,quantity,unit,min_threshold,expires_at,notes,created_at,updated_at";
     private static final String SHOPPING_LIST_COLUMNS = "id,name,created_at,updated_at";
     private static final String SHOPPING_LIST_ITEM_COLUMNS = "id,shopping_list_id,inventory_item_id,name,category,quantity,unit,purchased,notes";
+    static final int MAX_SHOPPING_LIST_NAME_CODE_POINTS = 100;
     private String ownerWhere(String column, Long ownerId) { return ownerId == null ? column + " IS NULL" : column + "=" + ownerId; }
     public List<Map<String,Object>> inventory() { return inventory(null); }
     public List<Map<String,Object>> inventory(Long ownerId) { return repo.query("SELECT " + INVENTORY_COLUMNS + " FROM inventory_items WHERE " + ownerWhere("account_id", ownerId) + " ORDER BY name"); }
@@ -261,14 +262,61 @@ public class PantryService {
     public Map<String,Object> createList(Map<String,Object> body) { return createList(null, body); }
     public Map<String,Object> createList(Long ownerId, Map<String,Object> body) {
         lockOwner(ownerId);
-        if (!(body.get("name") instanceof String name) || name.isBlank()) bad("name is required");
-        Map<String,Object> values = new LinkedHashMap<>(); values.put("name", body.get("name")); if (ownerId != null) values.put("account_id", ownerId);
+        String name = shoppingListName(body);
+        Map<String,Object> values = new LinkedHashMap<>(); values.put("name", name); if (ownerId != null) values.put("account_id", ownerId);
         long id = repo.insert("shopping_lists", values);
         var list = list(ownerId, id);
         list.put("itemCount", 0); list.put("purchasedCount", 0); return list;
     }
+    public Map<String,Object> updateList(long id, Map<String,Object> body) { return updateList(null, id, body); }
+    public Map<String,Object> updateList(Long ownerId, long id, Map<String,Object> body) {
+        lockOwner(ownerId);
+        var existing = list(ownerId, id);
+        String name = shoppingListName(body);
+        if (name.equals(existing.get("name"))) return existing;
+        repo.update("shopping_lists", id, Map.of("name", name, "updated_at", OffsetDateTime.now(ZoneOffset.UTC)), ownerId);
+        return list(ownerId, id);
+    }
     public void deleteList(long id) { deleteList(null, id); }
     public void deleteList(Long ownerId, long id) { lockOwner(ownerId); list(ownerId, id); repo.execute("DELETE FROM shopping_lists WHERE id=? AND " + ownerWhere("account_id", ownerId), id); }
+
+    private String shoppingListName(Map<String,Object> body) {
+        Object value = body.get("name");
+        if (!(value instanceof String)) bad("name is required");
+        String raw = (String) value;
+        String name = trimShoppingListBoundaryWhitespace(raw);
+        if (name.isEmpty()) bad("name is required");
+        if (name.codePointCount(0, name.length()) > MAX_SHOPPING_LIST_NAME_CODE_POINTS) {
+            bad("name must be 100 Unicode code points or fewer");
+        }
+        return name;
+    }
+
+    /** Matches the explicit boundary-whitespace table in the React application. */
+    static String trimShoppingListBoundaryWhitespace(String value) {
+        int start = 0;
+        int end = value.length();
+        while (start < end) {
+            int codePoint = value.codePointAt(start);
+            if (!isShoppingListBoundaryWhitespace(codePoint)) break;
+            start += Character.charCount(codePoint);
+        }
+        while (end > start) {
+            int codePoint = value.codePointBefore(end);
+            if (!isShoppingListBoundaryWhitespace(codePoint)) break;
+            end -= Character.charCount(codePoint);
+        }
+        return value.substring(start, end);
+    }
+
+    private static boolean isShoppingListBoundaryWhitespace(int codePoint) {
+        return codePoint == 0x0009 || codePoint == 0x000A || codePoint == 0x000B
+            || codePoint == 0x000C || codePoint == 0x000D || codePoint == 0x0020
+            || codePoint == 0x00A0 || codePoint == 0x1680
+            || (codePoint >= 0x2000 && codePoint <= 0x200A)
+            || codePoint == 0x2028 || codePoint == 0x2029 || codePoint == 0x202F
+            || codePoint == 0x205F || codePoint == 0x3000 || codePoint == 0xFEFF;
+    }
     public Map<String,Object> addItem(long listId, Map<String,Object> body) { return addItem(null, listId, body); }
     public Map<String,Object> addItem(Long ownerId, long listId, Map<String,Object> body) {
         lockOwner(ownerId);

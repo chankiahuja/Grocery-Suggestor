@@ -7,6 +7,7 @@
  */
 import * as zod from 'zod';
 
+import { preprocessShoppingListNameBody } from '../shopping-list-name-preprocessor';
 
 /**
  * @summary Check whether this session verified email within the last five minutes
@@ -29,8 +30,8 @@ export const DeleteAccountResponse = zod.void()
 export const GetAuthSessionResponse = zod.object({
   "authenticated": zod.boolean(),
   "account": zod.union([zod.object({
-  "id": zod.int(),
-  "email": zod.email(),
+  "id": zod.number().int(),
+  "email": zod.string().email(),
   "name": zod.string().nullable()
 }),zod.null()]),
   "csrfToken": zod.string()
@@ -48,7 +49,7 @@ export const requestEmailCodeBodyNameMax = 100;
 
 
 export const RequestEmailCodeBody = zod.object({
-  "email": zod.email().max(requestEmailCodeBodyEmailMax),
+  "email": zod.string().email().max(requestEmailCodeBodyEmailMax),
   "intent": zod.enum(['login', 'signup']),
   "name": zod.string().max(requestEmailCodeBodyNameMax).optional().describe('Required for signup; never changes the name of an existing account')
 })
@@ -67,7 +68,7 @@ export const verifyEmailCodeBodyCodeRegExp = new RegExp('^[0-9]{6}$');
 
 
 export const VerifyEmailCodeBody = zod.object({
-  "email": zod.email(),
+  "email": zod.string().email(),
   "challengeId": zod.string(),
   "code": zod.string().regex(verifyEmailCodeBodyCodeRegExp)
 })
@@ -75,8 +76,8 @@ export const VerifyEmailCodeBody = zod.object({
 export const VerifyEmailCodeResponse = zod.object({
   "authenticated": zod.boolean(),
   "account": zod.union([zod.object({
-  "id": zod.int(),
-  "email": zod.email(),
+  "id": zod.number().int(),
+  "email": zod.string().email(),
   "name": zod.string().nullable()
 }),zod.null()]),
   "csrfToken": zod.string()
@@ -89,8 +90,8 @@ export const VerifyEmailCodeResponse = zod.object({
 export const LogoutSessionResponse = zod.object({
   "authenticated": zod.boolean(),
   "account": zod.union([zod.object({
-  "id": zod.int(),
-  "email": zod.email(),
+  "id": zod.number().int(),
+  "email": zod.string().email(),
   "name": zod.string().nullable()
 }),zod.null()]),
   "csrfToken": zod.string()
@@ -105,7 +106,7 @@ export const getFeedbackConfigResponseResponseTimeMax = 120;
 
 
 export const GetFeedbackConfigResponse = zod.object({
-  "supportEmail": zod.email().nullable(),
+  "supportEmail": zod.string().email().nullable(),
   "responseTime": zod.string().max(getFeedbackConfigResponseResponseTimeMax).nullable()
 })
 
@@ -126,7 +127,7 @@ export const SubmitFeedbackBody = zod.object({
   "category": zod.enum(['problem', 'idea', 'other']),
   "subject": zod.string().max(submitFeedbackBodySubjectMax).optional(),
   "message": zod.string().min(1).max(submitFeedbackBodyMessageMax),
-  "email": zod.email().max(submitFeedbackBodyEmailMax).optional()
+  "email": zod.string().email().max(submitFeedbackBodyEmailMax).optional()
 })
 
 export const SubmitFeedbackResponse = zod.object({
@@ -180,6 +181,7 @@ export const ListInventoryItemsResponse = zod.array(ListInventoryItemsResponseIt
 
 export const createInventoryItemBodyQuantityMin = 0;
 
+export const createInventoryItemBodyUnitMax = 64;
 
 export const createInventoryItemBodyMinThresholdMin = 0;
 
@@ -189,7 +191,7 @@ export const CreateInventoryItemBody = zod.object({
   "name": zod.string().min(1),
   "category": zod.string().min(1),
   "quantity": zod.number().min(createInventoryItemBodyQuantityMin),
-  "unit": zod.string().min(1),
+  "unit": zod.string().min(1).max(createInventoryItemBodyUnitMax),
   "minThreshold": zod.number().min(createInventoryItemBodyMinThresholdMin),
   "expiresAt": zod.string().nullish(),
   "notes": zod.string().nullish()
@@ -256,6 +258,8 @@ export const UpdateInventoryItemParams = zod.object({
 
 export const updateInventoryItemBodyQuantityMin = 0;
 
+export const updateInventoryItemBodyUnitMax = 64;
+
 export const updateInventoryItemBodyMinThresholdMin = 0;
 
 
@@ -264,7 +268,7 @@ export const UpdateInventoryItemBody = zod.object({
   "name": zod.string().min(1).optional(),
   "category": zod.string().optional(),
   "quantity": zod.number().min(updateInventoryItemBodyQuantityMin).optional(),
-  "unit": zod.string().optional(),
+  "unit": zod.string().min(1).max(updateInventoryItemBodyUnitMax).optional(),
   "minThreshold": zod.number().min(updateInventoryItemBodyMinThresholdMin).optional(),
   "expiresAt": zod.string().nullish(),
   "notes": zod.string().nullish()
@@ -376,7 +380,7 @@ export const GetGrocerySuggestionsResponseItem = zod.object({
   "minThreshold": zod.number(),
   "unit": zod.string(),
   "reason": zod.string(),
-  "urgency": zod.enum(['critical', 'low', 'expiring_soon', 'expired']).describe('Expired alerts are independent of stock alerts; one item may have both expired and low entries. Zero-quantity items do not receive expired alerts. Expiry-only entries do not generate shopping purchases.')
+  "urgency": zod.enum(['critical', 'low', 'expiring_soon', 'expired']).describe('Each item has at most one alert, with presentation priority expired, out of stock, expiring soon, then low stock. Combined expiry and stock context is included in reason. Zero-quantity items do not receive expiry alerts. Expiry-only entries do not generate shopping purchases.')
 })
 export const GetGrocerySuggestionsResponse = zod.array(GetGrocerySuggestionsResponseItem)
 
@@ -433,10 +437,12 @@ export const ListShoppingListsResponse = zod.array(ListShoppingListsResponseItem
  */
 
 
+export const createShoppingListBodyNameRegExp = new RegExp('^(?:[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]|[^\\uD800-\\uDBFF]|[\\uD800-\\uDBFF](?![\\uDC00-\\uDFFF])){1,100}$');
 
-export const CreateShoppingListBody = zod.object({
-  "name": zod.string().min(1)
-})
+
+export const CreateShoppingListBody = zod.preprocess(preprocessShoppingListNameBody, zod.object({
+  "name": zod.string().min(1).regex(createShoppingListBodyNameRegExp).describe('Leading and trailing boundary whitespace is removed before validation; the limit is 100 Unicode code points after trimming.')
+}))
 
 export const CreateShoppingListResponse = zod.object({
   "id": zod.number(),
@@ -456,6 +462,41 @@ export const GetShoppingListParams = zod.object({
 })
 
 export const GetShoppingListResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "shoppingListId": zod.number(),
+  "inventoryItemId": zod.number().nullable(),
+  "name": zod.string(),
+  "category": zod.string(),
+  "quantity": zod.number(),
+  "unit": zod.string(),
+  "purchased": zod.boolean(),
+  "notes": zod.string().nullable()
+})),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary Rename an existing shopping list
+ */
+export const UpdateShoppingListParams = zod.object({
+  "id": zod.number()
+})
+
+
+
+export const updateShoppingListBodyNameRegExp = new RegExp('^(?:[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]|[^\\uD800-\\uDBFF]|[\\uD800-\\uDBFF](?![\\uDC00-\\uDFFF])){1,100}$');
+
+
+export const UpdateShoppingListBody = zod.preprocess(preprocessShoppingListNameBody, zod.object({
+  "name": zod.string().min(1).regex(updateShoppingListBodyNameRegExp).describe('Leading and trailing boundary whitespace is removed before validation; the limit is 100 Unicode code points after trimming.')
+}))
+
+export const UpdateShoppingListResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "items": zod.array(zod.object({

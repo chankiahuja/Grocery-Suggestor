@@ -1790,6 +1790,78 @@ export function useGetShoppingList<TData = Awaited<ReturnType<typeof getShopping
 
 
 
+export const getUpdateShoppingListUrl = (id: number,) => {
+
+
+
+
+  return `/api/shopping-lists/${id}`
+}
+
+/**
+ * @summary Rename an existing shopping list
+ */
+export const updateShoppingList = async (id: number,
+    shoppingListInput: ShoppingListInput, options?: Parameters<typeof customFetch>[1]): Promise<ShoppingListWithItems> => {
+
+  return customFetch<ShoppingListWithItems>(getUpdateShoppingListUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(shoppingListInput)
+  }
+);}
+
+
+
+
+
+export const getUpdateShoppingListMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateShoppingList>>, TError,{id: number;data: BodyType<ShoppingListInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateShoppingList>>, TError,{id: number;data: BodyType<ShoppingListInput>}, TContext> => {
+
+const mutationKey = ['updateShoppingList'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateShoppingList>>, {id: number;data: BodyType<ShoppingListInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateShoppingList(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateShoppingListMutationResult = NonNullable<Awaited<ReturnType<typeof updateShoppingList>>>
+    export type UpdateShoppingListMutationBody = BodyType<ShoppingListInput>
+    export type UpdateShoppingListMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Rename an existing shopping list
+ */
+export const useUpdateShoppingList = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateShoppingList>>, TError,{id: number;data: BodyType<ShoppingListInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateShoppingList>>,
+        TError,
+        {id: number;data: BodyType<ShoppingListInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateShoppingListMutationOptions(options));
+    }
+
 export const getDeleteShoppingListUrl = (id: number,) => {
 
 

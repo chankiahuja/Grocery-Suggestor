@@ -26,6 +26,22 @@ class PantryFlowTest {
     Map<String,Object> item(String name, double quantity) {
         return service.saveInventory(null, Map.of("name",name,"category","Dairy","quantity",quantity,"unit","litres","minThreshold",2));
     }
+    @Test void shoppingListNamesShareUnicodeBoundariesAndPreserveLegacyReads() {
+        String[] boundaries = {"\t", "\n", "\u000B", "\f", "\r", " ", "\u00A0", "\u1680", "\u2000", "\u2001", "\u2002", "\u2003", "\u2004", "\u2005", "\u2006", "\u2007", "\u2008", "\u2009", "\u200A", "\u2028", "\u2029", "\u202F", "\u205F", "\u3000", "\uFEFF"};
+        for (String boundary : boundaries) {
+            assertThat(PantryService.trimShoppingListBoundaryWhitespace(boundary + "List" + boundary)).isEqualTo("List");
+            assertThatThrownBy(() -> service.createList(Map.of("name", boundary))).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        }
+        assertThat(service.createList(Map.of("name", "  Weekly\u00A0 shop  ")).get("name")).isEqualTo("Weekly\u00A0 shop");
+        assertThat(service.createList(Map.of("name", "😀".repeat(100))).get("name")).isEqualTo("😀".repeat(100));
+        assertThatThrownBy(() -> service.createList(Map.of("name", "😀".repeat(101)))).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        assertThatThrownBy(() -> service.createList(Map.of("name", "a".repeat(101)))).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+
+        long legacyId = repository.insert("shopping_lists", Map.of("name", "L".repeat(101)));
+        assertThat(service.list(legacyId).get("name")).isEqualTo("L".repeat(101));
+        assertThatThrownBy(() -> service.updateList(legacyId, Map.of("name", "x".repeat(101)))).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        assertThat(service.updateList(legacyId, Map.of("name", " Valid ")).get("name")).isEqualTo("Valid");
+    }
     @Test void shortageToPurchaseAndRepeatedCompletion() {
         long milk = PantryService.id(item("Milk", 0));
         item("Cheese", 5);

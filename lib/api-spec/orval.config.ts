@@ -13,6 +13,23 @@ const titleTransformer: InputTransformerFn = (config) => {
   return config;
 };
 
+const zodTransformer: InputTransformerFn = (config) => {
+  titleTransformer(config);
+
+  const nameSchema = config.components?.schemas?.ShoppingListInput?.properties?.name;
+  if (nameSchema && typeof nameSchema === "object" && !Array.isArray(nameSchema)) {
+    // JSON Schema maxLength counts Unicode code points, while Zod's max counts
+    // UTF-16 code units. Keep maxLength in the published contract, but generate
+    // the equivalent code-point-aware validator for the Zod client.
+    delete nameSchema.maxLength;
+    // Make alternatives disjoint: a valid surrogate pair must never backtrack
+    // into two single-code-unit matches when an over-limit name is rejected.
+    nameSchema.pattern = "^(?:[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]|[^\\uD800-\\uDBFF]|[\\uD800-\\uDBFF](?![\\uDC00-\\uDFFF])){1,100}$";
+  }
+
+  return config;
+};
+
 export default defineConfig({
   "api-client-react": {
     input: {
@@ -34,7 +51,7 @@ export default defineConfig({
           includeHttpResponseReturnType: false,
         },
         mutator: {
-          path: path.resolve(apiClientReactSrc, "custom-fetch.ts"),
+          path: "custom-fetch.ts",
           name: "customFetch",
         },
       },
@@ -44,7 +61,7 @@ export default defineConfig({
     input: {
       target: "./openapi.yaml",
       override: {
-        transformer: titleTransformer,
+        transformer: zodTransformer,
       },
     },
     output: {
@@ -57,11 +74,34 @@ export default defineConfig({
       prettier: true,
       override: {
         zod: {
+          version: 3,
           coerce: {
             query: ['boolean', 'number', 'string'],
             param: ['boolean', 'number', 'string'],
             body: ['bigint', 'date'],
             response: ['bigint', 'date'],
+          },
+        },
+        operations: {
+          createShoppingList: {
+            zod: {
+              preprocess: {
+                body: {
+                  path: "shopping-list-name-preprocessor.ts",
+                  name: "preprocessShoppingListNameBody",
+                },
+              },
+            },
+          },
+          updateShoppingList: {
+            zod: {
+              preprocess: {
+                body: {
+                  path: "shopping-list-name-preprocessor.ts",
+                  name: "preprocessShoppingListNameBody",
+                },
+              },
+            },
           },
         },
         useDates: true,

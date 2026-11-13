@@ -550,6 +550,35 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateShoppingList
+      tags: [shopping-lists]
+      summary: Rename an existing shopping list
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShoppingListInput"
+      responses:
+        "200":
+          description: Renamed shopping list with its existing items
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShoppingListWithItems"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     delete:
       operationId: deleteShoppingList
       tags: [shopping-lists]
@@ -996,6 +1025,7 @@ components:
         name:
           type: string
           minLength: 1
+          description: Leading and trailing boundary whitespace is removed before validation; the limit is 100 Unicode code points after trimming.
       required:
         - name
 
