@@ -100,6 +100,11 @@ export default function ShoppingListDetail() {
       await queryClient.invalidateQueries({
         queryKey: getGetShoppingListQueryKey(listId),
       });
+      setQuantities((previous) => {
+        const next = { ...previous };
+        delete next[item.id];
+        return next;
+      });
     } catch {
       toast({
         title: "Error",
@@ -419,6 +424,13 @@ export default function ShoppingListDetail() {
         }}
         shoppingListId={listId}
         item={itemToEdit ?? undefined}
+        onItemUpdated={(updatedItem) => {
+          setQuantities((previous) => {
+            const next = { ...previous };
+            delete next[updatedItem.id];
+            return next;
+          });
+        }}
       />
 
       <RenameShoppingListDialog

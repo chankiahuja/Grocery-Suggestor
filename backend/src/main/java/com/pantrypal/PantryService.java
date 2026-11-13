@@ -337,8 +337,13 @@ public class PantryService {
     public Map<String,Object> updateItem(long listId, long id, Map<String,Object> body) { return updateItem(null, listId, id, body); }
     public Map<String,Object> updateItem(Long ownerId, long listId, long id, Map<String,Object> body) {
         lockOwner(ownerId);
-        repo.one("SELECT * FROM shopping_list_items WHERE id=? AND shopping_list_id=? AND " + ownerWhere("account_id", ownerId), id, listId);
+        var existing = repo.one("SELECT * FROM shopping_list_items WHERE id=? AND shopping_list_id=? AND " + ownerWhere("account_id", ownerId), id, listId);
         var values = fields(body, false, false); values.keySet().retainAll(Set.of("quantity", "unit", "notes", "purchased"));
+        if (values.containsKey("unit") && existing.get("inventoryItemId") != null) {
+            long inventoryItemId = ((Number) existing.get("inventoryItemId")).longValue();
+            String inventoryUnit = trimUnit(String.valueOf(inventory(ownerId, inventoryItemId).get("unit")));
+            if (!inventoryUnit.equals(values.get("unit"))) bad("Inventory-linked items must use the inventory unit");
+        }
         repo.update("shopping_list_items", id, values, ownerId);
         return repo.one("SELECT " + SHOPPING_LIST_ITEM_COLUMNS + " FROM shopping_list_items WHERE id=? AND " + ownerWhere("account_id", ownerId), id);
     }

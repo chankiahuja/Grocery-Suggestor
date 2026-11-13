@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { INVENTORY_UNIT_OPTIONS } from "@/lib/inventory-units";
 
 interface UnitSelectorProps {
@@ -17,16 +18,22 @@ export function UnitSelector({
   disabled = false,
   invalid = false,
 }: UnitSelectorProps) {
-  const isPreset = INVENTORY_UNIT_OPTIONS.includes(
+  const isPresetValue = INVENTORY_UNIT_OPTIONS.includes(
     value as (typeof INVENTORY_UNIT_OPTIONS)[number],
   );
+  const [customMode, setCustomMode] = useState(!isPresetValue);
 
   return (
     <>
       <select
-        value={isPreset ? value : "Custom"}
+        value={customMode ? "Custom" : value}
         disabled={disabled}
-        onChange={(event) => onChange(event.target.value === "Custom" ? "" : event.target.value)}
+        onChange={(event) => {
+          const selected = event.target.value;
+          const isCustom = selected === "Custom";
+          setCustomMode(isCustom);
+          onChange(isCustom ? "" : selected);
+        }}
         aria-label="Unit"
         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         data-testid={selectTestId}
@@ -37,7 +44,7 @@ export function UnitSelector({
         ))}
         <option value="Custom">Custom</option>
       </select>
-      {!isPreset && (
+      {customMode && (
         <input
           value={value}
           disabled={disabled}

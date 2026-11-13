@@ -50,6 +50,7 @@ interface AddShoppingItemDialogProps {
   onOpenChange: (open: boolean) => void;
   shoppingListId: number;
   item?: ShoppingListItem;
+  onItemUpdated?: (item: ShoppingListItem) => void;
 }
 
 export function AddShoppingItemDialog({
@@ -57,6 +58,7 @@ export function AddShoppingItemDialog({
   onOpenChange,
   shoppingListId,
   item,
+  onItemUpdated,
 }: AddShoppingItemDialogProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -91,15 +93,16 @@ export function AddShoppingItemDialog({
     setIsSubmitting(true);
     try {
       if (item) {
-        await updateItem.mutateAsync({
+        const updatedItem = await updateItem.mutateAsync({
           id: shoppingListId,
           itemId: item.id,
           data: {
             quantity: values.quantity,
             unit: values.unit,
-            notes: values.notes || undefined,
+            notes: values.notes,
           },
         });
+        onItemUpdated?.(updatedItem);
       } else {
         await addItem.mutateAsync({
           id: shoppingListId,
@@ -178,6 +181,7 @@ export function AddShoppingItemDialog({
                     <FormLabel>Unit</FormLabel>
                     <FormControl>
                       <UnitSelector
+                        key={`${item?.id ?? "new"}-${open}`}
                         value={field.value}
                         onChange={field.onChange}
                         selectTestId="input-shopping-item-unit"

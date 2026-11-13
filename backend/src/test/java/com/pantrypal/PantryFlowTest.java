@@ -93,6 +93,17 @@ class PantryFlowTest {
         long row = PantryService.id(service.addItem(first, Map.of("name","Eggs","category","Dairy","quantity",1,"unit","box")));
         assertThatThrownBy(() -> service.updateItem(second,row,Map.of("purchased",true))).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
     }
+    @Test void inventoryLinkedShoppingItemsKeepTheirInventoryUnit() {
+        var inventoryItem = item("Rice", 0);
+        long inventoryItemId = PantryService.id(inventoryItem);
+        long listId = PantryService.id(service.createList(Map.of("name", "Units")));
+        long shoppingItemId = PantryService.id(service.addItem(listId, Map.of(
+            "inventoryItemId", inventoryItemId, "name", "Rice", "category", "Grains", "quantity", 1, "unit", "litres")));
+        assertThatThrownBy(() -> service.updateItem(listId, shoppingItemId, Map.of("unit", "kg")))
+            .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        assertThat(service.updateItem(listId, shoppingItemId, Map.of("unit", " litres ")).get("unit"))
+            .isEqualTo("litres");
+    }
     @Test void apiValidationAndCombinedFilters() throws Exception {
         item("Milk",0);
         mvc.perform(get("/api/inventory").param("category","Produce").param("lowStock","true")).andExpect(status().isOk()).andExpect(content().json("[]"));

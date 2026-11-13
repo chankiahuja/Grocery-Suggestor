@@ -246,6 +246,7 @@ export function InventoryItemDialog({
                     <FormLabel>Unit</FormLabel>
                     <FormControl>
                       <UnitSelector
+                        key={`${item?.id ?? "new"}-${open}`}
                         value={field.value}
                         onChange={field.onChange}
                         selectTestId="input-item-unit"
