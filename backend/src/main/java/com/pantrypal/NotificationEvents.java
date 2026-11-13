@@ -32,6 +32,7 @@ public class NotificationEvents {
         private final Object monitor = new Object();
         private int users;
     }
+    private enum SendResult { DELIVERED, CLOSED, INACTIVE }
     private static final class Subscriber {
         private final String sessionId;
         private final SseEmitter emitter;
@@ -45,19 +46,19 @@ public class NotificationEvents {
             this.emitter = emitter;
         }
 
-        private boolean send(SseEmitter.SseEventBuilder event, BooleanSupplier sessionActive) throws IOException {
+        private SendResult send(SseEmitter.SseEventBuilder event, BooleanSupplier sessionActive) throws IOException {
             deliveryLock.lock();
             try {
                 synchronized (this) {
-                    if (closed) return false;
+                    if (closed) return SendResult.CLOSED;
                 }
                 if (!sessionActive.getAsBoolean()) {
                     close();
-                    return false;
+                    return SendResult.INACTIVE;
                 }
                 synchronized (this) {
                     // Disconnect may have completed while the session lookup was in progress.
-                    if (closed) return false;
+                    if (closed) return SendResult.CLOSED;
                     delivering = true;
                 }
                 try {
@@ -70,7 +71,7 @@ public class NotificationEvents {
                     }
                     if (complete) emitter.complete();
                 }
-                return true;
+                return SendResult.DELIVERED;
             } finally {
                 deliveryLock.unlock();
             }
@@ -245,8 +246,11 @@ public class NotificationEvents {
         }
     }
     private void send(Long accountId, Subscriber subscriber, SseEmitter.SseEventBuilder event) throws IOException {
-        if (!subscriber.send(event, () -> sessionActive(subscriber.sessionId))) {
+        var result = subscriber.send(event, () -> sessionActive(subscriber.sessionId));
+        if (result == SendResult.INACTIVE) {
             disconnectSession(subscriber.sessionId);
+            removeClient(accountId, subscriber);
+        } else if (result == SendResult.CLOSED) {
             removeClient(accountId, subscriber);
         }
     }

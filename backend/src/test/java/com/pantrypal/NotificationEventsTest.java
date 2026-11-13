@@ -108,6 +108,38 @@ class NotificationEventsTest {
     }
 
     @Test
+    void alreadyClosedSubscriberDoesNotRevokeItsStillActiveSession() throws Exception {
+        var sessions = sessions();
+        var workers = Executors.newFixedThreadPool(2);
+        var notifications = new NotificationEvents(mock(PantryService.class), sessions,
+            command -> workers.submit(command));
+        var failing = new FailingEmitter();
+        var surviving = new RecordingEmitter();
+        notifications.subscribe(authentication("1"), "shared-session", failing);
+        notifications.subscribe(authentication("1"), "shared-session", surviving);
+        try {
+            failing.failNextSend = true;
+            notifications.changed(new PantryService.PantryChanged("inventory_changed", 41L, 1L));
+            assertThat(failing.sendStarted.await(5, TimeUnit.SECONDS)).isTrue();
+            notifications.changed(new PantryService.PantryChanged("purchase_completed", null, 1L));
+            failing.releaseSend.countDown();
+
+            // The second broadcast observes only a closed subscriber. It must not
+            // revoke the still-valid session or close its other stream.
+            awaitExecutor(workers);
+            notifications.changed(new PantryService.PantryChanged("alerts_changed", null, 1L));
+            awaitExecutor(workers);
+            assertThat(surviving.payloads).contains(Map.of("type", "alerts_changed"));
+            assertThat(surviving.completed).isFalse();
+        } finally {
+            failing.releaseSend.countDown();
+            notifications.disconnectSession("shared-session");
+            workers.shutdownNow();
+            assertThat(workers.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+        }
+    }
+
+    @Test
     void normalCompletionAndEmitterErrorsRemoveUnusedSessionGuards() throws Exception {
         var notifications = new NotificationEvents(mock(PantryService.class), sessions());
         var completed = new RecordingEmitter();
@@ -625,6 +657,10 @@ class NotificationEventsTest {
         }
     }
 
+    private void awaitExecutor(java.util.concurrent.ExecutorService workers) throws Exception {
+        workers.submit(() -> {}).get(5, TimeUnit.SECONDS);
+    }
+
     private boolean isContractPayload(Object payload) {
         return Map.of("status", "connected").equals(payload)
             || Map.of("type", "inventory_changed").equals(payload)
@@ -723,6 +759,28 @@ class NotificationEventsTest {
         public void complete() {
             completedDuringDelivery |= delivering;
             super.complete();
+        }
+    }
+
+    private static class FailingEmitter extends RecordingEmitter {
+        final CountDownLatch sendStarted = new CountDownLatch(1);
+        final CountDownLatch releaseSend = new CountDownLatch(1);
+        volatile boolean failNextSend;
+
+        @Override
+        public void send(SseEventBuilder builder) throws IOException {
+            if (failNextSend) {
+                failNextSend = false;
+                sendStarted.countDown();
+                try {
+                    if (!releaseSend.await(5, TimeUnit.SECONDS)) throw new IOException("send timed out");
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException(e);
+                }
+                throw new IOException("simulated send failure");
+            }
+            super.send(builder);
         }
     }
 }
