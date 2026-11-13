@@ -437,7 +437,7 @@ export const ListShoppingListsResponse = zod.array(ListShoppingListsResponseItem
  */
 
 
-export const createShoppingListBodyNameRegExp = new RegExp('^(?:[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]|[\\s\\S]){1,100}$');
+export const createShoppingListBodyNameRegExp = new RegExp('^(?:[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]|[^\\uD800-\\uDBFF]|[\\uD800-\\uDBFF](?![\\uDC00-\\uDFFF])){1,100}$');
 
 
 export const CreateShoppingListBody = zod.preprocess(preprocessShoppingListNameBody, zod.object({
@@ -489,7 +489,7 @@ export const UpdateShoppingListParams = zod.object({
 
 
 
-export const updateShoppingListBodyNameRegExp = new RegExp('^(?:[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]|[\\s\\S]){1,100}$');
+export const updateShoppingListBodyNameRegExp = new RegExp('^(?:[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]|[^\\uD800-\\uDBFF]|[\\uD800-\\uDBFF](?![\\uDC00-\\uDFFF])){1,100}$');
 
 
 export const UpdateShoppingListBody = zod.preprocess(preprocessShoppingListNameBody, zod.object({

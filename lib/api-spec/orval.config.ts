@@ -22,7 +22,9 @@ const zodTransformer: InputTransformerFn = (config) => {
     // UTF-16 code units. Keep maxLength in the published contract, but generate
     // the equivalent code-point-aware validator for the Zod client.
     delete nameSchema.maxLength;
-    nameSchema.pattern = "^(?:[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]|[\\s\\S]){1,100}$";
+    // Make alternatives disjoint: a valid surrogate pair must never backtrack
+    // into two single-code-unit matches when an over-limit name is rejected.
+    nameSchema.pattern = "^(?:[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]|[^\\uD800-\\uDBFF]|[\\uD800-\\uDBFF](?![\\uDC00-\\uDFFF])){1,100}$";
   }
 
   return config;
