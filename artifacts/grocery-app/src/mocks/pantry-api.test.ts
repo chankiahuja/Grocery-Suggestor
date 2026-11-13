@@ -2,6 +2,32 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { MockPantryApi, seedState } from "./pantry-api";
 
+test("demo shopping-list creation and rename share Unicode name validation", async () => {
+  const api = new MockPantryApi();
+  const create = async (name: unknown) => api.fetch("/api/shopping-lists", {
+    method: "POST", body: JSON.stringify({ name }),
+  });
+  for (const name of ["\ufeff", "\u00a0", "\u2003", "a".repeat(101), "😀".repeat(101)]) {
+    assert.equal((await create(name)).status, 400);
+  }
+  const createdResponse = await create(`\ufeff${"😀".repeat(100)}\u3000`);
+  assert.equal(createdResponse.status, 201);
+  const created = await createdResponse.json();
+  assert.equal(created.name, "😀".repeat(100));
+
+  const renamedResponse = await api.fetch(`/api/shopping-lists/${created.id}`, {
+    method: "PATCH", body: JSON.stringify({ name: "  Weekly\u00a0 shop  " }),
+  });
+  assert.equal(renamedResponse.status, 200);
+  assert.equal((await renamedResponse.json()).name, "Weekly\u00a0 shop");
+
+  api.state.lists[0].name = "L".repeat(101);
+  assert.equal((await (await api.fetch(`/api/shopping-lists/${api.state.lists[0].id}`)).json()).name, "L".repeat(101));
+  assert.equal((await api.fetch(`/api/shopping-lists/${api.state.lists[0].id}`, {
+    method: "PATCH", body: JSON.stringify({ name: "Valid" }),
+  })).status, 200);
+});
+
 test("expired demo alerts clear on correction and never create expiry-only purchases", async () => {
   const api = new MockPantryApi();
   const template = api.state.inventory[0];

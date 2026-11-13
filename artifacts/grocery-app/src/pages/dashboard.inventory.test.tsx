@@ -1110,6 +1110,25 @@ describe("shopping list selection and deletion", () => {
     assert.ok(screen.getByRole("progressbar", { name: "Weekend groceries: 0% complete" }));
   });
 
+  it("renames a populated list with the shared Unicode validation", async () => {
+    const { api } = await setup();
+    const itemCount = api.state.lists[0].items.length;
+    fireEvent.click(screen.getByRole("link", { name: "Weekend groceries" }));
+    await screen.findByRole("checkbox", { name: "Purchased Milk" });
+    fireEvent.click(screen.getByRole("button", { name: "Edit name for Weekend groceries" }));
+    const input = await screen.findByRole("textbox", { name: "List name" });
+    assert.equal((input as HTMLInputElement).value, "Weekend groceries");
+    fireEvent.change(input, { target: { value: String.fromCodePoint(0x1f600).repeat(101) } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    assert.ok(await screen.findByRole("alert"));
+    assert.equal(api.state.lists[0].name, "Weekend groceries");
+    fireEvent.change(input, { target: { value: "\ufeffRenamed\u00a0 list\u3000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await screen.findByRole("heading", { name: "Renamed list" });
+    assert.equal(api.state.lists[0].name, "Renamed\u00a0 list");
+    assert.equal(api.state.lists[0].items.length, itemCount);
+  });
+
   it("keeps an individually failed deletion selected for bulk retry", async () => {
     const { api, queryClient } = await setup();
     globalThis.fetch = async (input, init) => {

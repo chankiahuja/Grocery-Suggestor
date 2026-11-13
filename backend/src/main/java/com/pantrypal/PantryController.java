@@ -29,6 +29,7 @@ public class PantryController {
     @GetMapping("/shopping-lists") public Object lists(Authentication authentication) { return service.lists(account(authentication)); }
     @PostMapping("/shopping-lists") @ResponseStatus(HttpStatus.CREATED) public Object createList(@RequestBody Map<String,Object> body, Authentication authentication) { return service.createList(account(authentication), body); }
     @GetMapping("/shopping-lists/{id}") public Object list(@PathVariable long id, Authentication authentication) { return service.list(account(authentication), id); }
+    @PatchMapping("/shopping-lists/{id}") public Object updateList(@PathVariable long id, @RequestBody Map<String,Object> body, Authentication authentication) { return service.updateList(account(authentication), id, body); }
     @DeleteMapping("/shopping-lists/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) public void deleteList(@PathVariable long id, Authentication authentication) { service.deleteList(account(authentication), id); }
     @PostMapping("/shopping-lists/{id}/items") @ResponseStatus(HttpStatus.CREATED) public Object addItem(@PathVariable long id, @RequestBody Map<String,Object> body, Authentication authentication) { return service.addItem(account(authentication), id, body); }
     @PatchMapping("/shopping-lists/{id}/items/{itemId}") public Object updateItem(@PathVariable long id, @PathVariable long itemId, @RequestBody Map<String,Object> body, Authentication authentication) { return service.updateItem(account(authentication), id, itemId, body); }

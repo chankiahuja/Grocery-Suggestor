@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useParams, useLocation } from "wouter";
-import { Plus, ShoppingBag, ArrowLeft, Trash2, Tags } from "lucide-react";
+import { Plus, ShoppingBag, ArrowLeft, Trash2, Tags, Pencil } from "lucide-react";
 import {
   useGetShoppingList,
   useUpdateShoppingListItem,
@@ -15,6 +15,7 @@ import type { ShoppingListItem } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import { AddShoppingItemDialog } from "@/components/add-shopping-item-dialog";
+import { RenameShoppingListDialog } from "@/components/rename-shopping-list-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -40,6 +41,7 @@ export default function ShoppingListDetail() {
   const listId = Number(params.id);
 
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<ShoppingListItem | null>(
     null,
@@ -232,8 +234,20 @@ export default function ShoppingListDetail() {
             </Button>
           </Link>
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <h2 className="text-3xl font-bold tracking-tight">{list.name}</h2>
+            <div className="min-w-0">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <h2 className="min-w-0 break-words text-3xl font-bold tracking-tight">{list.name}</h2>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label={`Edit name for ${list.name}`}
+                  onClick={() => setRenameDialogOpen(true)}
+                  data-testid="button-rename-list"
+                >
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Edit name
+                </Button>
+              </div>
               <p className="text-muted-foreground mt-1">
                 {list.items.filter((i) => i.purchased).length} /{" "}
                 {list.items.length} items purchased
@@ -385,6 +399,13 @@ export default function ShoppingListDetail() {
         open={addDialogOpen}
         onOpenChange={setAddDialogOpen}
         shoppingListId={listId}
+      />
+
+      <RenameShoppingListDialog
+        listId={listId}
+        currentName={list.name}
+        open={renameDialogOpen}
+        onOpenChange={setRenameDialogOpen}
       />
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

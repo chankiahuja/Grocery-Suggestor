@@ -180,6 +180,7 @@ export const ListInventoryItemsResponse = zod.array(ListInventoryItemsResponseIt
 
 export const createInventoryItemBodyQuantityMin = 0;
 
+export const createInventoryItemBodyUnitMax = 64;
 
 export const createInventoryItemBodyMinThresholdMin = 0;
 
@@ -189,7 +190,7 @@ export const CreateInventoryItemBody = zod.object({
   "name": zod.string().min(1),
   "category": zod.string().min(1),
   "quantity": zod.number().min(createInventoryItemBodyQuantityMin),
-  "unit": zod.string().min(1),
+  "unit": zod.string().min(1).max(createInventoryItemBodyUnitMax),
   "minThreshold": zod.number().min(createInventoryItemBodyMinThresholdMin),
   "expiresAt": zod.string().nullish(),
   "notes": zod.string().nullish()
@@ -256,6 +257,8 @@ export const UpdateInventoryItemParams = zod.object({
 
 export const updateInventoryItemBodyQuantityMin = 0;
 
+export const updateInventoryItemBodyUnitMax = 64;
+
 export const updateInventoryItemBodyMinThresholdMin = 0;
 
 
@@ -264,7 +267,7 @@ export const UpdateInventoryItemBody = zod.object({
   "name": zod.string().min(1).optional(),
   "category": zod.string().optional(),
   "quantity": zod.number().min(updateInventoryItemBodyQuantityMin).optional(),
-  "unit": zod.string().optional(),
+  "unit": zod.string().min(1).max(updateInventoryItemBodyUnitMax).optional(),
   "minThreshold": zod.number().min(updateInventoryItemBodyMinThresholdMin).optional(),
   "expiresAt": zod.string().nullish(),
   "notes": zod.string().nullish()
@@ -376,7 +379,7 @@ export const GetGrocerySuggestionsResponseItem = zod.object({
   "minThreshold": zod.number(),
   "unit": zod.string(),
   "reason": zod.string(),
-  "urgency": zod.enum(['critical', 'low', 'expiring_soon', 'expired']).describe('Expired alerts are independent of stock alerts; one item may have both expired and low entries. Zero-quantity items do not receive expired alerts. Expiry-only entries do not generate shopping purchases.')
+  "urgency": zod.enum(['critical', 'low', 'expiring_soon', 'expired']).describe('Each item has at most one alert, with presentation priority expired, out of stock, expiring soon, then low stock. Combined expiry and stock context is included in reason. Zero-quantity items do not receive expiry alerts. Expiry-only entries do not generate shopping purchases.')
 })
 export const GetGrocerySuggestionsResponse = zod.array(GetGrocerySuggestionsResponseItem)
 
@@ -431,11 +434,12 @@ export const ListShoppingListsResponse = zod.array(ListShoppingListsResponseItem
 /**
  * @summary Create a new shopping list
  */
+export const createShoppingListBodyNameMax = 100;
 
 
 
 export const CreateShoppingListBody = zod.object({
-  "name": zod.string().min(1)
+  "name": zod.string().min(1).max(createShoppingListBodyNameMax).describe('Leading and trailing boundary whitespace is removed before validation; the limit is 100 Unicode code points after trimming.')
 })
 
 export const CreateShoppingListResponse = zod.object({
@@ -456,6 +460,40 @@ export const GetShoppingListParams = zod.object({
 })
 
 export const GetShoppingListResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "shoppingListId": zod.number(),
+  "inventoryItemId": zod.number().nullable(),
+  "name": zod.string(),
+  "category": zod.string(),
+  "quantity": zod.number(),
+  "unit": zod.string(),
+  "purchased": zod.boolean(),
+  "notes": zod.string().nullable()
+})),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary Rename an existing shopping list
+ */
+export const UpdateShoppingListParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const updateShoppingListBodyNameMax = 100;
+
+
+
+export const UpdateShoppingListBody = zod.object({
+  "name": zod.string().min(1).max(updateShoppingListBodyNameMax).describe('Leading and trailing boundary whitespace is removed before validation; the limit is 100 Unicode code points after trimming.')
+})
+
+export const UpdateShoppingListResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "items": zod.array(zod.object({

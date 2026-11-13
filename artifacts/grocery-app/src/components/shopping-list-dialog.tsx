@@ -25,9 +25,16 @@ import {
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
+import {
+  shoppingListNameError,
+  trimShoppingListBoundaryWhitespace,
+} from '@/lib/shopping-list-name';
 
 const formSchema = z.object({
-  name: z.string().min(1, 'Name is required'),
+  name: z.string().superRefine((value, context) => {
+    const message = shoppingListNameError(value);
+    if (message) context.addIssue({ code: z.ZodIssueCode.custom, message });
+  }),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -55,15 +62,16 @@ export function ShoppingListDialog({
   });
 
   const onSubmit = async (values: FormValues) => {
+    const name = trimShoppingListBoundaryWhitespace(values.name);
     setIsSubmitting(true);
     try {
       await createList.mutateAsync({
-        data: values,
+        data: { name },
       });
 
       toast({
         title: 'Shopping list created',
-        description: `${values.name} is ready.`,
+        description: `${name} is ready.`,
       });
 
       queryClient.invalidateQueries({ queryKey: getListShoppingListsQueryKey() });
