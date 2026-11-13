@@ -188,30 +188,48 @@ public class PantryService {
             && LocalDate.parse(item.get("expiresAt").toString()).isBefore(Instant.ofEpochMilli(clock.millis()).atZone(ZoneOffset.UTC).toLocalDate());
     }
     boolean expiring(Map<String,Object> item) {
-        if (item.get("expiresAt") == null) return false;
+        if (number(item, "quantity") <= 0 || item.get("expiresAt") == null) return false;
         var date = LocalDate.parse(item.get("expiresAt").toString());
         var today = Instant.ofEpochMilli(clock.millis()).atZone(ZoneOffset.UTC).toLocalDate();
         return !date.isBefore(today) && !date.isAfter(today.plusDays(7));
+    }
+    private boolean lowStock(Map<String,Object> item) {
+        double quantity = number(item, "quantity");
+        return quantity > 0 && quantity <= number(item, "minThreshold");
+    }
+    private String primaryUrgency(Map<String,Object> item) {
+        if (expired(item)) return "expired";
+        if (number(item, "quantity") == 0) return "critical";
+        if (expiring(item)) return "expiring_soon";
+        if (lowStock(item)) return "low";
+        return null;
+    }
+    private String suggestionReason(Map<String,Object> item, String urgency) {
+        double quantity = number(item, "quantity"), threshold = number(item, "minThreshold");
+        String unit = String.valueOf(item.get("unit"));
+        String stock = lowStock(item) ? quantity + " " + unit + " left (minimum is " + threshold + " " + unit + ")" : null;
+        String expiry = expired(item) ? "Expired on " : "Expires on ";
+        if (urgency.equals("critical")) return "Out of stock";
+        if (urgency.equals("expired")) return expiry + item.get("expiresAt") + (stock == null ? "" : "; " + stock);
+        if (urgency.equals("expiring_soon")) return expiry + item.get("expiresAt") + (stock == null ? "" : "; " + stock);
+        return stock;
     }
     public List<Map<String,Object>> suggestions() { return suggestions(null); }
     public List<Map<String,Object>> suggestions(Long ownerId) {
         var result = new ArrayList<Map<String,Object>>();
         for (var item : inventory(ownerId)) {
-            double quantity = number(item, "quantity"), threshold = number(item, "minThreshold");
-            String urgency = quantity == 0 ? "critical" : quantity <= threshold ? "low" : expiring(item) ? "expiring_soon" : null;
-            var urgencies = new ArrayList<String>();
-            if (expired(item)) urgencies.add("expired");
-            if (urgency != null) urgencies.add(urgency);
-            for (String alert : urgencies) {
+            double quantity = number(item, "quantity");
+            String urgency = primaryUrgency(item);
+            if (urgency != null) {
                 Map<String,Object> suggestion = new LinkedHashMap<>();
                 suggestion.put("inventoryItemId", item.get("id"));
                 for (String key : List.of("name", "category", "minThreshold", "unit")) suggestion.put(key, item.get(key));
-                suggestion.put("currentQuantity", quantity); suggestion.put("urgency", alert);
-                suggestion.put("reason", alert.equals("critical") ? "Out of stock" : alert.equals("low") ? quantity + " " + item.get("unit") + " left (minimum is " + threshold + ")" : (alert.equals("expired") ? "Expired on " : "Expires on ") + item.get("expiresAt"));
+                suggestion.put("currentQuantity", quantity); suggestion.put("urgency", urgency);
+                suggestion.put("reason", suggestionReason(item, urgency));
                 result.add(suggestion);
             }
         }
-        result.sort(Comparator.comparingInt(s -> List.of("expired", "critical", "low", "expiring_soon").indexOf(s.get("urgency"))));
+        result.sort(Comparator.comparingInt(s -> List.of("expired", "critical", "expiring_soon", "low").indexOf(s.get("urgency"))));
         return result;
     }
     public Map<String,Object> stats() { return stats(null); }
@@ -280,7 +298,10 @@ public class PantryService {
     public Map<String,Object> generateList(Map<String,Object> request) { return generateList(null, request); }
     public Map<String,Object> generateList(Long ownerId, Map<String,Object> request) {
         lockOwner(ownerId);
-        var suggestions = suggestions(ownerId).stream().filter(s -> List.of("critical", "low").contains(s.get("urgency"))).toList();
+        var suggestions = suggestions(ownerId).stream()
+            .filter(s -> number(s, "currentQuantity") == 0
+                || number(s, "currentQuantity") <= number(s, "minThreshold"))
+            .toList();
         if (suggestions.isEmpty()) bad("No low-stock suggestions are available.");
         var selected = new LinkedHashMap<Long, Map<String,Object>>();
         Object requestedItems = request.get("items");

@@ -16,11 +16,27 @@ test("expired demo alerts clear on correction and never create expiry-only purch
   const invalid = await api.fetch("/api/suggestions/generate-list", { method: "POST", body: JSON.stringify({ items: [{ inventoryItemId: 101, quantity: 1 }] }) });
   assert.equal(invalid.status, 400);
   const list = await (await api.fetch("/api/suggestions/generate-list", { method: "POST" })).json();
-  assert.deepEqual(list.items.map((i: any) => i.inventoryItemId), [103, 102]);
+  assert.deepEqual(list.items.map((i: any) => i.inventoryItemId), [102, 103]);
   await api.fetch("/api/inventory/101", { method: "PATCH", body: JSON.stringify({ expiresAt: null }) });
   await api.fetch("/api/inventory/102", { method: "DELETE" });
   assert.equal((await (await api.fetch("/api/inventory/stats")).json()).expiredCount, 0);
   assert.ok((await (await api.fetch("/api/suggestions")).json()).every((a: any) => a.urgency !== "expired"));
+});
+
+test("demo suggestions prioritize expiry, retain stock context, and ignore expiry for empty items", async () => {
+  const api = new MockPantryApi();
+  const template = api.state.inventory[0];
+  const soon = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  api.state.inventory = [
+    { ...template, id: 201, name: "Expiring low", quantity: 1.5, minThreshold: 2, expiresAt: soon },
+    { ...template, id: 202, name: "Empty future", quantity: 0, minThreshold: 2, expiresAt: soon },
+  ];
+  const alerts = await (await api.fetch("/api/suggestions")).json();
+  const expiring = alerts.find((a: any) => a.inventoryItemId === 201);
+  assert.equal(expiring.urgency, "expiring_soon");
+  assert.match(expiring.reason, /minimum is 2/);
+  assert.deepEqual(alerts.find((a: any) => a.inventoryItemId === 202).urgency, "critical");
+  assert.equal((await (await api.fetch("/api/inventory/stats")).json()).expiringCount, 1);
 });
 
 test("browser demo keeps feedback unconfigured rather than reporting a false delivery", async () => {

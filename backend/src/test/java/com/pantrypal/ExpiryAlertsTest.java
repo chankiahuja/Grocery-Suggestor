@@ -38,11 +38,25 @@ class ExpiryAlertsTest {
         var alerts = service.suggestions();
         assertThat(alerts.stream().filter(a -> a.get("urgency").equals("expired"))).hasSize(2);
         assertThat(alerts.stream().filter(a -> a.get("name").equals("Expired and low")))
-            .extracting(a -> a.get("urgency")).containsExactly("expired", "low");
+            .extracting(a -> a.get("urgency")).containsExactly("expired");
+        assertThat(alerts.stream().filter(a -> a.get("name").equals("Expired and low")).findFirst().orElseThrow().get("reason"))
+            .asString().contains("Expired on 2026-11-07", "minimum is 2.0 litres");
         assertThat(alerts.stream().filter(a -> a.get("name").equals("Empty")))
             .extracting(a -> a.get("urgency")).containsExactly("critical");
         assertThat(alerts.stream().filter(a -> a.get("name").equals("Day eight"))).isEmpty();
         assertThat(alerts.get(0).get("reason")).isEqualTo("Expired on 2026-11-07");
+    }
+    @Test void expiryTakesPriorityWhileLowStockRemainsInTheCombinedReason() {
+        item(null, "Expiring low", 1.5, "2026-11-10");
+        var alert = service.suggestions().get(0);
+        assertThat(alert).containsEntry("urgency", "expiring_soon");
+        assertThat(alert.get("reason")).asString().contains("Expires on 2026-11-10", "minimum is 2.0 litres");
+    }
+    @Test void zeroQuantityDoesNotCountAsExpiringOrCarryExpiryAlert() {
+        item(null, "Empty future", 0, "2026-11-10");
+        assertThat(service.stats()).containsEntry("expiringCount", 0L);
+        assertThat(service.suggestions()).hasSize(1);
+        assertThat(service.suggestions().get(0)).containsEntry("urgency", "critical");
     }
     @Test void expiryOnlyAlertsCannotGeneratePurchasesAndOverlappingLowStockAppearsOnce() {
         long expired = item(null, "Expired", 5, "2026-11-07");

@@ -67,18 +67,21 @@ export default function Dashboard() {
   const hasStockSuggestions =
     suggestions?.some(
       (suggestion) =>
-        suggestion.urgency === "critical" || suggestion.urgency === "low",
+        suggestion.currentQuantity === 0 ||
+        suggestion.currentQuantity <= suggestion.minThreshold,
     ) ?? false;
 
   const handleGenerateShoppingList = async () => {
-    const items = (suggestions ?? [])
-      .filter(
-        (suggestion) =>
-          (suggestion.urgency === "critical" || suggestion.urgency === "low") &&
-          suggestion.inventoryItemId != null,
-      )
-      .map((suggestion) => ({
-        inventoryItemId: suggestion.inventoryItemId!,
+    const candidates = new Map<number, ReviewItem>();
+    for (const suggestion of suggestions ?? []) {
+      if (
+        suggestion.inventoryItemId == null ||
+        (suggestion.currentQuantity !== 0 &&
+          suggestion.currentQuantity > suggestion.minThreshold)
+      ) continue;
+      if (candidates.has(suggestion.inventoryItemId)) continue;
+      candidates.set(suggestion.inventoryItemId, {
+        inventoryItemId: suggestion.inventoryItemId,
         name: suggestion.name,
         category: suggestion.category,
         unit: suggestion.unit,
@@ -88,8 +91,9 @@ export default function Dashboard() {
           1,
         ),
         reason: suggestion.reason,
-      }));
-    setReviewItems(items);
+      });
+    }
+    setReviewItems([...candidates.values()]);
     setReviewOpen(true);
   };
 

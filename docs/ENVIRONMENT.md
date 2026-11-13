@@ -97,6 +97,8 @@ This claims all remaining unowned legacy rows for one account. Back up the datab
 
 The default full-stack application uses Spring Boot's embedded server on http://localhost:8080 for React assets and `/api`, including SSE. Maven includes `artifacts/grocery-app/dist/public` as classpath static resources; build React before running Maven directly. Docker Compose builds both frontend and backend from the repository root. Use `docker build -f backend/Dockerfile .` for a standalone image build.
 
+Deploy the frontend and backend from the same revision. The generated client, alert priority, and shopping-review behavior are a coordinated contract; deploy or roll back them together. After a deployment or rollback, refresh existing browser tabs before validating alerts or shopping-list review so stale frontend bundles and cached query data do not obscure the server behavior.
+
 Vite is optional for hot reload on port 5173. It reads shell variables in its configuration and proxies `/api` requests, including SSE, to Spring.
 
 Windows native example (Node.js 24 and JDK 17+ required), from the repository root:

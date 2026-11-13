@@ -50,7 +50,7 @@ export function getCategoryAttention(
 
     const isOutOfStock = item.quantity === 0;
     const isLowStock = !isOutOfStock && item.quantity <= item.minThreshold;
-    const expiringSoon = isExpiringSoon(item.expiresAt, now);
+    const expiringSoon = item.quantity > 0 && isExpiringSoon(item.expiresAt, now);
     const expired = item.quantity > 0 && isExpired(item.expiresAt, now);
 
     if (isOutOfStock) {
@@ -72,8 +72,8 @@ export function getCategoryAttention(
       (a, b) =>
         b.expired - a.expired ||
         b.outOfStock - a.outOfStock ||
-        b.lowStock - a.lowStock ||
         b.expiringSoon - a.expiringSoon ||
+        b.lowStock - a.lowStock ||
         a.category.localeCompare(b.category)
     );
 }
