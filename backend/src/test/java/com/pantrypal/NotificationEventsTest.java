@@ -11,6 +11,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
+import java.lang.reflect.Field;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -76,6 +77,60 @@ class NotificationEventsTest {
         queued.remove().run();
         assertThat(emitter.completed).isTrue();
         assertThat(emitter.payloads).doesNotContain(Map.of("type", "inventory_changed"));
+    }
+
+    @Test
+    void subscriptionRacingWithSessionRotationCannotLeaveAnActiveStream() throws Exception {
+        var notifications = new NotificationEvents(mock(PantryService.class), sessions());
+        var emitter = new BlockingEmitter();
+        emitter.blockDelivery = true;
+        var worker = Executors.newSingleThreadExecutor();
+        try {
+            var subscription = worker.submit(() -> notifications.subscribe(
+                authentication("1"), "rotated-session", emitter));
+            assertThat(emitter.deliveryStarted.await(5, TimeUnit.SECONDS)).isTrue();
+
+            notifications.disconnectSession("rotated-session");
+            assertThat(emitter.completed).isFalse();
+            emitter.releaseDelivery.countDown();
+            subscription.get(5, TimeUnit.SECONDS);
+
+            notifications.changed(new PantryService.PantryChanged("inventory_changed", 41L, 1L));
+            assertThat(emitter.completed).isTrue();
+            assertThat(emitter.payloads).doesNotContain(Map.of("type", "inventory_changed"));
+            assertThat(subscriberCount(notifications)).isZero();
+        } finally {
+            emitter.releaseDelivery.countDown();
+            worker.shutdownNow();
+            assertThat(worker.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+            notifications.disconnectSession("rotated-session");
+        }
+    }
+
+    @Test
+    void normalCompletionAndEmitterErrorsRemoveUnusedSessionGuards() throws Exception {
+        var notifications = new NotificationEvents(mock(PantryService.class), sessions());
+        var completed = new RecordingEmitter();
+        var failed = new RecordingEmitter();
+        notifications.subscribe(authentication("1"), "completed-session", completed);
+        notifications.subscribe(authentication("1"), "failed-session", failed);
+
+        removeSubscriber(notifications, 1L, completed);
+        removeSubscriber(notifications, 1L, failed);
+
+        assertThat(sessionGuardCount(notifications)).isZero();
+    }
+
+    @Test
+    void failedInitialRegistrationRemovesItsGuardWithoutCreatingARevocationTombstone() throws Exception {
+        var sessions = sessions();
+        when(sessions.findById("failed-registration")).thenThrow(
+            new DataAccessResourceFailureException("Session store unavailable"));
+        var notifications = new NotificationEvents(mock(PantryService.class), sessions);
+        notifications.subscribe(authentication("1"), "failed-registration", new RecordingEmitter());
+
+        assertThat(sessionGuardCount(notifications)).isZero();
+        assertThat(revokedSessionCount(notifications)).isZero();
     }
 
     @Test
@@ -255,6 +310,23 @@ class NotificationEventsTest {
     }
 
     @Test
+    void simultaneousSessionsForOneAccountRemainIndependentAcrossRevocation() {
+        NotificationEvents notifications = new NotificationEvents(mock(PantryService.class), sessions());
+        var firstSession = new RecordingEmitter();
+        var secondSession = new RecordingEmitter();
+        notifications.subscribe(authentication("1"), "same-account-a", firstSession);
+        notifications.subscribe(authentication("1"), "same-account-b", secondSession);
+
+        notifications.disconnectSession("same-account-a");
+        notifications.changed(new PantryService.PantryChanged("inventory_changed", 41L, 1L));
+
+        assertThat(firstSession.completed).isTrue();
+        assertThat(firstSession.payloads).doesNotContain(Map.of("type", "inventory_changed"));
+        assertThat(secondSession.completed).isFalse();
+        assertThat(secondSession.payloads).contains(Map.of("type", "inventory_changed"));
+    }
+
+    @Test
     void scheduledAlertChangesAndHeartbeatsStayWithinEachAccount() throws IOException {
         PantryService service = mock(PantryService.class);
         when(service.accountIds()).thenReturn(List.of(1L, 2L));
@@ -411,6 +483,126 @@ class NotificationEventsTest {
         }
     }
 
+    @Test
+    void stalledDeliveryForOneAccountDoesNotDelayLogoutForAnotherAccount() throws Exception {
+        var notifications = new NotificationEvents(mock(PantryService.class), sessions());
+        var stalled = new BlockingEmitter();
+        var other = new RecordingEmitter();
+        notifications.subscribe(authentication("1"), "account-a-session", stalled);
+        notifications.subscribe(authentication("2"), "account-b-session", other);
+        stalled.blockDelivery = true;
+
+        var workers = Executors.newFixedThreadPool(2);
+        try {
+            var delivery = workers.submit(() -> notifications.changed(
+                new PantryService.PantryChanged("inventory_changed", 41L, 1L)));
+            assertThat(stalled.deliveryStarted.await(5, TimeUnit.SECONDS)).isTrue();
+
+            var logout = workers.submit(() -> notifications.disconnectSession("account-b-session"));
+            logout.get(2, TimeUnit.SECONDS);
+            assertThat(other.completed).isTrue();
+
+            stalled.releaseDelivery.countDown();
+            delivery.get(5, TimeUnit.SECONDS);
+            assertThat(stalled.completed).isFalse();
+        } finally {
+            stalled.releaseDelivery.countDown();
+            workers.shutdownNow();
+            assertThat(workers.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+            notifications.disconnectSession("account-a-session");
+        }
+    }
+
+    @Test
+    void expiredSessionReceivesNoSignalBeforeTheNextCleanupSweep() {
+        var sessions = sessions();
+        var notifications = new NotificationEvents(mock(PantryService.class), sessions);
+        var emitter = new RecordingEmitter();
+        notifications.subscribe(authentication("1"), "expired-before-sweep", emitter);
+        emitter.payloads.clear();
+
+        var expired = new MapSession();
+        expired.setLastAccessedTime(Instant.EPOCH);
+        expired.setMaxInactiveInterval(Duration.ofSeconds(1));
+        when(sessions.findById("expired-before-sweep")).thenReturn(expired);
+
+        notifications.changed(new PantryService.PantryChanged("inventory_changed", 41L, 1L));
+        assertThat(emitter.payloads).doesNotContain(Map.of("type", "inventory_changed"));
+        assertThat(emitter.completed).isTrue();
+
+        notifications.checkExpiry();
+        assertThat(emitter.payloads).doesNotContain(Map.of("type", "heartbeat"));
+    }
+
+    @Test
+    void expiredRevocationTombstonesAndGuardsAreCleanedDuringTheExpirySweep() throws Exception {
+        var sessions = sessions();
+        var notifications = new NotificationEvents(mock(PantryService.class), sessions);
+        notifications.disconnectSession("expired-tombstone");
+        var blocked = new RecordingEmitter();
+        notifications.subscribe(authentication("1"), "expired-tombstone", blocked);
+        assertThat(blocked.completed).isTrue();
+        assertThat(subscriberCount(notifications)).isZero();
+        assertThat(revokedSessionCount(notifications)).isOne();
+
+        var expired = new MapSession();
+        expired.setLastAccessedTime(Instant.EPOCH);
+        expired.setMaxInactiveInterval(Duration.ofSeconds(1));
+        when(sessions.findById("expired-tombstone")).thenReturn(expired);
+
+        notifications.checkExpiry();
+        assertThat(sessionGuardCount(notifications)).isZero();
+        assertThat(revokedSessionCount(notifications)).isZero();
+
+        var expiredAgain = new RecordingEmitter();
+        notifications.subscribe(authentication("1"), "expired-tombstone", expiredAgain);
+        assertThat(expiredAgain.completed).isTrue();
+        assertThat(expiredAgain.payloads).isEmpty();
+        assertThat(subscriberCount(notifications)).isZero();
+    }
+
+    @Test
+    void concurrentCleanupAndSubscriptionShareTheSessionGuardAndPreserveOtherSessions() throws Exception {
+        var sessions = sessions();
+        var service = mock(PantryService.class);
+        when(service.accountIds()).thenReturn(List.of(1L));
+        when(service.suggestions(1L)).thenReturn(List.of());
+        var notifications = new NotificationEvents(service, sessions);
+        var active = new RecordingEmitter();
+        notifications.subscribe(authentication("1"), "active-session", active);
+
+        var expired = new MapSession();
+        expired.setLastAccessedTime(Instant.EPOCH);
+        expired.setMaxInactiveInterval(Duration.ofSeconds(1));
+        when(sessions.findById("active-session")).thenReturn(expired);
+
+        var start = new CountDownLatch(1);
+        var workers = Executors.newFixedThreadPool(2);
+        try {
+            var cleanup = workers.submit(() -> {
+                await(start);
+                notifications.checkExpiry();
+            });
+            var subscribe = workers.submit(() -> {
+                await(start);
+                return notifications.subscribe(authentication("1"), "active-session", new RecordingEmitter());
+            });
+            start.countDown();
+            cleanup.get(5, TimeUnit.SECONDS);
+            var replacement = (RecordingEmitter) subscribe.get(5, TimeUnit.SECONDS);
+
+            notifications.checkExpiry();
+            assertThat(active.completed).isTrue();
+            assertThat(replacement.completed).isTrue();
+            assertThat(active.payloads).doesNotContain(Map.of("type", "heartbeat"));
+            assertThat(replacement.payloads).doesNotContain(Map.of("type", "heartbeat"));
+            assertThat(subscriberCount(notifications)).isZero();
+            assertThat(sessionGuardCount(notifications)).isZero();
+        } finally {
+            workers.shutdownNow();
+        }
+    }
+
     @SuppressWarnings("unchecked")
     private SessionRepository<MapSession> sessions() {
         SessionRepository<MapSession> sessions = mock(SessionRepository.class);
@@ -424,12 +616,63 @@ class NotificationEventsTest {
         return authentication;
     }
 
+    private void await(CountDownLatch latch) {
+        try {
+            assertThat(latch.await(5, TimeUnit.SECONDS)).isTrue();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(e);
+        }
+    }
+
     private boolean isContractPayload(Object payload) {
         return Map.of("status", "connected").equals(payload)
             || Map.of("type", "inventory_changed").equals(payload)
             || Map.of("type", "purchase_completed").equals(payload)
             || Map.of("type", "alerts_changed").equals(payload)
             || Map.of("type", "heartbeat").equals(payload);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void removeSubscriber(NotificationEvents notifications, long accountId, RecordingEmitter emitter) throws Exception {
+        Field clientsField = NotificationEvents.class.getDeclaredField("clients");
+        clientsField.setAccessible(true);
+        var clients = (java.util.Map<Long, java.util.concurrent.CopyOnWriteArrayList<?>>) clientsField.get(notifications);
+        Object subscriber = clients.get(accountId).stream()
+            .filter(candidate -> {
+                try {
+                    Field emitterField = candidate.getClass().getDeclaredField("emitter");
+                    emitterField.setAccessible(true);
+                    return emitterField.get(candidate) == emitter;
+                } catch (ReflectiveOperationException e) {
+                    throw new AssertionError(e);
+                }
+            }).findFirst().orElseThrow();
+        var remove = NotificationEvents.class.getDeclaredMethod("removeClient", Long.class, subscriber.getClass());
+        remove.setAccessible(true);
+        remove.invoke(notifications, accountId, subscriber);
+    }
+
+    @SuppressWarnings("unchecked")
+    private int sessionGuardCount(NotificationEvents notifications) throws Exception {
+        Field field = NotificationEvents.class.getDeclaredField("sessionGuards");
+        field.setAccessible(true);
+        return ((Map<String, ?>) field.get(notifications)).size();
+    }
+
+    @SuppressWarnings("unchecked")
+    private int subscriberCount(NotificationEvents notifications) throws Exception {
+        Field field = NotificationEvents.class.getDeclaredField("clients");
+        field.setAccessible(true);
+        return ((Map<Long, java.util.concurrent.CopyOnWriteArrayList<?>>) field.get(notifications))
+            .values().stream().mapToInt(List::size).sum();
+    }
+
+    @SuppressWarnings("unchecked")
+    private int revokedSessionCount(NotificationEvents notifications) throws Exception {
+        Field field = NotificationEvents.class.getDeclaredField("revokedSessions");
+        field.setAccessible(true);
+        return ((java.util.Set<String>) field.get(notifications)).size();
     }
 
     private static class RecordingEmitter extends SseEmitter {

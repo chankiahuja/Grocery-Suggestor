@@ -28,6 +28,10 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 @RequestMapping("/api/notifications")
 public class NotificationEvents {
     private static final Logger log = LoggerFactory.getLogger(NotificationEvents.class);
+    private static final class SessionGuard {
+        private final Object monitor = new Object();
+        private int users;
+    }
     private static final class Subscriber {
         private final String sessionId;
         private final SseEmitter emitter;
@@ -89,6 +93,8 @@ public class NotificationEvents {
     }
 
     private final Map<Long,CopyOnWriteArrayList<Subscriber>> clients = new ConcurrentHashMap<>();
+    private final Set<String> revokedSessions = ConcurrentHashMap.newKeySet();
+    private final Map<String,SessionGuard> sessionGuards = new ConcurrentHashMap<>();
     private final PantryService service;
     private final SessionRepository<? extends Session> sessions;
     private final Executor deliveryExecutor;
@@ -112,11 +118,22 @@ public class NotificationEvents {
     SseEmitter subscribe(Authentication authentication, String sessionId, SseEmitter emitter) {
         long accountId = Long.parseLong(authentication.getName());
         var subscriber = new Subscriber(sessionId, emitter);
-        clients.compute(accountId, (ignored, accountClients) -> {
-            var registeredClients = accountClients == null ? new CopyOnWriteArrayList<Subscriber>() : accountClients;
-            registeredClients.add(subscriber);
-            return registeredClients;
-        });
+        if (sessionId != null) {
+            var guard = acquireSessionGuard(sessionId);
+            try {
+                synchronized (guard.monitor) {
+                    if (revokedSessions.contains(sessionId)) {
+                        subscriber.close();
+                        return emitter;
+                    }
+                    register(accountId, subscriber);
+                }
+            } finally {
+                releaseSessionGuard(sessionId, guard);
+            }
+        } else {
+            register(accountId, subscriber);
+        }
         emitter.onCompletion(() -> removeClient(accountId, subscriber));
         emitter.onTimeout(() -> removeClient(accountId, subscriber));
         emitter.onError(error -> removeClient(accountId, subscriber));
@@ -127,19 +144,30 @@ public class NotificationEvents {
     @TransactionalEventListener
     public void deleted(AccountDeletionService.AccountDeleted event) {
         var subscribers = clients.remove(event.accountId());
-        if (subscribers != null) subscribers.forEach(Subscriber::close);
+        if (subscribers != null) subscribers.forEach(subscriber -> {
+            subscriber.close();
+            cleanupSessionGuard(subscriber.sessionId);
+        });
         previousByAccount.remove(event.accountId());
     }
     public void disconnectSession(String sessionId) {
         if (sessionId == null) return;
-        clients.forEach((accountId, accountClients) -> {
-            for (var subscriber : accountClients) {
-                if (subscriber.belongsTo(sessionId)) {
-                    subscriber.close();
-                    removeClient(accountId, subscriber);
-                }
+        var guard = acquireSessionGuard(sessionId);
+        try {
+            synchronized (guard.monitor) {
+                revokedSessions.add(sessionId);
+                clients.forEach((accountId, accountClients) -> {
+                    for (var subscriber : accountClients) {
+                        if (subscriber.belongsTo(sessionId)) {
+                            subscriber.close();
+                            removeClient(accountId, subscriber);
+                        }
+                    }
+                });
             }
-        });
+        } finally {
+            releaseSessionGuard(sessionId, guard);
+        }
     }
     @TransactionalEventListener
     public void changed(PantryService.PantryChanged event) {
@@ -154,12 +182,12 @@ public class NotificationEvents {
     }
     @Scheduled(fixedDelayString="${pantrypal.expiry-check-ms:60000}")
     public synchronized void checkExpiry() {
+        cleanupRevokedSessions();
         clients.forEach((accountId, accountClients) -> {
             for (var subscriber : accountClients) {
                 try {
                     if (!sessionActive(subscriber.sessionId)) {
-                        subscriber.close();
-                        removeClient(accountId, subscriber);
+                        disconnectSession(subscriber.sessionId);
                     }
                 } catch (DataAccessException | CannotCreateTransactionException e) {
                     // A failed lookup does not establish expiry. Later sends must validate again.
@@ -198,13 +226,68 @@ public class NotificationEvents {
         var session = sessions.findById(sessionId);
         return session != null && !session.isExpired();
     }
+
+    private void cleanupRevokedSessions() {
+        for (String sessionId : revokedSessions) {
+            try {
+                if (sessionActive(sessionId)) continue;
+                var guard = acquireSessionGuard(sessionId);
+                try {
+                    synchronized (guard.monitor) {
+                        revokedSessions.remove(sessionId);
+                    }
+                } finally {
+                    releaseSessionGuard(sessionId, guard);
+                }
+            } catch (DataAccessException | CannotCreateTransactionException e) {
+                // Keep the tombstone when the session store is unavailable.
+            }
+        }
+    }
     private void send(Long accountId, Subscriber subscriber, SseEmitter.SseEventBuilder event) throws IOException {
-        if (!subscriber.send(event, () -> sessionActive(subscriber.sessionId))) removeClient(accountId, subscriber);
+        if (!subscriber.send(event, () -> sessionActive(subscriber.sessionId))) {
+            disconnectSession(subscriber.sessionId);
+            removeClient(accountId, subscriber);
+        }
+    }
+
+    private void register(Long accountId, Subscriber subscriber) {
+        clients.compute(accountId, (ignored, accountClients) -> {
+            var registeredClients = accountClients == null ? new CopyOnWriteArrayList<Subscriber>() : accountClients;
+            registeredClients.add(subscriber);
+            return registeredClients;
+        });
     }
     private void removeClient(Long accountId, Subscriber subscriber) {
         clients.computeIfPresent(accountId, (ignored, accountClients) -> {
             accountClients.remove(subscriber);
             return accountClients.isEmpty() ? null : accountClients;
         });
+        cleanupSessionGuard(subscriber.sessionId);
+    }
+    private SessionGuard acquireSessionGuard(String sessionId) {
+        return sessionGuards.compute(sessionId, (ignored, existing) -> {
+            var guard = existing == null ? new SessionGuard() : existing;
+            guard.users++;
+            return guard;
+        });
+    }
+    private void releaseSessionGuard(String sessionId, SessionGuard guard) {
+        sessionGuards.computeIfPresent(sessionId, (ignored, current) -> {
+            if (current != guard) return current;
+            current.users--;
+            return current.users == 0 && !revokedSessions.contains(sessionId)
+                && !hasSubscriber(sessionId) ? null : current;
+        });
+    }
+    private void cleanupSessionGuard(String sessionId) {
+        if (sessionId == null) return;
+        sessionGuards.computeIfPresent(sessionId, (ignored, current) ->
+            current.users == 0 && !revokedSessions.contains(sessionId)
+                && !hasSubscriber(sessionId) ? null : current);
+    }
+    private boolean hasSubscriber(String sessionId) {
+        return clients.values().stream().anyMatch(accountClients ->
+            accountClients.stream().anyMatch(subscriber -> subscriber.belongsTo(sessionId)));
     }
 }
