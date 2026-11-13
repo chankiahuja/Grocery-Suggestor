@@ -5,6 +5,7 @@ import {
   getListShoppingListsQueryKey,
   useUpdateShoppingList,
 } from "@workspace/api-client-react";
+import type { ShoppingListWithItems } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -60,8 +61,15 @@ export function RenameShoppingListDialog({
       const updatedList = await updateList.mutateAsync({ id: listId, data: { name: normalizedName } });
       const detailQueryKey = getGetShoppingListQueryKey(listId);
       await queryClient.cancelQueries({ queryKey: detailQueryKey });
-      queryClient.setQueryData(detailQueryKey, updatedList);
-      await queryClient.invalidateQueries({ queryKey: getListShoppingListsQueryKey() });
+      queryClient.setQueryData<ShoppingListWithItems>(detailQueryKey, (current) =>
+        current
+          ? { ...current, name: updatedList.name, updatedAt: updatedList.updatedAt }
+          : updatedList,
+      );
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: detailQueryKey }),
+        queryClient.invalidateQueries({ queryKey: getListShoppingListsQueryKey() }),
+      ]);
       toast({
         title: "Shopping list renamed",
         description: `The list is now named ${normalizedName}.`,

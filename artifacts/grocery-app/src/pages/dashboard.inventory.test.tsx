@@ -1111,7 +1111,7 @@ describe("shopping list selection and deletion", () => {
     assert.ok(screen.getByRole("progressbar", { name: "Weekend groceries: 0% complete" }));
   });
 
-  it("renames a populated list with the shared Unicode validation", async () => {
+  it("preserves newer item state while a rename is pending", async () => {
     const { api, queryClient } = await setup();
     const itemCount = api.state.lists[0].items.length;
     fireEvent.click(screen.getByRole("link", { name: "Weekend groceries" }));
@@ -1126,34 +1126,48 @@ describe("shopping list selection and deletion", () => {
     fireEvent.change(input, { target: { value: "\ufeffRenamed\u00a0 list\u3000" } });
 
     const detailQueryKey = getGetShoppingListQueryKey(api.state.lists[0].id);
+    const originalFetch = api.fetch;
+    let releaseRename!: () => void;
+    const renameReleased = new Promise<void>((resolve) => {
+      releaseRename = resolve;
+    });
+    let renameStarted = false;
+    globalThis.fetch = async (request, init) => {
+      if (String(request) === `/api/shopping-lists/${api.state.lists[0].id}` && init?.method === "PATCH") {
+        renameStarted = true;
+        const response = await originalFetch(request, init);
+        const staleResponseBody = await response.text();
+        await renameReleased;
+        return new Response(staleResponseBody, {
+          status: response.status,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return originalFetch(request, init);
+    };
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => assert.equal(renameStarted, true));
+
+    api.state.lists[0].items[0].quantity = 9;
+    api.state.lists[0].items[0].purchased = true;
     await act(async () => {
-      queryClient.setQueryData(detailQueryKey, {
+      queryClient.setQueryData<ShoppingListWithItems>(detailQueryKey, {
         ...queryClient.getQueryData<ShoppingListWithItems>(detailQueryKey)!,
-        name: "Background refresh",
+        items: api.state.lists[0].items.map((item) => ({ ...item })),
       });
     });
-    assert.equal((input as HTMLInputElement).value, "\ufeffRenamed\u00a0 list\u3000");
+    releaseRename();
 
-    let resolveStaleDetail!: (list: ShoppingListWithItems) => void;
-    const staleDetail = new Promise<ShoppingListWithItems>((resolve) => {
-      resolveStaleDetail = resolve;
-    });
-    let staleRequestStarted = false;
-    const staleRequest = queryClient
-      .fetchQuery({
-        queryKey: detailQueryKey,
-        queryFn: () => {
-          staleRequestStarted = true;
-          return staleDetail;
-        },
-      })
-      .catch(() => undefined);
-    await waitFor(() => assert.equal(staleRequestStarted, true));
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await screen.findByRole("heading", { name: "Renamed list" });
-    resolveStaleDetail({ ...api.state.lists[0], name: "Background refresh" });
-    await staleRequest;
-    assert.ok(screen.getByRole("heading", { name: "Renamed list" }));
+    assert.equal(
+      (screen.getByRole("spinbutton", { name: "Milk quantity" }) as HTMLInputElement).value,
+      "9",
+    );
+    assert.equal(
+      screen.getByRole("checkbox", { name: "Purchased Milk" }).getAttribute("data-state"),
+      "checked",
+    );
     assert.equal(api.state.lists[0].name, "Renamed\u00a0 list");
     assert.equal(api.state.lists[0].items.length, itemCount);
   });

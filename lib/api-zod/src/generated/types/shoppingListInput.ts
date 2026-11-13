@@ -10,7 +10,7 @@ export interface ShoppingListInput {
   /**
      * Leading and trailing boundary whitespace is removed before validation; the limit is 100 Unicode code points after trimming.
      * @minLength 1
-     * @maxLength 100
+     * @pattern ^(?:[\uD800-\uDBFF][\uDC00-\uDFFF]|[\s\S]){1,100}$
      */
   name: string;
 }
