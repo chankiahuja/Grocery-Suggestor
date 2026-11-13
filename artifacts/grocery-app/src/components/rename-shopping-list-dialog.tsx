@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   getGetShoppingListQueryKey,
@@ -38,12 +38,14 @@ export function RenameShoppingListDialog({
   const updateList = useUpdateShoppingList();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const wasOpen = useRef(false);
 
   useEffect(() => {
-    if (open) {
+    if (open && !wasOpen.current) {
       setName(currentName);
       setError(undefined);
     }
+    wasOpen.current = open;
   }, [currentName, open]);
 
   const handleSave = async () => {
@@ -56,7 +58,9 @@ export function RenameShoppingListDialog({
     setError(undefined);
     try {
       const updatedList = await updateList.mutateAsync({ id: listId, data: { name: normalizedName } });
-      queryClient.setQueryData(getGetShoppingListQueryKey(listId), updatedList);
+      const detailQueryKey = getGetShoppingListQueryKey(listId);
+      await queryClient.cancelQueries({ queryKey: detailQueryKey });
+      queryClient.setQueryData(detailQueryKey, updatedList);
       await queryClient.invalidateQueries({ queryKey: getListShoppingListsQueryKey() });
       toast({
         title: "Shopping list renamed",

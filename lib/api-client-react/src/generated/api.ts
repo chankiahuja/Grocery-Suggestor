@@ -1746,7 +1746,7 @@ export const getGetShoppingListQueryKey = (id: number,) => {
     }
 
 
-export const getGetShoppingListQueryOptions = <TData = Awaited<ReturnType<typeof getShoppingList>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getShoppingList>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetShoppingListQueryOptions = <TData = Awaited<ReturnType<typeof getShoppingList>>, TError = ErrorType<ErrorResponse>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getShoppingList>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -1765,14 +1765,14 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type GetShoppingListQueryResult = NonNullable<Awaited<ReturnType<typeof getShoppingList>>>
-export type GetShoppingListQueryError = ErrorType<unknown>
+export type GetShoppingListQueryError = ErrorType<ErrorResponse>
 
 
 /**
  * @summary Get shopping list with items
  */
 
-export function useGetShoppingList<TData = Awaited<ReturnType<typeof getShoppingList>>, TError = ErrorType<unknown>>(
+export function useGetShoppingList<TData = Awaited<ReturnType<typeof getShoppingList>>, TError = ErrorType<ErrorResponse>>(
  id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getShoppingList>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {

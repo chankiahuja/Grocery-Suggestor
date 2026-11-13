@@ -64,6 +64,7 @@ const { memoryLocation } = await import("wouter/memory-location");
 const {
   getGetGrocerySuggestionsQueryKey,
   getGetInventoryStatsQueryKey,
+  getGetShoppingListQueryKey,
   getListInventoryItemsQueryKey,
   getListShoppingListsQueryKey,
 } = await import("@workspace/api-client-react");
@@ -1111,7 +1112,7 @@ describe("shopping list selection and deletion", () => {
   });
 
   it("renames a populated list with the shared Unicode validation", async () => {
-    const { api } = await setup();
+    const { api, queryClient } = await setup();
     const itemCount = api.state.lists[0].items.length;
     fireEvent.click(screen.getByRole("link", { name: "Weekend groceries" }));
     await screen.findByRole("checkbox", { name: "Purchased Milk" });
@@ -1123,8 +1124,34 @@ describe("shopping list selection and deletion", () => {
     assert.ok(await screen.findByRole("alert"));
     assert.equal(api.state.lists[0].name, "Weekend groceries");
     fireEvent.change(input, { target: { value: "\ufeffRenamed\u00a0 list\u3000" } });
+
+    const detailQueryKey = getGetShoppingListQueryKey(api.state.lists[0].id);
+    await act(async () => {
+      queryClient.setQueryData(detailQueryKey, {
+        ...queryClient.getQueryData<ShoppingListWithItems>(detailQueryKey)!,
+        name: "Background refresh",
+      });
+    });
+    assert.equal((input as HTMLInputElement).value, "\ufeffRenamed\u00a0 list\u3000");
+
+    let resolveStaleDetail!: (list: ShoppingListWithItems) => void;
+    const staleDetail = new Promise<ShoppingListWithItems>((resolve) => {
+      resolveStaleDetail = resolve;
+    });
+    let staleRequestStarted = false;
+    const staleRequest = queryClient.fetchQuery({
+      queryKey: detailQueryKey,
+      queryFn: () => {
+        staleRequestStarted = true;
+        return staleDetail;
+      },
+    });
+    await waitFor(() => assert.equal(staleRequestStarted, true));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await screen.findByRole("heading", { name: "Renamed list" });
+    resolveStaleDetail({ ...api.state.lists[0], name: "Background refresh" });
+    await staleRequest.catch(() => undefined);
+    assert.ok(screen.getByRole("heading", { name: "Renamed list" }));
     assert.equal(api.state.lists[0].name, "Renamed\u00a0 list");
     assert.equal(api.state.lists[0].items.length, itemCount);
   });
