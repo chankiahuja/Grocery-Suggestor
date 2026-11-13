@@ -60,6 +60,9 @@ public class PantryService {
 
     // Explicit allowlist: client keys never become SQL identifiers.
     Map<String,Object> fields(Map<String,Object> body, boolean create, boolean inventory) {
+        return fields(body, create, inventory, true);
+    }
+    Map<String,Object> fields(Map<String,Object> body, boolean create, boolean inventory, boolean validateUnit) {
         Map<String,Object> result = new LinkedHashMap<>();
         for (String key : List.of("name", "category", "quantity", "unit", "minThreshold", "expiresAt", "notes", "inventoryItemId", "purchased")) {
             if (!inventory && List.of("minThreshold", "expiresAt").contains(key)) continue;
@@ -67,10 +70,10 @@ public class PantryService {
             if (!body.containsKey(key)) continue;
             Object value = body.get(key);
             if (List.of("name", "category", "unit").contains(key) && (!(value instanceof String s) || s.isBlank())) bad(key + " is required");
-            if (inventory && key.equals("unit")) {
+            if (key.equals("unit") && validateUnit) {
                 String unit = trimUnit((String) value);
                 if (unit.isEmpty()) bad("unit is required");
-                if (unit.length() > MAX_UNIT_LENGTH) bad("unit must be 64 characters or fewer");
+                if (unit.codePointCount(0, unit.length()) > MAX_UNIT_LENGTH) bad("unit must be 64 characters or fewer");
                 if (numericLookingUnit(unit)) bad("unit must describe a unit, not only a number");
                 value = unit;
             }
@@ -319,8 +322,11 @@ public class PantryService {
     }
     public Map<String,Object> addItem(long listId, Map<String,Object> body) { return addItem(null, listId, body); }
     public Map<String,Object> addItem(Long ownerId, long listId, Map<String,Object> body) {
+        return addItem(ownerId, listId, body, true);
+    }
+    private Map<String,Object> addItem(Long ownerId, long listId, Map<String,Object> body, boolean validateUnit) {
         lockOwner(ownerId);
-        list(ownerId, listId); var values = fields(body, true, false);
+        list(ownerId, listId); var values = fields(body, true, false, validateUnit);
         values.remove("purchased");
         if (values.get("inventory_item_id") != null) inventory(ownerId, ((Number)values.get("inventory_item_id")).longValue());
         values.put("shopping_list_id", listId);
@@ -332,7 +338,7 @@ public class PantryService {
     public Map<String,Object> updateItem(Long ownerId, long listId, long id, Map<String,Object> body) {
         lockOwner(ownerId);
         repo.one("SELECT * FROM shopping_list_items WHERE id=? AND shopping_list_id=? AND " + ownerWhere("account_id", ownerId), id, listId);
-        var values = fields(body, false, false); values.keySet().retainAll(Set.of("quantity", "notes", "purchased"));
+        var values = fields(body, false, false); values.keySet().retainAll(Set.of("quantity", "unit", "notes", "purchased"));
         repo.update("shopping_list_items", id, values, ownerId);
         return repo.one("SELECT " + SHOPPING_LIST_ITEM_COLUMNS + " FROM shopping_list_items WHERE id=? AND " + ownerWhere("account_id", ownerId), id);
     }
@@ -383,7 +389,7 @@ public class PantryService {
         for (var suggestion : selected.values()) {
             var body = new LinkedHashMap<>(suggestion);
             body.putIfAbsent("quantity", Math.max(number(suggestion,"minThreshold") - number(suggestion,"currentQuantity"), 1));
-            body.put("notes", suggestion.get("reason")); addItem(ownerId, listId, body);
+            body.put("notes", suggestion.get("reason")); addItem(ownerId, listId, body, false);
         }
         return list(ownerId, listId);
     }

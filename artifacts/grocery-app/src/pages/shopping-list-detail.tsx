@@ -41,6 +41,7 @@ export default function ShoppingListDetail() {
   const listId = Number(params.id);
 
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [itemToEdit, setItemToEdit] = useState<ShoppingListItem | null>(null);
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<ShoppingListItem | null>(
@@ -255,7 +256,10 @@ export default function ShoppingListDetail() {
             </div>
             <div className="flex flex-wrap gap-3">
               <Button
-                onClick={() => setAddDialogOpen(true)}
+                onClick={() => {
+                  setItemToEdit(null);
+                  setAddDialogOpen(true);
+                }}
                 data-testid="button-add-item"
               >
                 <Plus className="h-4 w-4 mr-2" />
@@ -372,6 +376,18 @@ export default function ShoppingListDetail() {
                           <Button
                             variant="outline"
                             size="sm"
+                            aria-label={`Edit ${item.name}`}
+                            onClick={() => {
+                              setItemToEdit(item);
+                              setAddDialogOpen(true);
+                            }}
+                            data-testid={`button-edit-item-${item.id}`}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
                             aria-label={`Remove ${item.name} from ${list.name}`}
                             onClick={() => handleDeleteClick(item)}
                             data-testid={`button-delete-item-${item.id}`}
@@ -397,8 +413,12 @@ export default function ShoppingListDetail() {
 
       <AddShoppingItemDialog
         open={addDialogOpen}
-        onOpenChange={setAddDialogOpen}
+        onOpenChange={(open) => {
+          setAddDialogOpen(open);
+          if (!open) setItemToEdit(null);
+        }}
         shoppingListId={listId}
+        item={itemToEdit ?? undefined}
       />
 
       <RenameShoppingListDialog

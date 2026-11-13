@@ -35,7 +35,8 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useNotifications } from "@/hooks/use-notifications";
-import { INVENTORY_UNIT_OPTIONS, isInvalidUnit } from "@/lib/inventory-units";
+import { isInvalidUnit } from "@/lib/inventory-units";
+import { UnitSelector } from "@/components/unit-selector";
 
 function nullableValue(value: string | undefined) {
   return value === "" || value === undefined ? null : value;
@@ -71,7 +72,6 @@ const formSchema = z.object({
 });
 
 type FormValues = z.infer<typeof formSchema>;
-type UnitMode = "preset" | "custom";
 
 interface InventoryItemDialogProps {
   open: boolean;
@@ -91,12 +91,6 @@ export function InventoryItemDialog({
 
   const createItem = useCreateInventoryItem();
   const updateItem = useUpdateInventoryItem();
-
-  const [unitMode, setUnitMode] = useState<UnitMode>(() =>
-    item?.unit && INVENTORY_UNIT_OPTIONS.includes(item.unit as typeof INVENTORY_UNIT_OPTIONS[number])
-      ? "preset"
-      : "custom",
-  );
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -123,11 +117,6 @@ export function InventoryItemDialog({
       expiresAt: item?.expiresAt || "",
       notes: item?.notes || "",
     });
-    setUnitMode(
-      item?.unit && INVENTORY_UNIT_OPTIONS.includes(item.unit as typeof INVENTORY_UNIT_OPTIONS[number])
-        ? "preset"
-        : "custom",
-    );
   }, [form, item, open]);
 
   const onSubmit = async (values: FormValues) => {
@@ -256,35 +245,14 @@ export function InventoryItemDialog({
                   <FormItem>
                     <FormLabel>Unit</FormLabel>
                     <FormControl>
-                      <select
-                        value={unitMode === "preset" ? field.value : "Custom"}
-                        onChange={(event) => {
-                          if (event.target.value === "Custom") {
-                            setUnitMode("custom");
-                            field.onChange("");
-                          } else {
-                            setUnitMode("preset");
-                            field.onChange(event.target.value);
-                          }
-                        }}
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                        data-testid="input-item-unit"
-                      >
-                        <option value="" disabled>Choose a unit</option>
-                        {INVENTORY_UNIT_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-                        <option value="Custom">Custom</option>
-                      </select>
-                    </FormControl>
-                    {unitMode === "custom" && (
-                      <Input
+                      <UnitSelector
                         value={field.value}
                         onChange={field.onChange}
-                        placeholder="Enter a custom text unit"
-                        aria-label="Custom unit"
-                        aria-invalid={fieldState.invalid}
-                        data-testid="input-item-custom-unit"
+                        selectTestId="input-item-unit"
+                        customInputTestId="input-item-custom-unit"
+                        invalid={fieldState.invalid}
                       />
-                    )}
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}

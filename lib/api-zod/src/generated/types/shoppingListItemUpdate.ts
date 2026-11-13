@@ -7,6 +7,12 @@
  */
 
 export interface ShoppingListItemUpdate {
+  /**
+     * Trim boundary whitespace, reject numeric-only units, and preserve valid custom text units.
+     * @minLength 1
+     * @maxLength 64
+     */
+  unit?: string;
   purchased?: boolean;
   /** @minimum 0 */
   quantity?: number;

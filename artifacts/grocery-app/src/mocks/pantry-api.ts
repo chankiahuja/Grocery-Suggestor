@@ -8,8 +8,17 @@ import {
   shoppingListNameError,
   trimShoppingListBoundaryWhitespace,
 } from "../lib/shopping-list-name";
+import { isInvalidUnit } from "../lib/inventory-units";
 
 export const MOCK_STORAGE_KEY = "pantrypal-demo-v1";
+function normalizeUnit(value: unknown): string | { error: string } {
+  if (typeof value !== "string") return { error: "unit is required" };
+  const unit = value.trim();
+  if (!unit) return { error: "unit is required" };
+  if (isInvalidUnit(unit)) return { error: "unit must describe a unit, not only a number" };
+  if ([...unit].length > 64) return { error: "unit must be 64 characters or fewer" };
+  return unit;
+}
 type State = {
   inventory: InventoryItem[];
   lists: ShoppingListWithItems[];
@@ -165,7 +174,7 @@ export class MockPantryApi {
     const method = (init?.method ?? request?.method ?? "GET").toUpperCase();
     const raw =
       init?.body ?? (request && method !== "GET" ? await request.text() : null);
-    const body = raw ? JSON.parse(String(raw)) : {};
+    let body = raw ? JSON.parse(String(raw)) : {};
     const parts = url.pathname.split("/").filter(Boolean).slice(1);
     const id = Number(parts[1]);
     const now = new Date().toISOString();
@@ -440,8 +449,11 @@ export class MockPantryApi {
       }
       if (parts[2] === "items") {
         if (parts.length === 3 && method === "POST") {
+          const unit = normalizeUnit(body.unit);
+          if (typeof unit !== "string") return this.json(unit, 400);
           const row = {
             ...body,
+            unit,
             id: this.state.nextId++,
             shoppingListId: id,
             inventoryItemId: body.inventoryItemId ?? null,
@@ -454,6 +466,11 @@ export class MockPantryApi {
         const row = list.items.find((i) => i.id === Number(parts[3]));
         if (!row) return missing();
         if (method === "PATCH") {
+          if (Object.prototype.hasOwnProperty.call(body, "unit")) {
+            const unit = normalizeUnit(body.unit);
+            if (typeof unit !== "string") return this.json(unit, 400);
+            body = { ...body, unit };
+          }
           Object.assign(row, body);
           return save(row);
         }

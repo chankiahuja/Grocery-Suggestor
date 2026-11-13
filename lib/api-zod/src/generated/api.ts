@@ -536,6 +536,7 @@ export const AddShoppingListItemParams = zod.object({
 
 export const addShoppingListItemBodyQuantityMin = 0;
 
+export const addShoppingListItemBodyUnitMax = 64;
 
 
 
@@ -544,7 +545,7 @@ export const AddShoppingListItemBody = zod.object({
   "name": zod.string().min(1),
   "category": zod.string().min(1),
   "quantity": zod.number().min(addShoppingListItemBodyQuantityMin),
-  "unit": zod.string().min(1),
+  "unit": zod.string().min(1).max(addShoppingListItemBodyUnitMax).describe('Trim boundary whitespace, reject numeric-only units, and preserve valid custom text units.'),
   "notes": zod.string().optional()
 })
 
@@ -569,11 +570,14 @@ export const UpdateShoppingListItemParams = zod.object({
   "itemId": zod.coerce.number()
 })
 
+export const updateShoppingListItemBodyUnitMax = 64;
+
 export const updateShoppingListItemBodyQuantityMin = 0;
 
 
 
 export const UpdateShoppingListItemBody = zod.object({
+  "unit": zod.string().min(1).max(updateShoppingListItemBodyUnitMax).optional().describe('Trim boundary whitespace, reject numeric-only units, and preserve valid custom text units.'),
   "purchased": zod.boolean().optional(),
   "quantity": zod.number().min(updateShoppingListItemBodyQuantityMin).optional(),
   "notes": zod.string().optional()

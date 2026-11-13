@@ -58,8 +58,8 @@ class PantryFlowTest {
     }
     @Test void shoppingListsPreserveNumericUnitsAndLegacyGeneratedUnits() {
         long listId = PantryService.id(service.createList(Map.of("name", "Numeric units")));
-        var direct = service.addItem(listId, Map.of("name", "Legacy sugar", "category", "Pantry", "quantity", 2, "unit", "2"));
-        assertThat(direct.get("unit")).isEqualTo("2");
+        assertThatThrownBy(() -> service.addItem(listId, Map.of("name", "Legacy sugar", "category", "Pantry", "quantity", 2, "unit", "2")))
+            .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
 
         long legacyId = repository.insert("inventory_items", Map.of(
             "name", "Legacy rice", "category", "Grains", "quantity", 0, "unit", "2", "min_threshold", 1));

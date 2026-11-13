@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   useAddShoppingListItem,
+  useUpdateShoppingListItem,
   getGetShoppingListQueryKey,
 } from '@workspace/api-client-react';
+import type { ShoppingListItem } from '@workspace/api-client-react';
 import {
   Dialog,
   DialogContent,
@@ -26,12 +28,18 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
+import { isInvalidUnit } from '@/lib/inventory-units';
+import { UnitSelector } from '@/components/unit-selector';
 
 const formSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   category: z.string().min(1, 'Category is required'),
   quantity: z.coerce.number().min(0, 'Quantity must be 0 or greater'),
-  unit: z.string().min(1, 'Unit is required'),
+  unit: z.string()
+    .trim()
+    .min(1, 'Unit is required')
+    .max(64, 'Unit must be 64 characters or fewer')
+    .refine((value) => !isInvalidUnit(value), 'Choose a unit or enter a custom text unit'),
   notes: z.string().optional(),
 });
 
@@ -41,18 +49,21 @@ interface AddShoppingItemDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   shoppingListId: number;
+  item?: ShoppingListItem;
 }
 
 export function AddShoppingItemDialog({
   open,
   onOpenChange,
   shoppingListId,
+  item,
 }: AddShoppingItemDialogProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const addItem = useAddShoppingListItem();
+  const updateItem = useUpdateShoppingListItem();
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -65,20 +76,43 @@ export function AddShoppingItemDialog({
     },
   });
 
+  useEffect(() => {
+    if (!open) return;
+    form.reset({
+      name: item?.name ?? '',
+      category: item?.category ?? '',
+      quantity: item?.quantity ?? 1,
+      unit: item?.unit ?? '',
+      notes: item?.notes ?? '',
+    });
+  }, [form, item, open]);
+
   const onSubmit = async (values: FormValues) => {
     setIsSubmitting(true);
     try {
-      await addItem.mutateAsync({
-        id: shoppingListId,
-        data: {
-          ...values,
-          notes: values.notes || undefined,
-        },
-      });
+      if (item) {
+        await updateItem.mutateAsync({
+          id: shoppingListId,
+          itemId: item.id,
+          data: {
+            quantity: values.quantity,
+            unit: values.unit,
+            notes: values.notes || undefined,
+          },
+        });
+      } else {
+        await addItem.mutateAsync({
+          id: shoppingListId,
+          data: {
+            ...values,
+            notes: values.notes || undefined,
+          },
+        });
+      }
 
       toast({
-        title: 'Item added',
-        description: `${values.name} added to shopping list.`,
+        title: item ? 'Item updated' : 'Item added',
+        description: `${values.name} ${item ? 'updated' : 'added'} ${item ? 'in' : 'to'} the shopping list.`,
       });
 
       queryClient.invalidateQueries({
@@ -90,7 +124,7 @@ export function AddShoppingItemDialog({
     } catch (error) {
       toast({
         title: 'Error',
-        description: 'Failed to add item. Please try again.',
+        description: `Failed to ${item ? 'update' : 'add'} item. Please try again.`,
         variant: 'destructive',
       });
     } finally {
@@ -100,9 +134,9 @@ export function AddShoppingItemDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent data-testid="dialog-add-shopping-item">
+      <DialogContent data-testid={item ? "dialog-edit-shopping-item" : "dialog-add-shopping-item"}>
         <DialogHeader>
-          <DialogTitle>Add Item to Shopping List</DialogTitle>
+          <DialogTitle>{item ? "Edit Shopping List Item" : "Add Item to Shopping List"}</DialogTitle>
         </DialogHeader>
 
         <Form {...form}>
@@ -115,7 +149,7 @@ export function AddShoppingItemDialog({
                   <FormItem className="col-span-2">
                     <FormLabel>Name</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="e.g. Bread" data-testid="input-shopping-item-name" />
+                      <Input {...field} disabled={Boolean(item)} placeholder="e.g. Bread" data-testid="input-shopping-item-name" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -129,7 +163,7 @@ export function AddShoppingItemDialog({
                   <FormItem>
                     <FormLabel>Category</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="e.g. Bakery" data-testid="input-shopping-item-category" />
+                      <Input {...field} disabled={Boolean(item)} placeholder="e.g. Bakery" data-testid="input-shopping-item-category" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -139,11 +173,17 @@ export function AddShoppingItemDialog({
               <FormField
                 control={form.control}
                 name="unit"
-                render={({ field }) => (
+                render={({ field, fieldState }) => (
                   <FormItem>
                     <FormLabel>Unit</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="e.g. loaf" data-testid="input-shopping-item-unit" />
+                      <UnitSelector
+                        value={field.value}
+                        onChange={field.onChange}
+                        selectTestId="input-shopping-item-unit"
+                        customInputTestId="input-shopping-item-custom-unit"
+                        invalid={fieldState.invalid}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -189,7 +229,7 @@ export function AddShoppingItemDialog({
                 Cancel
               </Button>
               <Button type="submit" disabled={isSubmitting} data-testid="button-add-shopping-item">
-                {isSubmitting ? 'Adding...' : 'Add Item'}
+                {isSubmitting ? (item ? 'Updating...' : 'Adding...') : (item ? 'Update Item' : 'Add Item')}
               </Button>
             </DialogFooter>
           </form>
