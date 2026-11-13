@@ -300,6 +300,9 @@ test("demo reviewed list preserves quantities and exclusions through reload and 
   const reloaded = new MockPantryApi(JSON.parse(stored));
   const persisted = await (await reloaded.fetch(`/api/shopping-lists/${list.id}`)).json();
   assert.deepEqual(persisted, list);
+  const linkedItem = reloaded.state.lists.find((candidate) => candidate.id === list.id)!.items[0];
+  assert.equal(linkedItem.inventoryItemId, 1);
+  assert.equal(linkedItem.unit, reloaded.state.inventory.find((item) => item.id === 1)!.unit);
   const before = reloaded.state.inventory.map(item => item.quantity);
   assert.equal((await reloaded.fetch(`/api/shopping-lists/${list.id}/items/${list.items[0].id}`, {
     method: "PATCH", body: JSON.stringify({ purchased: true }),
@@ -310,6 +313,8 @@ test("demo reviewed list preserves quantities and exclusions through reload and 
   }
   assert.deepEqual(reloaded.state.inventory.map(item => item.quantity),
     before.map((quantity, index) => index === 0 ? quantity + 7.5 : quantity));
+  assert.equal(linkedItem.inventoryItemId, 1);
+  assert.equal(linkedItem.unit, reloaded.state.inventory.find((item) => item.id === 1)!.unit);
 });
 
 test("demo reviewed list validates all selections before changing stored state", async () => {
