@@ -7,7 +7,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "test": "tsx --test src/shopping-list-name.test.ts"
+    "test": "tsx --test src/shopping-list-name.test.ts src/shopping-list-item.test.ts"
   },
   "dependencies": {
     "zod": "catalog:"

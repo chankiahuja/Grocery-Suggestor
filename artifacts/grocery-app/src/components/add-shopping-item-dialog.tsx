@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -8,7 +8,7 @@ import {
   useUpdateShoppingListItem,
   getGetShoppingListQueryKey,
 } from '@workspace/api-client-react';
-import type { ShoppingListItem } from '@workspace/api-client-react';
+import type { ShoppingListItem, ShoppingListItemUpdate } from '@workspace/api-client-react';
 import {
   Dialog,
   DialogContent,
@@ -42,6 +42,7 @@ const formSchema = z.object({
     .refine((value) => !isInvalidUnit(value), 'Choose a unit or enter a custom text unit'),
   notes: z.string().optional(),
 });
+const linkedItemFormSchema = formSchema.extend({ unit: z.string() });
 
 type FormValues = z.infer<typeof formSchema>;
 
@@ -66,9 +67,13 @@ export function AddShoppingItemDialog({
 
   const addItem = useAddShoppingListItem();
   const updateItem = useUpdateShoppingListItem();
+  const resolver = useMemo(
+    () => zodResolver(item?.inventoryItemId != null ? linkedItemFormSchema : formSchema),
+    [item?.inventoryItemId],
+  );
 
   const form = useForm<FormValues>({
-    resolver: zodResolver(formSchema),
+    resolver,
     defaultValues: {
       name: '',
       category: '',
@@ -93,14 +98,15 @@ export function AddShoppingItemDialog({
     setIsSubmitting(true);
     try {
       if (item) {
+        const data: ShoppingListItemUpdate = {
+          notes: values.notes ?? '',
+          ...(values.quantity !== item.quantity ? { quantity: values.quantity } : {}),
+          ...(item.inventoryItemId == null ? { unit: values.unit } : {}),
+        };
         const updatedItem = await updateItem.mutateAsync({
           id: shoppingListId,
           itemId: item.id,
-          data: {
-            quantity: values.quantity,
-            unit: values.unit,
-            notes: values.notes,
-          },
+          data,
         });
         onItemUpdated?.(updatedItem);
       } else {
@@ -187,8 +193,12 @@ export function AddShoppingItemDialog({
                         selectTestId="input-shopping-item-unit"
                         customInputTestId="input-shopping-item-custom-unit"
                         invalid={fieldState.invalid}
+                        disabled={item?.inventoryItemId != null}
                       />
                     </FormControl>
+                    {item?.inventoryItemId != null && (
+                      <p className="text-sm text-muted-foreground">Unit comes from the linked inventory item.</p>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}

@@ -1100,8 +1100,7 @@ components:
         unit:
           type: string
           minLength: 1
-          maxLength: 64
-          description: Trim boundary whitespace, reject numeric-only units, and preserve valid custom text units.
+          description: Trim boundary whitespace, then require 1-64 Unicode code points, reject numeric-only units, and preserve valid custom text units.
         notes:
           type: string
       required:
@@ -1116,8 +1115,7 @@ components:
         unit:
           type: string
           minLength: 1
-          maxLength: 64
-          description: Trim boundary whitespace, reject numeric-only units, and preserve valid custom text units.
+          description: Trim boundary whitespace, then require 1-64 Unicode code points, reject numeric-only units, and preserve valid custom text units.
         purchased:
           type: boolean
         quantity:

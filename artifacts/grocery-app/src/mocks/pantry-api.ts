@@ -469,6 +469,12 @@ export class MockPantryApi {
           if (Object.prototype.hasOwnProperty.call(body, "unit")) {
             const unit = normalizeUnit(body.unit);
             if (typeof unit !== "string") return this.json(unit, 400);
+            if (row.inventoryItemId != null) {
+              const inventoryItem = this.state.inventory.find((candidate) => candidate.id === row.inventoryItemId);
+              if (inventoryItem && unit !== inventoryItem.unit.trim()) {
+                return this.json({ error: "Inventory-linked items must use the inventory unit" }, 400);
+              }
+            }
             body = { ...body, unit };
           }
           Object.assign(row, body);

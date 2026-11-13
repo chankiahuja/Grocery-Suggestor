@@ -8,6 +8,7 @@
 import * as zod from 'zod';
 
 import { preprocessShoppingListNameBody } from '../shopping-list-name-preprocessor';
+import { preprocessShoppingListItemBody } from '../shopping-list-item-preprocessor';
 
 /**
  * @summary Check whether this session verified email within the last five minutes
@@ -529,25 +530,26 @@ export const DeleteShoppingListResponse = zod.void()
  * @summary Add item to shopping list
  */
 export const AddShoppingListItemParams = zod.object({
-  "id": zod.coerce.number()
+  "id": zod.number()
 })
 
 
 
 export const addShoppingListItemBodyQuantityMin = 0;
 
-export const addShoppingListItemBodyUnitMax = 64;
 
 
+export const addShoppingListItemBodyUnitRegExp = new RegExp('^(?![0-9]+$)(?:[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]|[^\\uD800-\\uDBFF]|[\\uD800-\\uDBFF](?![\\uDC00-\\uDFFF])){1,64}$');
 
-export const AddShoppingListItemBody = zod.object({
+
+export const AddShoppingListItemBody = zod.preprocess(preprocessShoppingListItemBody, zod.object({
   "inventoryItemId": zod.number().optional(),
   "name": zod.string().min(1),
   "category": zod.string().min(1),
   "quantity": zod.number().min(addShoppingListItemBodyQuantityMin),
-  "unit": zod.string().min(1).max(addShoppingListItemBodyUnitMax).describe('Trim boundary whitespace, reject numeric-only units, and preserve valid custom text units.'),
+  "unit": zod.string().min(1).regex(addShoppingListItemBodyUnitRegExp).describe('Trim boundary whitespace, then require 1-64 Unicode code points, reject numeric-only units, and preserve valid custom text units.'),
   "notes": zod.string().optional()
-})
+}))
 
 export const AddShoppingListItemResponse = zod.object({
   "id": zod.number(),
@@ -566,22 +568,23 @@ export const AddShoppingListItemResponse = zod.object({
  * @summary Update a shopping list item (e.g., mark as purchased)
  */
 export const UpdateShoppingListItemParams = zod.object({
-  "id": zod.coerce.number(),
-  "itemId": zod.coerce.number()
+  "id": zod.number(),
+  "itemId": zod.number()
 })
 
-export const updateShoppingListItemBodyUnitMax = 64;
 
+
+export const updateShoppingListItemBodyUnitRegExp = new RegExp('^(?![0-9]+$)(?:[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]|[^\\uD800-\\uDBFF]|[\\uD800-\\uDBFF](?![\\uDC00-\\uDFFF])){1,64}$');
 export const updateShoppingListItemBodyQuantityMin = 0;
 
 
 
-export const UpdateShoppingListItemBody = zod.object({
-  "unit": zod.string().min(1).max(updateShoppingListItemBodyUnitMax).optional().describe('Trim boundary whitespace, reject numeric-only units, and preserve valid custom text units.'),
+export const UpdateShoppingListItemBody = zod.preprocess(preprocessShoppingListItemBody, zod.object({
+  "unit": zod.string().min(1).regex(updateShoppingListItemBodyUnitRegExp).optional().describe('Trim boundary whitespace, then require 1-64 Unicode code points, reject numeric-only units, and preserve valid custom text units.'),
   "purchased": zod.boolean().optional(),
   "quantity": zod.number().min(updateShoppingListItemBodyQuantityMin).optional(),
   "notes": zod.string().optional()
-})
+}))
 
 export const UpdateShoppingListItemResponse = zod.object({
   "id": zod.number(),

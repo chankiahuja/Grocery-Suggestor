@@ -28,6 +28,27 @@ test("demo shopping-list creation and rename share Unicode name validation", asy
   })).status, 200);
 });
 
+test("demo rejects incompatible linked units before changing any fields", async () => {
+  const api = new MockPantryApi();
+  const row = api.state.lists[0].items[0];
+  const before = structuredClone(row);
+  const rejected = await api.fetch(`/api/shopping-lists/20/items/${row.id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ quantity: 99, notes: "changed", unit: "kg" }),
+  });
+  assert.equal(rejected.status, 400);
+  assert.deepEqual(row, before);
+
+  row.unit = "legacy-invalid-unit";
+  const omittedUnit = await api.fetch(`/api/shopping-lists/20/items/${row.id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ notes: "" }),
+  });
+  assert.equal(omittedUnit.status, 200);
+  assert.equal(row.unit, "legacy-invalid-unit");
+  assert.equal(row.notes, "");
+});
+
 test("expired demo alerts clear on correction and never create expiry-only purchases", async () => {
   const api = new MockPantryApi();
   const template = api.state.inventory[0];

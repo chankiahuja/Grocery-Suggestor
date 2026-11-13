@@ -27,6 +27,14 @@ const zodTransformer: InputTransformerFn = (config) => {
     nameSchema.pattern = "^(?:[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]|[^\\uD800-\\uDBFF]|[\\uD800-\\uDBFF](?![\\uDC00-\\uDFFF])){1,100}$";
   }
 
+  for (const schemaName of ["ShoppingListItemInput", "ShoppingListItemUpdate"]) {
+    const unitSchema = config.components?.schemas?.[schemaName]?.properties?.unit;
+    if (unitSchema && typeof unitSchema === "object" && !Array.isArray(unitSchema)) {
+      delete unitSchema.maxLength;
+      unitSchema.pattern = "^(?![0-9]+$)(?:[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]|[^\\uD800-\\uDBFF]|[\\uD800-\\uDBFF](?![\\uDC00-\\uDFFF])){1,64}$";
+    }
+  }
+
   return config;
 };
 
@@ -99,6 +107,26 @@ export default defineConfig({
                 body: {
                   path: "shopping-list-name-preprocessor.ts",
                   name: "preprocessShoppingListNameBody",
+                },
+              },
+            },
+          },
+          addShoppingListItem: {
+            zod: {
+              preprocess: {
+                body: {
+                  path: "shopping-list-item-preprocessor.ts",
+                  name: "preprocessShoppingListItemBody",
+                },
+              },
+            },
+          },
+          updateShoppingListItem: {
+            zod: {
+              preprocess: {
+                body: {
+                  path: "shopping-list-item-preprocessor.ts",
+                  name: "preprocessShoppingListItemBody",
                 },
               },
             },
