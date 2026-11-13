@@ -127,6 +127,7 @@ public class NotificationEvents {
                         subscriber.close();
                         return emitter;
                     }
+                    beforeSubscriberRegistration(sessionId);
                     register(accountId, subscriber);
                 }
             } finally {
@@ -142,6 +143,9 @@ public class NotificationEvents {
         catch (IOException | DataAccessException | CannotCreateTransactionException e) { subscriber.close(); removeClient(accountId, subscriber); }
         return emitter;
     }
+    void beforeSubscriberRegistration(String sessionId) {
+        // Test seam for deterministic subscription/revocation interleavings.
+    }
     @TransactionalEventListener
     public void deleted(AccountDeletionService.AccountDeleted event) {
         var subscribers = clients.remove(event.accountId());
@@ -154,6 +158,7 @@ public class NotificationEvents {
     public void disconnectSession(String sessionId) {
         if (sessionId == null) return;
         var guard = acquireSessionGuard(sessionId);
+        beforeSessionRevocation(sessionId);
         try {
             synchronized (guard.monitor) {
                 revokedSessions.add(sessionId);
@@ -169,6 +174,9 @@ public class NotificationEvents {
         } finally {
             releaseSessionGuard(sessionId, guard);
         }
+    }
+    void beforeSessionRevocation(String sessionId) {
+        // Test seam for deterministic subscription/revocation interleavings.
     }
     @TransactionalEventListener
     public void changed(PantryService.PantryChanged event) {

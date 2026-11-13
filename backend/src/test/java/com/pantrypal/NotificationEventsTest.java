@@ -81,28 +81,44 @@ class NotificationEventsTest {
 
     @Test
     void subscriptionRacingWithSessionRotationCannotLeaveAnActiveStream() throws Exception {
-        var notifications = new NotificationEvents(mock(PantryService.class), sessions());
-        var emitter = new BlockingEmitter();
-        emitter.blockDelivery = true;
-        var worker = Executors.newSingleThreadExecutor();
-        try {
-            var subscription = worker.submit(() -> notifications.subscribe(
-                authentication("1"), "rotated-session", emitter));
-            assertThat(emitter.deliveryStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        var registrationWindowEntered = new CountDownLatch(1);
+        var releaseRegistration = new CountDownLatch(1);
+        var revocationStarted = new CountDownLatch(1);
+        var notifications = new NotificationEvents(mock(PantryService.class), sessions()) {
+            @Override
+            void beforeSubscriberRegistration(String sessionId) {
+                if ("rotated-session".equals(sessionId)) {
+                    registrationWindowEntered.countDown();
+                    await(releaseRegistration);
+                }
+            }
 
-            notifications.disconnectSession("rotated-session");
-            assertThat(emitter.completed).isFalse();
-            emitter.releaseDelivery.countDown();
+            @Override
+            void beforeSessionRevocation(String sessionId) {
+                if ("rotated-session".equals(sessionId)) revocationStarted.countDown();
+            }
+        };
+        var emitter = new RecordingEmitter();
+        var workers = Executors.newFixedThreadPool(2);
+        try {
+            var subscription = workers.submit(() -> notifications.subscribe(
+                authentication("1"), "rotated-session", emitter));
+            assertThat(registrationWindowEntered.await(5, TimeUnit.SECONDS)).isTrue();
+
+            var revocation = workers.submit(() -> notifications.disconnectSession("rotated-session"));
+            assertThat(revocationStarted.await(5, TimeUnit.SECONDS)).isTrue();
+            releaseRegistration.countDown();
             subscription.get(5, TimeUnit.SECONDS);
+            revocation.get(5, TimeUnit.SECONDS);
 
             notifications.changed(new PantryService.PantryChanged("inventory_changed", 41L, 1L));
             assertThat(emitter.completed).isTrue();
             assertThat(emitter.payloads).doesNotContain(Map.of("type", "inventory_changed"));
             assertThat(subscriberCount(notifications)).isZero();
         } finally {
-            emitter.releaseDelivery.countDown();
-            worker.shutdownNow();
-            assertThat(worker.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+            releaseRegistration.countDown();
+            workers.shutdownNow();
+            assertThat(workers.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
             notifications.disconnectSession("rotated-session");
         }
     }
@@ -158,17 +174,21 @@ class NotificationEventsTest {
     }
 
     @Test
-    void normalCompletionAndEmitterErrorsRemoveUnusedSessionGuards() throws Exception {
+    void registeredEmitterCallbacksRemoveUnusedSessionGuards() throws Exception {
         var notifications = new NotificationEvents(mock(PantryService.class), sessions());
         var completed = new RecordingEmitter();
+        var timedOut = new RecordingEmitter();
         var failed = new RecordingEmitter();
         notifications.subscribe(authentication("1"), "completed-session", completed);
+        notifications.subscribe(authentication("1"), "timed-out-session", timedOut);
         notifications.subscribe(authentication("1"), "failed-session", failed);
 
-        removeSubscriber(notifications, 1L, completed);
-        removeSubscriber(notifications, 1L, failed);
+        completed.fireCompletion();
+        timedOut.fireTimeout();
+        failed.fireError(new IOException("client disconnected"));
 
         assertThat(sessionGuardCount(notifications)).isZero();
+        assertThat(subscriberCount(notifications)).isZero();
     }
 
     @Test
@@ -684,26 +704,6 @@ class NotificationEventsTest {
     }
 
     @SuppressWarnings("unchecked")
-    private void removeSubscriber(NotificationEvents notifications, long accountId, RecordingEmitter emitter) throws Exception {
-        Field clientsField = NotificationEvents.class.getDeclaredField("clients");
-        clientsField.setAccessible(true);
-        var clients = (java.util.Map<Long, java.util.concurrent.CopyOnWriteArrayList<?>>) clientsField.get(notifications);
-        Object subscriber = clients.get(accountId).stream()
-            .filter(candidate -> {
-                try {
-                    Field emitterField = candidate.getClass().getDeclaredField("emitter");
-                    emitterField.setAccessible(true);
-                    return emitterField.get(candidate) == emitter;
-                } catch (ReflectiveOperationException e) {
-                    throw new AssertionError(e);
-                }
-            }).findFirst().orElseThrow();
-        var remove = NotificationEvents.class.getDeclaredMethod("removeClient", Long.class, subscriber.getClass());
-        remove.setAccessible(true);
-        remove.invoke(notifications, accountId, subscriber);
-    }
-
-    @SuppressWarnings("unchecked")
     private int sessionGuardCount(NotificationEvents notifications) throws Exception {
         Field field = NotificationEvents.class.getDeclaredField("sessionGuards");
         field.setAccessible(true);
@@ -728,6 +728,39 @@ class NotificationEventsTest {
     private static class RecordingEmitter extends SseEmitter {
         final List<Object> payloads = new ArrayList<>();
         volatile boolean completed;
+        private Runnable completionCallback;
+        private Runnable timeoutCallback;
+        private java.util.function.Consumer<Throwable> errorCallback;
+
+        @Override
+        public void onCompletion(Runnable callback) {
+            completionCallback = callback;
+            super.onCompletion(callback);
+        }
+
+        @Override
+        public void onTimeout(Runnable callback) {
+            timeoutCallback = callback;
+            super.onTimeout(callback);
+        }
+
+        @Override
+        public void onError(java.util.function.Consumer<Throwable> callback) {
+            errorCallback = callback;
+            super.onError(callback);
+        }
+
+        void fireCompletion() {
+            completionCallback.run();
+        }
+
+        void fireTimeout() {
+            timeoutCallback.run();
+        }
+
+        void fireError(Throwable error) {
+            errorCallback.accept(error);
+        }
 
         @Override
         public void complete() {
