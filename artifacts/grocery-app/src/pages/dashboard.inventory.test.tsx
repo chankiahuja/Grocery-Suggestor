@@ -1172,6 +1172,75 @@ describe("shopping list selection and deletion", () => {
     assert.equal(api.state.lists[0].items.length, itemCount);
   });
 
+  it("does not let a unit-and-notes edit overwrite a newer inline quantity save", async () => {
+    const { api } = await setup();
+    fireEvent.click(screen.getByRole("link", { name: "Weekend groceries" }));
+    await screen.findByRole("checkbox", { name: "Purchased Milk" });
+
+    const originalFetch = api.fetch;
+    let releaseQuantity!: () => void;
+    const quantityReleased = new Promise<void>((resolve) => { releaseQuantity = resolve; });
+    let quantityStarted = false;
+    const bodies: Record<string, unknown>[] = [];
+    globalThis.fetch = async (input, init) => {
+      if (String(input) === "/api/shopping-lists/20/items/21" && init?.method === "PATCH") {
+        const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+        bodies.push(body);
+        if (body.quantity === 9) {
+          quantityStarted = true;
+          await quantityReleased;
+        }
+      }
+      return originalFetch(input, init);
+    };
+
+    const quantity = screen.getByRole("spinbutton", { name: "Milk quantity" });
+    fireEvent.change(quantity, { target: { value: "9" } });
+    fireEvent.blur(quantity);
+    await waitFor(() => assert.equal(quantityStarted, true));
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Milk" }));
+    await screen.findByTestId("dialog-edit-shopping-item");
+    fireEvent.change(screen.getByTestId("input-shopping-item-notes"), { target: { value: "Updated note" } });
+    releaseQuantity();
+    fireEvent.click(screen.getByTestId("button-add-shopping-item"));
+
+    await waitFor(() => assert.equal(api.state.lists[0].items[0].quantity, 9));
+    await waitFor(() => assert.equal(api.state.lists[0].items[0].notes, "Updated note"));
+    assert.equal(bodies[1]?.quantity, undefined);
+    assert.equal((screen.getByRole("spinbutton", { name: "Milk quantity" }) as HTMLInputElement).value, "9");
+  });
+
+  it("prefills linked units, switches preset/custom modes, and validates custom units", async () => {
+    const { api } = await setup();
+    fireEvent.click(screen.getByRole("link", { name: "Weekend groceries" }));
+    await screen.findByRole("checkbox", { name: "Purchased Milk" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Milk" }));
+    await screen.findByTestId("dialog-edit-shopping-item");
+    assert.equal((screen.getByTestId("input-shopping-item-unit") as HTMLSelectElement).value, "Custom");
+    assert.equal((screen.getByTestId("input-shopping-item-custom-unit") as HTMLInputElement).value, "litres");
+    assert.equal((screen.getByTestId("input-shopping-item-unit") as HTMLSelectElement).disabled, true);
+    fireEvent.click(screen.getByTestId("button-cancel"));
+
+    fireEvent.click(screen.getByTestId("button-add-item"));
+    await screen.findByTestId("dialog-add-shopping-item");
+    fireEvent.change(screen.getByTestId("input-shopping-item-name"), { target: { value: "Custom item" } });
+    fireEvent.change(screen.getByTestId("input-shopping-item-category"), { target: { value: "Pantry" } });
+    fireEvent.change(screen.getByTestId("input-shopping-item-unit"), { target: { value: "kg" } });
+    assert.equal((screen.getByTestId("input-shopping-item-unit") as HTMLSelectElement).value, "kg");
+    fireEvent.change(screen.getByTestId("input-shopping-item-unit"), { target: { value: "Custom" } });
+    fireEvent.change(screen.getByTestId("input-shopping-item-custom-unit"), { target: { value: "2.5" } });
+    fireEvent.click(screen.getByTestId("button-add-shopping-item"));
+    await screen.findByText("Choose a unit or enter a custom text unit");
+    assert.equal(api.state.lists[0].items.length, 2);
+
+    fireEvent.change(screen.getByTestId("input-shopping-item-custom-unit"), { target: { value: "grams" } });
+    fireEvent.click(screen.getByTestId("button-add-shopping-item"));
+    await waitFor(() => assert.equal(api.state.lists[0].items.length, 3));
+    assert.equal(api.state.lists[0].items[2].unit, "grams");
+  });
+
   it("keeps an individually failed deletion selected for bulk retry", async () => {
     const { api, queryClient } = await setup();
     globalThis.fetch = async (input, init) => {
@@ -1911,6 +1980,10 @@ describe("inventory units and card labels", () => {
 
     fireEvent.click(screen.getByTestId("button-edit-1"));
     await screen.findByTestId("dialog-inventory-item");
+    const unitSelect = screen.getByTestId("input-item-unit") as HTMLSelectElement;
+    const unitLabel = screen.getByText("Unit", { selector: "label" }) as HTMLLabelElement;
+    assert.equal(unitLabel.htmlFor, unitSelect.id);
+    assert.ok(unitSelect.getAttribute("aria-describedby")?.includes("form-item-description"));
     changeInput("input-item-unit", "Custom");
     changeInput("input-item-custom-unit", "grams");
     assert.equal((screen.getByTestId("input-item-custom-unit") as HTMLInputElement).value, "grams");
@@ -1923,6 +1996,7 @@ describe("inventory units and card labels", () => {
     assert.ok(customUnitInput);
     assert.equal(customUnitInput.getAttribute("aria-label"), "Custom unit");
     assert.equal(customUnitInput.getAttribute("aria-invalid"), "true");
+    assert.ok(customUnitInput.getAttribute("aria-describedby")?.includes("form-item-message"));
     queryClient.clear();
   });
 });

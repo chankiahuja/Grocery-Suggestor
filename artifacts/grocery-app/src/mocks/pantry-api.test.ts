@@ -28,6 +28,42 @@ test("demo shopping-list creation and rename share Unicode name validation", asy
   })).status, 200);
 });
 
+test("demo rejects incompatible linked units before changing any fields", async () => {
+  const api = new MockPantryApi();
+  const row = api.state.lists[0].items[0];
+  const before = structuredClone(row);
+  const rejected = await api.fetch(`/api/shopping-lists/20/items/${row.id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ quantity: 99, notes: "changed", unit: "kg" }),
+  });
+  assert.equal(rejected.status, 400);
+  assert.deepEqual(row, before);
+
+  row.unit = "legacy-invalid-unit";
+  const omittedUnit = await api.fetch(`/api/shopping-lists/20/items/${row.id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ notes: "" }),
+  });
+  assert.equal(omittedUnit.status, 200);
+  assert.equal(row.unit, "legacy-invalid-unit");
+  assert.equal(row.notes, "");
+});
+
+test("demo item creation validates trimmed Unicode units", async () => {
+  const api = new MockPantryApi();
+  const create = (unit: string) => api.fetch("/api/shopping-lists/20/items", {
+    method: "POST",
+    body: JSON.stringify({ name: "Custom item", category: "Pantry", quantity: 1, unit }),
+  });
+  for (const unit of ["2.5", "-2", "２", "١٢", "1/2", "   "]) {
+    assert.equal((await create(unit)).status, 400, unit);
+  }
+  const emoji = String.fromCodePoint(0x1f600);
+  const response = await create(` ${emoji.repeat(64)} `);
+  assert.equal(response.status, 201);
+  assert.equal((await response.json()).unit, emoji.repeat(64));
+});
+
 test("expired demo alerts clear on correction and never create expiry-only purchases", async () => {
   const api = new MockPantryApi();
   const template = api.state.inventory[0];
@@ -264,6 +300,9 @@ test("demo reviewed list preserves quantities and exclusions through reload and 
   const reloaded = new MockPantryApi(JSON.parse(stored));
   const persisted = await (await reloaded.fetch(`/api/shopping-lists/${list.id}`)).json();
   assert.deepEqual(persisted, list);
+  const linkedItem = reloaded.state.lists.find((candidate) => candidate.id === list.id)!.items[0];
+  assert.equal(linkedItem.inventoryItemId, 1);
+  assert.equal(linkedItem.unit, reloaded.state.inventory.find((item) => item.id === 1)!.unit);
   const before = reloaded.state.inventory.map(item => item.quantity);
   assert.equal((await reloaded.fetch(`/api/shopping-lists/${list.id}/items/${list.items[0].id}`, {
     method: "PATCH", body: JSON.stringify({ purchased: true }),
@@ -274,6 +313,8 @@ test("demo reviewed list preserves quantities and exclusions through reload and 
   }
   assert.deepEqual(reloaded.state.inventory.map(item => item.quantity),
     before.map((quantity, index) => index === 0 ? quantity + 7.5 : quantity));
+  assert.equal(linkedItem.inventoryItemId, 1);
+  assert.equal(linkedItem.unit, reloaded.state.inventory.find((item) => item.id === 1)!.unit);
 });
 
 test("demo reviewed list validates all selections before changing stored state", async () => {

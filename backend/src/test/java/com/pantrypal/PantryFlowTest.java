@@ -58,8 +58,8 @@ class PantryFlowTest {
     }
     @Test void shoppingListsPreserveNumericUnitsAndLegacyGeneratedUnits() {
         long listId = PantryService.id(service.createList(Map.of("name", "Numeric units")));
-        var direct = service.addItem(listId, Map.of("name", "Legacy sugar", "category", "Pantry", "quantity", 2, "unit", "2"));
-        assertThat(direct.get("unit")).isEqualTo("2");
+        assertThatThrownBy(() -> service.addItem(listId, Map.of("name", "Legacy sugar", "category", "Pantry", "quantity", 2, "unit", "2")))
+            .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
 
         long legacyId = repository.insert("inventory_items", Map.of(
             "name", "Legacy rice", "category", "Grains", "quantity", 0, "unit", "2", "min_threshold", 1));
@@ -92,6 +92,17 @@ class PantryFlowTest {
         long second = PantryService.id(service.createList(Map.of("name","Second")));
         long row = PantryService.id(service.addItem(first, Map.of("name","Eggs","category","Dairy","quantity",1,"unit","box")));
         assertThatThrownBy(() -> service.updateItem(second,row,Map.of("purchased",true))).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+    }
+    @Test void inventoryLinkedShoppingItemsKeepTheirInventoryUnit() {
+        var inventoryItem = item("Rice", 0);
+        long inventoryItemId = PantryService.id(inventoryItem);
+        long listId = PantryService.id(service.createList(Map.of("name", "Units")));
+        long shoppingItemId = PantryService.id(service.addItem(listId, Map.of(
+            "inventoryItemId", inventoryItemId, "name", "Rice", "category", "Grains", "quantity", 1, "unit", "litres")));
+        assertThatThrownBy(() -> service.updateItem(listId, shoppingItemId, Map.of("unit", "kg")))
+            .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        assertThat(service.updateItem(listId, shoppingItemId, Map.of("unit", " litres ")).get("unit"))
+            .isEqualTo("litres");
     }
     @Test void apiValidationAndCombinedFilters() throws Exception {
         item("Milk",0);

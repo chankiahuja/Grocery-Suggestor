@@ -272,12 +272,20 @@ export interface ShoppingListItemInput {
   category: string;
   /** @minimum 0 */
   quantity: number;
-  /** @minLength 1 */
+  /**
+     * Trim boundary whitespace, then require 1-64 Unicode code points, reject numeric-only units, and preserve valid custom text units.
+     * @minLength 1
+     */
   unit: string;
   notes?: string;
 }
 
 export interface ShoppingListItemUpdate {
+  /**
+     * Trim boundary whitespace, then require 1-64 Unicode code points, reject numeric-only units, and preserve valid custom text units.
+     * @minLength 1
+     */
+  unit?: string;
   purchased?: boolean;
   /** @minimum 0 */
   quantity?: number;

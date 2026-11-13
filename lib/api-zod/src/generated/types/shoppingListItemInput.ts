@@ -14,7 +14,11 @@ export interface ShoppingListItemInput {
   category: string;
   /** @minimum 0 */
   quantity: number;
-  /** @minLength 1 */
+  /**
+     * Trim boundary whitespace, then require 1-64 Unicode code points, reject numeric-only units, and preserve valid custom text units.
+     * @minLength 1
+     * @pattern ^(?![0-9]+$)(?:[\uD800-\uDBFF][\uDC00-\uDFFF]|[^\uD800-\uDBFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])){1,64}$
+     */
   unit: string;
   notes?: string;
 }
