@@ -36,10 +36,12 @@ export function RenameShoppingListDialog({
 }: RenameShoppingListDialogProps) {
   const [name, setName] = useState(currentName);
   const [error, setError] = useState<string>();
+  const [isSaving, setIsSaving] = useState(false);
   const updateList = useUpdateShoppingList();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const wasOpen = useRef(false);
+  const saveInProgress = useRef(false);
 
   useEffect(() => {
     if (open && !wasOpen.current) {
@@ -50,6 +52,7 @@ export function RenameShoppingListDialog({
   }, [currentName, open]);
 
   const handleSave = async () => {
+    if (saveInProgress.current) return;
     const validationError = shoppingListNameError(name);
     if (validationError) {
       setError(validationError);
@@ -57,6 +60,8 @@ export function RenameShoppingListDialog({
     }
     const normalizedName = trimShoppingListBoundaryWhitespace(name);
     setError(undefined);
+    saveInProgress.current = true;
+    setIsSaving(true);
     try {
       const updatedList = await updateList.mutateAsync({ id: listId, data: { name: normalizedName } });
       const detailQueryKey = getGetShoppingListQueryKey(listId);
@@ -64,7 +69,7 @@ export function RenameShoppingListDialog({
       queryClient.setQueryData<ShoppingListWithItems>(detailQueryKey, (current) =>
         current
           ? { ...current, name: updatedList.name, updatedAt: updatedList.updatedAt }
-          : updatedList,
+          : undefined,
       );
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: detailQueryKey }),
@@ -77,14 +82,19 @@ export function RenameShoppingListDialog({
       onOpenChange(false);
     } catch {
       setError("Could not rename the shopping list. Please try again.");
+    } finally {
+      saveInProgress.current = false;
+      setIsSaving(false);
     }
   };
+
+  const renameInProgress = isSaving || updateList.isPending;
 
   return (
     <Dialog
       open={open}
       onOpenChange={(nextOpen) => {
-        if (!updateList.isPending) onOpenChange(nextOpen);
+        if (!renameInProgress) onOpenChange(nextOpen);
       }}
     >
       <DialogContent data-testid="dialog-rename-list">
@@ -106,7 +116,7 @@ export function RenameShoppingListDialog({
               id="shopping-list-name"
               autoFocus
               value={name}
-              disabled={updateList.isPending}
+              disabled={renameInProgress}
               aria-invalid={Boolean(error)}
               aria-describedby={error ? "shopping-list-name-error" : undefined}
               onChange={(event) => {
@@ -124,13 +134,13 @@ export function RenameShoppingListDialog({
             <Button
               type="button"
               variant="outline"
-              disabled={updateList.isPending}
+              disabled={renameInProgress}
               onClick={() => onOpenChange(false)}
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={updateList.isPending}>
-              {updateList.isPending ? "Saving..." : "Save"}
+            <Button type="submit" disabled={renameInProgress}>
+              {renameInProgress ? "Saving..." : "Save"}
             </Button>
           </DialogFooter>
         </form>
