@@ -101,6 +101,7 @@ export default function ShoppingListDetail() {
         queryKey: getGetShoppingListQueryKey(listId),
       });
       setQuantities((previous) => {
+        if (previous[item.id] !== raw) return previous;
         const next = { ...previous };
         delete next[item.id];
         return next;
@@ -426,6 +427,13 @@ export default function ShoppingListDetail() {
         item={itemToEdit ?? undefined}
         onItemUpdated={(updatedItem) => {
           setQuantities((previous) => {
+            const draft = previous[updatedItem.id];
+            if (
+              draft !== undefined &&
+              draft !== String(itemToEdit?.quantity)
+            ) {
+              return previous;
+            }
             const next = { ...previous };
             delete next[updatedItem.id];
             return next;
