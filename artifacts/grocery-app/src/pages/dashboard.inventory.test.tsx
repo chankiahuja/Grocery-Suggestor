@@ -2236,7 +2236,7 @@ describe("inventory quantity validation", () => {
 });
 
 describe("inventory conflict recovery", () => {
-  it("refreshes the revision after a conflict without discarding the draft", async () => {
+  it("requires review after a conflict before saving against fresh stock", async () => {
     const api = new GroceryApiMock();
     api.items = [dashboardItem(1, "Rice", "Pantry", 4, 1)];
     globalThis.fetch = api.fetch;
@@ -2259,9 +2259,22 @@ describe("inventory conflict recovery", () => {
       false,
     ));
     assert.equal((screen.getByTestId("input-item-name") as HTMLInputElement).value, "Updated rice");
+    assert.equal((screen.getByTestId("input-item-quantity") as HTMLInputElement).value, "4");
+    assert.ok(screen.getByTestId("inventory-conflict"));
 
+    fireEvent.click(screen.getByTestId("button-review-latest"));
+    await waitFor(() => {
+      assert.equal((screen.getByTestId("input-item-name") as HTMLInputElement).value, "Rice");
+      assert.equal((screen.getByTestId("input-item-quantity") as HTMLInputElement).value, "5");
+    });
+
+    changeInput("input-item-name", "Updated rice");
     fireEvent.click(screen.getByTestId("button-save-item"));
-    await waitFor(() => assert.equal(api.items[0]!.name, "Updated rice"));
+    await waitFor(() => {
+      assert.equal(api.items[0]!.name, "Updated rice");
+      assert.equal(api.items[0]!.quantity, 5);
+      assert.equal(api.items[0]!.revision, 2);
+    });
     assert.equal(screen.queryByTestId("dialog-inventory-item"), null);
   });
 });

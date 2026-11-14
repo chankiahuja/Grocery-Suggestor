@@ -6,6 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   useCreateInventoryItem,
   useUpdateInventoryItem,
+  getInventoryItem,
   getListInventoryItemsQueryKey,
   getGetInventoryStatsQueryKey,
   getGetGrocerySuggestionsQueryKey,
@@ -37,6 +38,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useNotifications } from "@/hooks/use-notifications";
 import { isInvalidUnit } from "@/lib/inventory-units";
 import { UnitSelector } from "@/components/unit-selector";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { refreshPantry } from "@/lib/refresh-pantry";
 
 function nullableValue(value: string | undefined) {
   return value === "" || value === undefined ? null : value;
@@ -88,6 +91,8 @@ export function InventoryItemDialog({
   const { toast } = useToast();
   const { notifyOutOfStock } = useNotifications();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isReviewing, setIsReviewing] = useState(false);
+  const [hasConflict, setHasConflict] = useState(false);
   const [focusNameAfterSave, setFocusNameAfterSave] = useState(false);
   const submitIntent = useRef<"close" | "continue">("close");
   const dialogSession = useRef(0);
@@ -159,6 +164,8 @@ export function InventoryItemDialog({
       submitIntent.current = "close";
       activeSubmission.current = null;
       setIsSubmitting(false);
+      setHasConflict(false);
+      setIsReviewing(false);
       setFocusNameAfterSave(false);
     }
     onOpenChange(nextOpen);
@@ -166,6 +173,43 @@ export function InventoryItemDialog({
 
   const handleInvalidSubmit = () => {
     submitIntent.current = "close";
+  };
+
+  const isConflictError = (error: unknown) =>
+    typeof error === "object" && error !== null &&
+    "status" in error && (error as { status?: unknown }).status === 409;
+
+  const reviewLatest = async () => {
+    if (!item || isReviewing) return;
+    const reviewSession = dialogSession.current;
+    setIsReviewing(true);
+    try {
+      const latest = await getInventoryItem(item.id);
+      if (dialogSession.current !== reviewSession || !openState.current) return;
+      refreshPantry(queryClient, latest);
+      form.reset({
+        name: latest.name,
+        category: latest.category,
+        quantity: latest.quantity,
+        unit: latest.unit,
+        minThreshold: latest.minThreshold,
+        expiresAt: latest.expiresAt || "",
+        notes: latest.notes || "",
+      });
+      setHasConflict(false);
+      toast({
+        title: "Latest item loaded",
+        description: "Review the current values before saving again.",
+      });
+    } catch {
+      toast({
+        title: "Unable to load the latest item",
+        description: "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      if (dialogSession.current === reviewSession) setIsReviewing(false);
+    }
   };
 
   const onSubmit = async (values: FormValues) => {
@@ -237,6 +281,8 @@ export function InventoryItemDialog({
         }
       }
 
+      setHasConflict(false);
+
       queryClient.invalidateQueries({
         queryKey: getListInventoryItemsQueryKey(),
       });
@@ -265,29 +311,21 @@ export function InventoryItemDialog({
         form.reset();
       }
     } catch (error) {
-      if (item) {
-        try {
-          await Promise.all([
-            queryClient.invalidateQueries({
-              queryKey: getListInventoryItemsQueryKey(),
-            }),
-            queryClient.invalidateQueries({
-              queryKey: getGetInventoryStatsQueryKey(),
-            }),
-            queryClient.invalidateQueries({
-              queryKey: getGetGrocerySuggestionsQueryKey(),
-            }),
-          ]);
-        } catch {
-          // Keep the submitted values and report the original save failure.
-        }
-      }
       if (isCurrentSubmission()) {
-        toast({
-          title: "Error",
-          description: "Failed to save item. Please try again.",
-          variant: "destructive",
-        });
+        if (item && isConflictError(error)) {
+          setHasConflict(true);
+          toast({
+            title: "Item changed",
+            description: "Your draft is preserved. Review the latest item before saving again.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Error",
+            description: "Failed to save item. Please try again.",
+            variant: "destructive",
+          });
+        }
       }
     } finally {
       if (isCurrentSubmission()) {
@@ -303,6 +341,25 @@ export function InventoryItemDialog({
         <DialogHeader>
           <DialogTitle>{item ? "Edit Item" : "Add New Item"}</DialogTitle>
         </DialogHeader>
+
+        {hasConflict && item && (
+          <Alert variant="destructive" data-testid="inventory-conflict">
+            <AlertTitle>Item changed elsewhere</AlertTitle>
+            <AlertDescription>
+              Your draft is preserved. Load the latest values to review the change before saving again.
+              <Button
+                type="button"
+                variant="outline"
+                className="mt-3"
+                onClick={reviewLatest}
+                disabled={isReviewing}
+                data-testid="button-review-latest"
+              >
+                {isReviewing ? "Loading latest..." : "Review latest"}
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
 
         <Form {...form}>
           <form
