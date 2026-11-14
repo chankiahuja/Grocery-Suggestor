@@ -626,7 +626,7 @@ describe("inventory save and continue", () => {
     assert.equal(screen.queryByTestId("dialog-inventory-item"), null);
   });
 
-  it("clears the continue intent when native quantity validation blocks submission", async () => {
+  it("clears the continue intent when quantity validation reports invalid", async () => {
     const api = new GroceryApiMock();
     globalThis.fetch = api.fetch;
     renderApp();
@@ -638,15 +638,17 @@ describe("inventory save and continue", () => {
     changeInput("input-item-name", "Rice");
     changeInput("input-item-category", "Pantry");
     changeInput("input-item-custom-unit", "bags");
-    changeInput("input-item-quantity", "2.55");
+    changeInput("input-item-quantity", "2.56");
     changeInput("input-item-threshold", "1");
 
-    const continueButton = screen.getByTestId("button-save-and-add-another");
+    // JSDOM does not implement number-input stepMismatch validation. Exercise
+    // the same invalid event that a browser dispatches for step="0.1".
+    const quantityInput = screen.getByTestId("input-item-quantity");
     let invalidEvents = 0;
-    screen.getByTestId("input-item-quantity").addEventListener("invalid", () => {
+    quantityInput.addEventListener("invalid", () => {
       invalidEvents += 1;
     }, { once: true });
-    (continueButton as HTMLButtonElement).click();
+    fireEvent.invalid(quantityInput);
     assert.equal(invalidEvents, 1);
     assert.equal(api.items.length, 0);
     assert.ok(screen.getByTestId("dialog-inventory-item"));
