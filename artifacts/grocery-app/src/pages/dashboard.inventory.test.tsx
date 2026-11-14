@@ -588,13 +588,17 @@ describe("inventory save and continue", () => {
     changeInput("input-item-threshold", "1");
 
     const continueButton = screen.getByTestId("button-save-and-add-another");
-    continueButton.addEventListener("click", (event) => event.preventDefault(), { once: true });
-    fireEvent.click(continueButton);
+    let invalidEvents = 0;
+    screen.getByTestId("input-item-quantity").addEventListener("invalid", () => {
+      invalidEvents += 1;
+    }, { once: true });
+    (continueButton as HTMLButtonElement).click();
+    assert.equal(invalidEvents, 1);
     assert.equal(api.items.length, 0);
     assert.ok(screen.getByTestId("dialog-inventory-item"));
 
     changeInput("input-item-quantity", "2.5");
-    fireEvent.click(screen.getByTestId("button-save-item"));
+    screen.getByTestId("dialog-inventory-item").querySelector("form")!.requestSubmit();
     await waitFor(() => assert.equal(api.items.length, 1));
     assert.equal(screen.queryByTestId("dialog-inventory-item"), null);
   });
