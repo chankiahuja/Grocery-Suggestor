@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -88,6 +88,8 @@ export function InventoryItemDialog({
   const { toast } = useToast();
   const { notifyOutOfStock } = useNotifications();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [focusNameAfterSave, setFocusNameAfterSave] = useState(false);
+  const submitIntent = useRef<"close" | "continue">("close");
 
   const createItem = useCreateInventoryItem();
   const updateItem = useUpdateInventoryItem();
@@ -119,7 +121,18 @@ export function InventoryItemDialog({
     });
   }, [form, item, open]);
 
+  useEffect(() => {
+    if (!open || !focusNameAfterSave) return;
+
+    form.setFocus("name");
+    setFocusNameAfterSave(false);
+  }, [focusNameAfterSave, form, open]);
+
   const onSubmit = async (values: FormValues) => {
+    if (isSubmitting) return;
+
+    const shouldContinue = !item && submitIntent.current === "continue";
+    submitIntent.current = "close";
     setIsSubmitting(true);
     try {
       if (item) {
@@ -158,13 +171,17 @@ export function InventoryItemDialog({
           notifyOutOfStock(values.name);
           toast({
             title: `${values.name} added — and already out of stock`,
-            description: "Consider adding it to a shopping list right away.",
+            description: shouldContinue
+              ? "Add your next item."
+              : "Consider adding it to a shopping list right away.",
             variant: "destructive",
           });
         } else {
           toast({
             title: "Item added",
-            description: `${values.name} has been added to inventory.`,
+            description: shouldContinue
+              ? `${values.name} added. Add your next item.`
+              : `${values.name} has been added to inventory.`,
           });
         }
       }
@@ -179,8 +196,21 @@ export function InventoryItemDialog({
         queryKey: getGetGrocerySuggestionsQueryKey(),
       });
 
-      onOpenChange(false);
-      form.reset();
+      if (shouldContinue) {
+        form.reset({
+          name: "",
+          category: values.category,
+          quantity: 0,
+          unit: values.unit,
+          minThreshold: 0,
+          expiresAt: "",
+          notes: "",
+        });
+        setFocusNameAfterSave(true);
+      } else {
+        onOpenChange(false);
+        form.reset();
+      }
     } catch (error) {
       toast({
         title: "Error",
@@ -345,11 +375,24 @@ export function InventoryItemDialog({
               </Button>
               <Button
                 type="submit"
+                variant={item ? "default" : "outline"}
                 disabled={isSubmitting}
                 data-testid="button-save-item"
               >
-                {isSubmitting ? "Saving..." : item ? "Update" : "Add Item"}
+                {isSubmitting ? "Saving..." : item ? "Update" : "Save item"}
               </Button>
+              {!item && (
+                <Button
+                  type="submit"
+                  disabled={isSubmitting}
+                  onClick={() => {
+                    submitIntent.current = "continue";
+                  }}
+                  data-testid="button-save-and-add-another"
+                >
+                  {isSubmitting ? "Saving..." : "Save & add another"}
+                </Button>
+              )}
             </DialogFooter>
           </form>
         </Form>
