@@ -729,10 +729,16 @@ describe("inventory save and continue", () => {
     cancelButton.focus();
     assert.equal(document.activeElement, cancelButton);
 
-    api.rejectPendingCreate?.();
-    await waitFor(() => assert.equal((screen.getByTestId("button-save-item") as HTMLButtonElement).disabled, true));
+    await act(async () => {
+      api.rejectPendingCreate?.();
+      await Promise.resolve();
+    });
     assert.ok(screen.getByTestId("dialog-inventory-item"));
     assert.equal((screen.getByTestId("input-item-name") as HTMLInputElement).value, "New draft");
+    assert.equal((screen.getByTestId("input-item-category") as HTMLInputElement).value, "Dairy");
+    assert.equal((screen.getByTestId("input-item-custom-unit") as HTMLInputElement).value, "bottles");
+    assert.equal((screen.getByTestId("button-save-item") as HTMLButtonElement).disabled, true);
+    assert.equal(api.resolvePendingCreate !== null, true);
     assert.equal(document.activeElement, cancelButton);
 
     api.resolvePendingCreate?.();
