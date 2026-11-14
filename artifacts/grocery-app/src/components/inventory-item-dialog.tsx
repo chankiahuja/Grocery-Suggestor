@@ -92,6 +92,7 @@ export function InventoryItemDialog({
   const submitIntent = useRef<"close" | "continue">("close");
   const dialogSession = useRef(0);
   const openState = useRef(open);
+  const lastFormReset = useRef<{ session: number; itemId: number | null } | null>(null);
   const activeSubmission = useRef<number | null>(null);
   const nextSubmission = useRef(0);
 
@@ -123,6 +124,13 @@ export function InventoryItemDialog({
     }
 
     if (!open) return;
+
+    const itemId = item?.id ?? null;
+    if (
+      lastFormReset.current?.session === dialogSession.current &&
+      lastFormReset.current.itemId === itemId
+    ) return;
+    lastFormReset.current = { session: dialogSession.current, itemId };
 
     form.reset({
       name: item?.name || "",
@@ -257,6 +265,23 @@ export function InventoryItemDialog({
         form.reset();
       }
     } catch (error) {
+      if (item) {
+        try {
+          await Promise.all([
+            queryClient.invalidateQueries({
+              queryKey: getListInventoryItemsQueryKey(),
+            }),
+            queryClient.invalidateQueries({
+              queryKey: getGetInventoryStatsQueryKey(),
+            }),
+            queryClient.invalidateQueries({
+              queryKey: getGetGrocerySuggestionsQueryKey(),
+            }),
+          ]);
+        } catch {
+          // Keep the submitted values and report the original save failure.
+        }
+      }
       if (isCurrentSubmission()) {
         toast({
           title: "Error",

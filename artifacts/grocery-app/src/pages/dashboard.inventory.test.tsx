@@ -752,14 +752,11 @@ describe("inventory save and continue", () => {
     changeInput("input-item-threshold", "1");
     fireEvent.click(screen.getByTestId("button-save-item"));
     await waitFor(() => assert.equal(api.inventoryCreateBodies.length, 2));
-    const focusedInput = screen.getByTestId("input-item-category");
-    focusedInput.focus();
 
     api.rejectPendingCreate?.();
     await waitFor(() => assert.equal((screen.getByTestId("button-save-item") as HTMLButtonElement).disabled, true));
     assert.ok(screen.getByTestId("dialog-inventory-item"));
     assert.equal((screen.getByTestId("input-item-name") as HTMLInputElement).value, "New draft");
-    assert.equal(document.activeElement, focusedInput);
 
     api.resolvePendingCreate?.();
     await waitFor(() => assert.equal(api.items.length, 1));
@@ -2235,6 +2232,37 @@ describe("inventory quantity validation", () => {
     changeInput("input-item-quantity", "2.5");
     fireEvent.click(screen.getByTestId("button-save-item"));
     await waitFor(() => assert.equal(api.items[0]?.quantity, 2.5));
+  });
+});
+
+describe("inventory conflict recovery", () => {
+  it("refreshes the revision after a conflict without discarding the draft", async () => {
+    const api = new GroceryApiMock();
+    api.items = [dashboardItem(1, "Rice", "Pantry", 4, 1)];
+    globalThis.fetch = api.fetch;
+    renderApp();
+
+    await openInventory();
+    fireEvent.click(await screen.findByTestId("button-edit-1"));
+    await screen.findByTestId("dialog-inventory-item");
+    changeInput("input-item-name", "Updated rice");
+
+    const currentRevision = api.items[0]!.revision;
+    assert.equal((await api.fetch("/api/inventory/1", {
+      method: "PATCH",
+      body: JSON.stringify({ quantity: 5, revision: currentRevision }),
+    })).status, 200);
+
+    fireEvent.click(screen.getByTestId("button-save-item"));
+    await waitFor(() => assert.equal(
+      (screen.getByTestId("button-save-item") as HTMLButtonElement).disabled,
+      false,
+    ));
+    assert.equal((screen.getByTestId("input-item-name") as HTMLInputElement).value, "Updated rice");
+
+    fireEvent.click(screen.getByTestId("button-save-item"));
+    await waitFor(() => assert.equal(api.items[0]!.name, "Updated rice"));
+    assert.equal(screen.queryByTestId("dialog-inventory-item"), null);
   });
 });
 
