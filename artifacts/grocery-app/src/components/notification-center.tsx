@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   Clock,
   CheckCheck,
+  Mail,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -20,7 +21,7 @@ import type { GrocerySuggestion } from "@workspace/api-client-react";
 
 const STORAGE_KEY = "pantrypal-seen-notifications";
 const EMAIL_REMINDER_NOTE =
-  "Expiry reminders by email are planned for a future release. For now, you can check your alerts here.";
+  "Expiry reminders by email are planned for a future release. Check your alerts here for now.";
 
 function notifKey(s: GrocerySuggestion) {
   return `${s.inventoryItemId}::${s.urgency}::${s.reason}`;
@@ -179,7 +180,7 @@ export function NotificationCenter() {
           data-testid="notification-panel"
         >
           {/* Header */}
-          <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-border">
+          <div className="pantry-notification-panel-header flex items-center justify-between gap-2 px-4 py-3 border-b border-border">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <Bell className="h-4 w-4 text-muted-foreground" />
               <span className="font-semibold text-sm text-foreground">
@@ -206,7 +207,9 @@ export function NotificationCenter() {
           </div>
 
           {/* Body */}
-          <div className="max-h-96 overflow-y-auto">
+          <div
+            className="pantry-notification-panel-body max-h-96 overflow-y-auto"
+          >
             {isLoading ? (
               <p className="p-4 text-sm text-muted-foreground" role="status">Loading alerts…</p>
             ) : isError ? (
@@ -271,13 +274,23 @@ export function NotificationCenter() {
             )}
           </div>
 
-          {/* Informational footer; this is not an alert and must not affect counts or unread state. */}
-          <p
-            className="border-t border-border bg-muted/20 px-4 py-3 text-xs leading-relaxed text-muted-foreground"
-            data-testid="notification-email-reminder-note"
-          >
-            {EMAIL_REMINDER_NOTE}
-          </p>
+          {/* Informational card; this is not an alert and must not affect counts or unread state. */}
+          <div className="border-t border-border px-3 py-3">
+            <div
+              className="flex items-start gap-2 rounded-lg border border-[#b9cdb0] bg-[#e6ecdc] px-3 py-3 text-[#314634] dark:border-[#526b56] dark:bg-[#28382b] dark:text-[#e7f0e4]"
+              data-testid="notification-email-reminder-note"
+            >
+              <Mail className="mt-0.5 h-4 w-4 shrink-0 text-[#526e49] dark:text-[#b8d2ba]" aria-hidden="true" />
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold leading-5">
+                  Email reminders — coming later
+                </h3>
+                <p className="mt-1 text-[13px] leading-relaxed">
+                  {EMAIL_REMINDER_NOTE}
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
