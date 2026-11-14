@@ -82,7 +82,7 @@ describe("NotificationCenter", { concurrency: false }, () => {
       /Expiry reminders by email are planned for a future release\./,
     );
     assert.equal(
-      screen.getByText(/\d+ alerts?/).textContent,
+      (await screen.findByText(/\d+ alerts?/)).textContent,
       `${suggestions.length} alerts`,
     );
     client.clear();
