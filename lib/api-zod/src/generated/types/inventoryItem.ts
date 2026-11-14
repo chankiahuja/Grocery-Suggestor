@@ -17,6 +17,8 @@ export interface InventoryItem {
   expiresAt: string | null;
   /** @nullable */
   notes: string | null;
+  /** @minimum 0 */
+  revision: number;
   createdAt: string;
   updatedAt: string;
 }

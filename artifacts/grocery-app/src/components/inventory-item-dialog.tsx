@@ -176,6 +176,7 @@ export function InventoryItemDialog({
       if (item) {
         const update: InventoryItemUpdate = {
           ...values,
+          revision: item.revision,
           expiresAt: nullableValue(values.expiresAt),
           notes: nullableValue(values.notes),
         };

@@ -160,6 +160,10 @@ export const ListInventoryItemsQueryParams = zod.object({
   "outOfStock": zod.coerce.boolean().optional().describe('Return only items with zero quantity.')
 })
 
+export const listInventoryItemsResponseRevisionMin = 0;
+
+
+
 export const ListInventoryItemsResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -169,6 +173,7 @@ export const ListInventoryItemsResponseItem = zod.object({
   "minThreshold": zod.number(),
   "expiresAt": zod.string().nullable(),
   "notes": zod.string().nullable(),
+  "revision": zod.number().int().min(listInventoryItemsResponseRevisionMin),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -198,6 +203,10 @@ export const CreateInventoryItemBody = zod.object({
   "notes": zod.string().nullish()
 })
 
+export const createInventoryItemResponseRevisionMin = 0;
+
+
+
 export const CreateInventoryItemResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -207,6 +216,7 @@ export const CreateInventoryItemResponse = zod.object({
   "minThreshold": zod.number(),
   "expiresAt": zod.string().nullable(),
   "notes": zod.string().nullable(),
+  "revision": zod.number().int().min(createInventoryItemResponseRevisionMin),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -235,6 +245,10 @@ export const GetInventoryItemParams = zod.object({
   "id": zod.coerce.number()
 })
 
+export const getInventoryItemResponseRevisionMin = 0;
+
+
+
 export const GetInventoryItemResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -244,6 +258,7 @@ export const GetInventoryItemResponse = zod.object({
   "minThreshold": zod.number(),
   "expiresAt": zod.string().nullable(),
   "notes": zod.string().nullable(),
+  "revision": zod.number().int().min(getInventoryItemResponseRevisionMin),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -263,6 +278,8 @@ export const updateInventoryItemBodyUnitMax = 64;
 
 export const updateInventoryItemBodyMinThresholdMin = 0;
 
+export const updateInventoryItemBodyRevisionMin = 0;
+
 
 
 export const UpdateInventoryItemBody = zod.object({
@@ -272,8 +289,13 @@ export const UpdateInventoryItemBody = zod.object({
   "unit": zod.string().min(1).max(updateInventoryItemBodyUnitMax).optional(),
   "minThreshold": zod.number().min(updateInventoryItemBodyMinThresholdMin).optional(),
   "expiresAt": zod.string().nullish(),
-  "notes": zod.string().nullish()
+  "notes": zod.string().nullish(),
+  "revision": zod.number().int().min(updateInventoryItemBodyRevisionMin).describe('Revision loaded with the item; the update is rejected if it is stale.')
 })
+
+export const updateInventoryItemResponseRevisionMin = 0;
+
+
 
 export const UpdateInventoryItemResponse = zod.object({
   "id": zod.number(),
@@ -284,6 +306,7 @@ export const UpdateInventoryItemResponse = zod.object({
   "minThreshold": zod.number(),
   "expiresAt": zod.string().nullable(),
   "notes": zod.string().nullable(),
+  "revision": zod.number().int().min(updateInventoryItemResponseRevisionMin),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -323,6 +346,10 @@ export const AdjustInventoryItemBody = zod.object({
   "amount": zod.number().gt(adjustInventoryItemBodyAmountExclusiveMin)
 })
 
+export const adjustInventoryItemResponseRevisionMin = 0;
+
+
+
 export const AdjustInventoryItemResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -332,6 +359,7 @@ export const AdjustInventoryItemResponse = zod.object({
   "minThreshold": zod.number(),
   "expiresAt": zod.string().nullable(),
   "notes": zod.string().nullable(),
+  "revision": zod.number().int().min(adjustInventoryItemResponseRevisionMin),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -353,6 +381,10 @@ export const UndoInventoryAdjustmentBody = zod.object({
   "idempotencyKey": zod.string().min(1).max(undoInventoryAdjustmentBodyIdempotencyKeyMax).describe('Original adjustment\'s Idempotency-Key, scoped to the inventory item')
 })
 
+export const undoInventoryAdjustmentResponseInventoryRevisionMin = 0;
+
+
+
 export const UndoInventoryAdjustmentResponse = zod.object({
   "status": zod.enum(['undone', 'already_undone']),
   "inventory": zod.object({
@@ -364,6 +396,7 @@ export const UndoInventoryAdjustmentResponse = zod.object({
   "minThreshold": zod.number(),
   "expiresAt": zod.string().nullable(),
   "notes": zod.string().nullable(),
+  "revision": zod.number().int().min(undoInventoryAdjustmentResponseInventoryRevisionMin),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })

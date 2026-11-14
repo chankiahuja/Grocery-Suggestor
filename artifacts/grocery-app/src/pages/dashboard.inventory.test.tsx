@@ -125,6 +125,7 @@ function dashboardItem(
     minThreshold,
     expiresAt,
     notes: null,
+    revision: 0,
     createdAt: timestamp,
     updatedAt: timestamp,
   };
@@ -163,6 +164,23 @@ class GroceryApiMock {
   };
   generatedShoppingList: ShoppingListWithItems | null = null;
   private nextInventoryId = 1;
+
+  private refreshPendingCreateControls() {
+    if (this.pendingCreates.length === 0) {
+      this.resolvePendingCreate = null;
+      this.rejectPendingCreate = null;
+      return;
+    }
+
+    this.resolvePendingCreate = () => {
+      this.pendingCreates.shift()?.resolve();
+      this.refreshPendingCreateControls();
+    };
+    this.rejectPendingCreate = () => {
+      this.pendingCreates.shift()?.reject();
+      this.refreshPendingCreateControls();
+    };
+  }
 
   readonly fetch = async (
     input: RequestInfo | URL,
@@ -219,6 +237,7 @@ class GroceryApiMock {
           minThreshold: Number(input.minThreshold),
           expiresAt: input.expiresAt ? String(input.expiresAt) : null,
           notes: input.notes ? String(input.notes) : null,
+          revision: 0,
           createdAt: timestamp,
           updatedAt: timestamp,
         };
@@ -232,16 +251,7 @@ class GroceryApiMock {
             reject: () => reject(new Error("Inventory request rejected")),
           };
           this.pendingCreates.push(pending);
-          this.resolvePendingCreate = () => {
-            this.pendingCreates.shift()?.resolve();
-            this.resolvePendingCreate = this.pendingCreates[0]?.resolve ?? null;
-            this.rejectPendingCreate = this.pendingCreates[0]?.reject ?? null;
-          };
-          this.rejectPendingCreate = () => {
-            this.pendingCreates.shift()?.reject();
-            this.resolvePendingCreate = this.pendingCreates[0]?.resolve ?? null;
-            this.rejectPendingCreate = this.pendingCreates[0]?.reject ?? null;
-          };
+          this.refreshPendingCreateControls();
         });
       }
       return createItem();
@@ -277,6 +287,7 @@ class GroceryApiMock {
       const update = this.readBody(init);
       this.inventoryUpdateBodies.push(update);
       Object.assign(item, update, { updatedAt: timestamp });
+      item.revision += 1;
       return this.json(item);
     }
     if (inventoryItemMatch && method === "DELETE") {
@@ -490,6 +501,36 @@ function renderApp(path = "/dashboard") {
 }
 
 describe("inventory save and continue", () => {
+  it("advances both pending create controls through every queued settlement", async () => {
+    const api = new GroceryApiMock();
+    api.inventoryCreateMode = "pending";
+    const requests = [1, 2, 3].map((id) =>
+      api.fetch("/api/inventory", {
+        method: "POST",
+        body: JSON.stringify({
+          name: `Item ${id}`,
+          category: "Pantry",
+          quantity: 1,
+          unit: "each",
+          minThreshold: 0,
+        }),
+      }),
+    );
+
+    assert.equal(api.inventoryCreateBodies.length, 3);
+    api.resolvePendingCreate?.();
+    api.rejectPendingCreate?.();
+    api.resolvePendingCreate?.();
+
+    const results = await Promise.allSettled(requests);
+    assert.equal(results[0]?.status, "fulfilled");
+    assert.equal(results[1]?.status, "rejected");
+    assert.equal(results[2]?.status, "fulfilled");
+    assert.equal(api.items.length, 2);
+    assert.equal(api.resolvePendingCreate, null);
+    assert.equal(api.rejectPendingCreate, null);
+  });
+
   it("keeps create mode open, preserves category and custom unit, resets the draft, and focuses Name", async () => {
     const api = new GroceryApiMock();
     globalThis.fetch = api.fetch;
@@ -1708,6 +1749,7 @@ describe("dashboard inventory attention refresh", () => {
         minThreshold: 1,
         expiresAt: null,
         notes: null,
+        revision: 0,
         createdAt: timestamp,
         updatedAt: timestamp,
       },
@@ -1720,6 +1762,7 @@ describe("dashboard inventory attention refresh", () => {
         minThreshold: 2,
         expiresAt: null,
         notes: null,
+        revision: 0,
         createdAt: timestamp,
         updatedAt: timestamp,
       },
@@ -1732,6 +1775,7 @@ describe("dashboard inventory attention refresh", () => {
         minThreshold: 2,
         expiresAt: expiringDate,
         notes: null,
+        revision: 0,
         createdAt: timestamp,
         updatedAt: timestamp,
       },
@@ -1744,6 +1788,7 @@ describe("dashboard inventory attention refresh", () => {
         minThreshold: 2,
         expiresAt: null,
         notes: null,
+        revision: 0,
         createdAt: timestamp,
         updatedAt: timestamp,
       },
@@ -2184,6 +2229,7 @@ describe("inventory optional field clearing", () => {
       minThreshold: 1,
       expiresAt: null,
       notes: "Keep dry",
+      revision: 0,
     });
 
     fireEvent.click(screen.getByTestId("button-edit-1"));
@@ -2201,6 +2247,7 @@ describe("inventory optional field clearing", () => {
       minThreshold: 1,
       expiresAt: "2027-01-15",
       notes: null,
+      revision: 1,
     });
 
     fireEvent.click(screen.getByTestId("button-edit-1"));
@@ -2220,6 +2267,7 @@ describe("inventory optional field clearing", () => {
       minThreshold: 1,
       expiresAt: null,
       notes: null,
+      revision: 2,
     });
 
     fireEvent.click(screen.getByTestId("button-edit-1"));

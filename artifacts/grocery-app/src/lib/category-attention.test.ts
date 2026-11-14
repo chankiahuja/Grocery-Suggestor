@@ -22,6 +22,7 @@ function item(
     minThreshold,
     expiresAt,
     notes: null,
+    revision: 0,
     createdAt: `${today}T00:00:00.000Z`,
     updatedAt: `${today}T00:00:00.000Z`,
   };

@@ -79,7 +79,7 @@ test("expired demo alerts clear on correction and never create expiry-only purch
   assert.equal(invalid.status, 400);
   const list = await (await api.fetch("/api/suggestions/generate-list", { method: "POST" })).json();
   assert.deepEqual(list.items.map((i: any) => i.inventoryItemId), [102, 103]);
-  await api.fetch("/api/inventory/101", { method: "PATCH", body: JSON.stringify({ expiresAt: null }) });
+  await api.fetch("/api/inventory/101", { method: "PATCH", body: JSON.stringify({ expiresAt: null, revision: api.state.inventory.find((item) => item.id === 101)!.revision }) });
   await api.fetch("/api/inventory/102", { method: "DELETE" });
   assert.equal((await (await api.fetch("/api/inventory/stats")).json()).expiredCount, 0);
   assert.ok((await (await api.fetch("/api/suggestions")).json()).every((a: any) => a.urgency !== "expired"));
@@ -136,7 +136,10 @@ test("demo Undo rejects expired, historical, missing and intervening writes incl
     if (change === "expiry") api.state.adjustments![0].expiresAt = Date.now() - 1;
     if (change === "historical") delete api.state.adjustments![0].revision;
     if (change === "edit") {
-      for (const quantity of [2, 1]) await api.fetch("/api/inventory/1", { method: "PATCH", body: JSON.stringify({ quantity }) });
+      for (const quantity of [2, 1]) {
+        const item = api.state.inventory.find((candidate) => candidate.id === 1)!;
+        await api.fetch("/api/inventory/1", { method: "PATCH", body: JSON.stringify({ quantity, revision: item.revision }) });
+      }
     }
     if (change === "adjustment") await adjust(api, { operation: "consume", amount: 1 }, "later", 1);
     if (change === "purchase") {
@@ -244,7 +247,7 @@ test("replay returns current inventory without a mutation and rejects conflictin
   assert.equal((await adjust(api, body)).status, 200);
   assert.equal(saves, 1);
   await api.fetch("/api/inventory/2", {
-    method: "PATCH", body: JSON.stringify({ quantity: 0, notes: "Changed later" }),
+    method: "PATCH", body: JSON.stringify({ quantity: 0, notes: "Changed later", revision: api.state.inventory.find((item) => item.id === 2)!.revision }),
   });
   const before = JSON.stringify(api.state);
   const replay = await adjust(api, body);

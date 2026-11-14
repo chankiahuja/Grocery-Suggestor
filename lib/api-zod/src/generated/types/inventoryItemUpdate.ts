@@ -23,4 +23,9 @@ export interface InventoryItemUpdate {
   expiresAt?: string | null;
   /** @nullable */
   notes?: string | null;
+  /**
+     * Revision loaded with the item; the update is rejected if it is stale.
+     * @minimum 0
+     */
+  revision: number;
 }

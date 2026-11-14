@@ -55,7 +55,7 @@ class InventoryUndoTest {
                 .andExpect(jsonPath("$.inventory.quantity").value(5))
                 .andExpect(jsonPath("$.inventory.notes").value("Keep notes"))
                 .andExpect(jsonPath("$.inventory.expiresAt").value("2027-01-01"))
-                .andExpect(jsonPath("$.inventory.revision").doesNotExist());
+                .andExpect(jsonPath("$.inventory.revision").value(2));
             var after = row(id);
             assertThat(undo(id, "original").get("status")).isEqualTo("already_undone");
             assertThat(row(id)).isEqualTo(after);
@@ -70,8 +70,22 @@ class InventoryUndoTest {
             var replayInventory = (Map<?,?>) replay.get("inventory");
             assertThat(replayInventory.get("notes")).isEqualTo("New notes");
             assertThat(replayInventory.get("quantity")).isEqualTo(8.0);
-            assertThat(service.inventory(id)).doesNotContainKey("revision");
-            assertThat(service.inventory()).allSatisfy(i -> assertThat(i).doesNotContainKey("revision"));
+            assertThat(service.inventory(id)).containsEntry("revision", 3L);
+            assertThat(service.inventory()).allSatisfy(i -> assertThat(i).containsKey("revision"));
+        } finally { service.deleteInventory(id); }
+    }
+
+    @Test void rejectsStaleInventoryUpdateWithoutWriting() {
+        long id = item();
+        try {
+            long loadedRevision = ((Number) service.inventory(id).get("revision")).longValue();
+            service.saveInventory(null, id, Map.of("notes", "First edit"), loadedRevision);
+            var afterFirstEdit = row(id);
+
+            assertThatThrownBy(() -> service.saveInventory(null, id, Map.of("notes", "Stale edit"), loadedRevision))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .hasMessageContaining("Inventory item was modified");
+            assertThat(row(id)).isEqualTo(afterFirstEdit);
         } finally { service.deleteInventory(id); }
     }
 

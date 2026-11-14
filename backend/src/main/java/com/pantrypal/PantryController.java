@@ -11,6 +11,14 @@ public class PantryController {
     final PantryService service;
     public PantryController(PantryService service) { this.service = service; }
     private Long account(Authentication authentication) { return authentication == null ? null : Long.parseLong(authentication.getName()); }
+    private long revision(Map<String,Object> body) {
+        Object value = body.get("revision");
+        if (!(value instanceof Number number) || !Double.isFinite(number.doubleValue())
+            || number.doubleValue() < 0 || number.doubleValue() != number.longValue()) {
+            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.BAD_REQUEST, "revision must be a non-negative integer");
+        }
+        return number.longValue();
+    }
     @GetMapping("/healthz") public Object health() { return Map.of("status", "ok"); }
     @GetMapping("/inventory") public Object inventory(@RequestParam(required=false) String category, @RequestParam(required=false) Boolean lowStock, @RequestParam(required=false) Boolean outOfStock, Authentication authentication) {
         return service.inventory(account(authentication)).stream().filter(i -> category == null || category.equals(i.get("category")))
@@ -20,7 +28,7 @@ public class PantryController {
     @GetMapping("/inventory/stats") public Object stats(Authentication authentication) { return service.stats(account(authentication)); }
     @GetMapping("/inventory/{id}") public Object inventory(@PathVariable long id, Authentication authentication) { return service.inventory(account(authentication), id); }
     @PostMapping("/inventory") @ResponseStatus(HttpStatus.CREATED) public Object createInventory(@RequestBody Map<String,Object> body, Authentication authentication) { return service.saveInventory(account(authentication), null, body); }
-    @PatchMapping("/inventory/{id}") public Object updateInventory(@PathVariable long id, @RequestBody Map<String,Object> body, Authentication authentication) { return service.saveInventory(account(authentication), id, body); }
+    @PatchMapping("/inventory/{id}") public Object updateInventory(@PathVariable long id, @RequestBody Map<String,Object> body, Authentication authentication) { return service.saveInventory(account(authentication), id, body, revision(body)); }
     @PostMapping("/inventory/{id}/adjust") public Object adjustInventory(@PathVariable long id, @RequestHeader("Idempotency-Key") String idempotencyKey, @RequestBody Map<String,Object> body, Authentication authentication) { return service.adjustInventory(account(authentication), id, idempotencyKey, body); }
     @PostMapping("/inventory/{id}/undo") public Object undoInventoryAdjustment(@PathVariable long id, @RequestBody Map<String,Object> body, Authentication authentication) { return service.undoInventoryAdjustment(account(authentication), id, body); }
     @DeleteMapping("/inventory/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) public void deleteInventory(@PathVariable long id, Authentication authentication) { service.deleteInventory(account(authentication), id); }

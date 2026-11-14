@@ -859,6 +859,9 @@ components:
           type: ["string", "null"]
         notes:
           type: ["string", "null"]
+        revision:
+          type: integer
+          minimum: 0
         createdAt:
           type: string
         updatedAt:
@@ -872,6 +875,7 @@ components:
         - minThreshold
         - expiresAt
         - notes
+        - revision
         - createdAt
         - updatedAt
 
@@ -927,6 +931,12 @@ components:
           type: ["string", "null"]
         notes:
           type: ["string", "null"]
+        revision:
+          type: integer
+          minimum: 0
+          description: Revision loaded with the item; the update is rejected if it is stale.
+      required:
+        - revision
 
     InventoryStats:
       type: object

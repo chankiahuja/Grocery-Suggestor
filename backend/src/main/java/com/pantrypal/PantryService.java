@@ -93,7 +93,7 @@ public class PantryService {
         return result;
     }
 
-    private static final String INVENTORY_COLUMNS = "id,name,category,quantity,unit,min_threshold,expires_at,notes,created_at,updated_at";
+    private static final String INVENTORY_COLUMNS = "id,name,category,quantity,unit,min_threshold,expires_at,notes,revision,created_at,updated_at";
     private static final String SHOPPING_LIST_COLUMNS = "id,name,created_at,updated_at";
     private static final String SHOPPING_LIST_ITEM_COLUMNS = "id,shopping_list_id,inventory_item_id,name,category,quantity,unit,purchased,notes";
     static final int MAX_SHOPPING_LIST_NAME_CODE_POINTS = 100;
@@ -104,10 +104,20 @@ public class PantryService {
     public Map<String,Object> inventory(Long ownerId, long id) { return repo.one("SELECT " + INVENTORY_COLUMNS + " FROM inventory_items WHERE id=? AND " + ownerWhere("account_id", ownerId), id); }
     public Map<String,Object> saveInventory(Long id, Map<String,Object> body) { return saveInventory(null, id, body); }
     public Map<String,Object> saveInventory(Long ownerId, Long id, Map<String,Object> body) {
+        return saveInventory(ownerId, id, body, null);
+    }
+    public Map<String,Object> saveInventory(Long ownerId, Long id, Map<String,Object> body, Long expectedRevision) {
         lockOwner(ownerId);
         var values = fields(body, id == null, true);
         if (id == null) { if (ownerId != null) values.put("account_id", ownerId); id = repo.insert("inventory_items", values); }
-        else { inventory(ownerId, id); values.put("updated_at", OffsetDateTime.now(ZoneOffset.UTC)); repo.update("inventory_items", id, values, ownerId); }
+        else {
+            inventory(ownerId, id);
+            values.put("updated_at", OffsetDateTime.now(ZoneOffset.UTC));
+            if (expectedRevision != null && repo.update("inventory_items", id, values, ownerId, expectedRevision) == 0) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Inventory item was modified; reload and try again");
+            }
+            if (expectedRevision == null) repo.update("inventory_items", id, values, ownerId);
+        }
         events.publishEvent(new PantryChanged("inventory_changed", id, ownerId));
         return inventory(ownerId, id);
     }

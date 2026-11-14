@@ -65,6 +65,7 @@ export function seedState(): State {
       minThreshold,
       expiresAt: days === null ? null : date(days),
       notes: null,
+      revision: 0,
       createdAt: now,
       updatedAt: now,
     }),
@@ -297,6 +298,7 @@ export class MockPantryApi {
             id: this.state.nextId++,
             expiresAt: body.expiresAt || null,
             notes: body.notes ?? null,
+            revision: 0,
             createdAt: now,
             updatedAt: now,
           };
@@ -321,7 +323,7 @@ export class MockPantryApi {
             return this.json({ error: "Inventory changed after adjustment" }, 409);
           item.quantity = adjustment.previousQuantity;
           item.updatedAt = now;
-          revise(id);
+          item.revision = revise(id);
           adjustment.undone = true;
           return save({ status: "undone", inventory: item });
         }
@@ -353,21 +355,26 @@ export class MockPantryApi {
           const previousQuantity = item.quantity;
           item.quantity += operation === "consume" ? -amount : amount;
           item.updatedAt = now;
+          const revision = revise(id);
+          item.revision = revision;
           (this.state.adjustments ??= []).push({
             inventoryItemId: id,
             key,
             operation,
             amount,
             previousQuantity,
-            revision: revise(id),
+            revision,
             expiresAt: Date.now() + 5 * 60_000,
           });
           return save(item);
         }
         if (method === "GET") return this.json(item);
         if (method === "PATCH") {
-          Object.assign(item, body, { updatedAt: now });
-          revise(id);
+          if (typeof body.revision !== "number" || body.revision !== item.revision)
+            return this.json({ error: "Inventory item was modified; reload and try again" }, 409);
+          const { revision: _revision, ...update } = body;
+          Object.assign(item, update, { updatedAt: now });
+          item.revision = revise(id);
           return save(item);
         }
         if (method === "DELETE") {

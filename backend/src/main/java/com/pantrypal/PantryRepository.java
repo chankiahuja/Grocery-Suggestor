@@ -55,15 +55,21 @@ public class PantryRepository {
         return Objects.requireNonNull(keys.getKey()).longValue();
     }
 
-    public void update(String table, long id, Map<String,Object> values) {
-        update(table, id, values, null);
+    public int update(String table, long id, Map<String,Object> values) {
+        return update(table, id, values, null);
     }
 
-    public void update(String table, long id, Map<String,Object> values, Long accountId) {
-        if (values.isEmpty()) return;
+    public int update(String table, long id, Map<String,Object> values, Long accountId) {
+        return update(table, id, values, accountId, null);
+    }
+
+    public int update(String table, long id, Map<String,Object> values, Long accountId, Long expectedRevision) {
+        if (values.isEmpty()) return 0;
         var args = new ArrayList<>(values.values()); args.add(id);
         String revision = table.equals("inventory_items") ? ",revision=revision+1" : "";
         String ownership = accountId == null ? "account_id IS NULL" : "account_id=" + accountId;
-        jdbc.update("UPDATE " + table + " SET " + String.join(",", values.keySet().stream().map(k -> k + "=?").toList()) + revision + " WHERE id=? AND " + ownership, args.toArray());
+        String revisionWhere = expectedRevision == null ? "" : " AND revision=?";
+        if (expectedRevision != null) args.add(expectedRevision);
+        return jdbc.update("UPDATE " + table + " SET " + String.join(",", values.keySet().stream().map(k -> k + "=?").toList()) + revision + " WHERE id=? AND " + ownership + revisionWhere, args.toArray());
     }
 }
