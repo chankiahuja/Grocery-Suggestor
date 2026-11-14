@@ -98,6 +98,7 @@ export function InventoryItemDialog({
   const dialogSession = useRef(0);
   const openState = useRef(open);
   const lastFormReset = useRef<{ session: number; itemId: number | null } | null>(null);
+  const formRevision = useRef<number | null>(null);
   const activeSubmission = useRef<number | null>(null);
   const nextSubmission = useRef(0);
 
@@ -123,6 +124,7 @@ export function InventoryItemDialog({
       dialogSession.current += 1;
       if (!open) {
         activeSubmission.current = null;
+        formRevision.current = null;
         setIsSubmitting(false);
         setFocusNameAfterSave(false);
       }
@@ -136,6 +138,7 @@ export function InventoryItemDialog({
       lastFormReset.current.itemId === itemId
     ) return;
     lastFormReset.current = { session: dialogSession.current, itemId };
+    formRevision.current = item?.revision ?? null;
 
     form.reset({
       name: item?.name || "",
@@ -163,6 +166,7 @@ export function InventoryItemDialog({
     if (!nextOpen) {
       submitIntent.current = "close";
       activeSubmission.current = null;
+      formRevision.current = null;
       setIsSubmitting(false);
       setHasConflict(false);
       setIsReviewing(false);
@@ -187,6 +191,7 @@ export function InventoryItemDialog({
       const latest = await getInventoryItem(item.id);
       if (dialogSession.current !== reviewSession || !openState.current) return;
       refreshPantry(queryClient, latest);
+      formRevision.current = latest.revision;
       form.reset({
         name: latest.name,
         category: latest.category,
@@ -228,7 +233,7 @@ export function InventoryItemDialog({
       if (item) {
         const update: InventoryItemUpdate = {
           ...values,
-          revision: item.revision,
+          revision: formRevision.current ?? item.revision,
           expiresAt: nullableValue(values.expiresAt),
           notes: nullableValue(values.notes),
         };
@@ -281,8 +286,6 @@ export function InventoryItemDialog({
         }
       }
 
-      setHasConflict(false);
-
       queryClient.invalidateQueries({
         queryKey: getListInventoryItemsQueryKey(),
       });
@@ -294,6 +297,8 @@ export function InventoryItemDialog({
       });
 
       if (!isCurrentSubmission()) return;
+
+      setHasConflict(false);
 
       if (shouldContinue) {
         form.reset({

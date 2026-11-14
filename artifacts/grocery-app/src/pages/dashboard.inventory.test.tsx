@@ -280,6 +280,11 @@ class GroceryApiMock {
     }
 
     const inventoryItemMatch = url.pathname.match(/^\/api\/inventory\/(\d+)$/);
+    if (inventoryItemMatch && method === "GET") {
+      const id = Number(inventoryItemMatch[1]);
+      const item = this.items.find((candidate) => candidate.id === id);
+      return item ? this.json(item) : this.json({ error: "Item not found" }, 404);
+    }
     if (inventoryItemMatch && method === "PATCH") {
       const id = Number(inventoryItemMatch[1]);
       const item = this.items.find((candidate) => candidate.id === id);
