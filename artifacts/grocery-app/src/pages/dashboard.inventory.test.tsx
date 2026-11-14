@@ -164,6 +164,23 @@ class GroceryApiMock {
   generatedShoppingList: ShoppingListWithItems | null = null;
   private nextInventoryId = 1;
 
+  private refreshPendingCreateControls() {
+    if (this.pendingCreates.length === 0) {
+      this.resolvePendingCreate = null;
+      this.rejectPendingCreate = null;
+      return;
+    }
+
+    this.resolvePendingCreate = () => {
+      this.pendingCreates.shift()?.resolve();
+      this.refreshPendingCreateControls();
+    };
+    this.rejectPendingCreate = () => {
+      this.pendingCreates.shift()?.reject();
+      this.refreshPendingCreateControls();
+    };
+  }
+
   readonly fetch = async (
     input: RequestInfo | URL,
     init?: RequestInit,
@@ -232,16 +249,7 @@ class GroceryApiMock {
             reject: () => reject(new Error("Inventory request rejected")),
           };
           this.pendingCreates.push(pending);
-          this.resolvePendingCreate = () => {
-            this.pendingCreates.shift()?.resolve();
-            this.resolvePendingCreate = this.pendingCreates[0]?.resolve ?? null;
-            this.rejectPendingCreate = this.pendingCreates[0]?.reject ?? null;
-          };
-          this.rejectPendingCreate = () => {
-            this.pendingCreates.shift()?.reject();
-            this.resolvePendingCreate = this.pendingCreates[0]?.resolve ?? null;
-            this.rejectPendingCreate = this.pendingCreates[0]?.reject ?? null;
-          };
+          this.refreshPendingCreateControls();
         });
       }
       return createItem();
@@ -490,6 +498,36 @@ function renderApp(path = "/dashboard") {
 }
 
 describe("inventory save and continue", () => {
+  it("advances both pending create controls through every queued settlement", async () => {
+    const api = new GroceryApiMock();
+    api.inventoryCreateMode = "pending";
+    const requests = [1, 2, 3].map((id) =>
+      api.fetch("/api/inventory", {
+        method: "POST",
+        body: JSON.stringify({
+          name: `Item ${id}`,
+          category: "Pantry",
+          quantity: 1,
+          unit: "each",
+          minThreshold: 0,
+        }),
+      }),
+    );
+
+    assert.equal(api.inventoryCreateBodies.length, 3);
+    api.resolvePendingCreate?.();
+    api.rejectPendingCreate?.();
+    api.resolvePendingCreate?.();
+
+    const results = await Promise.allSettled(requests);
+    assert.equal(results[0]?.status, "fulfilled");
+    assert.equal(results[1]?.status, "rejected");
+    assert.equal(results[2]?.status, "fulfilled");
+    assert.equal(api.items.length, 2);
+    assert.equal(api.resolvePendingCreate, null);
+    assert.equal(api.rejectPendingCreate, null);
+  });
+
   it("keeps create mode open, preserves category and custom unit, resets the draft, and focuses Name", async () => {
     const api = new GroceryApiMock();
     globalThis.fetch = api.fetch;
@@ -720,6 +758,15 @@ describe("inventory save and continue", () => {
     fireEvent.click(screen.getByTestId("button-save-and-add-another"));
     await waitFor(() => assert.equal(api.inventoryCreateBodies.length, 1));
     assert.equal((screen.getByTestId("button-save-and-add-another") as HTMLButtonElement).disabled, true);
+    for (const testId of [
+      "input-item-name",
+      "input-item-category",
+      "input-item-custom-unit",
+      "input-item-quantity",
+      "input-item-threshold",
+    ]) {
+      assert.equal((screen.getByTestId(testId) as HTMLInputElement).disabled, true);
+    }
     fireEvent.submit(screen.getByTestId("dialog-inventory-item").querySelector("form")!);
     assert.equal(api.inventoryCreateBodies.length, 1);
 

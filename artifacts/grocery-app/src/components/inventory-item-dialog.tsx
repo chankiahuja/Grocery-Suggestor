@@ -294,6 +294,7 @@ export function InventoryItemDialog({
                     <FormControl>
                       <Input
                         {...field}
+                        disabled={isSubmitting}
                         placeholder="e.g. Milk"
                         data-testid="input-item-name"
                       />
@@ -312,6 +313,7 @@ export function InventoryItemDialog({
                     <FormControl>
                       <Input
                         {...field}
+                        disabled={isSubmitting}
                         placeholder="e.g. Dairy"
                         data-testid="input-item-category"
                       />
@@ -332,6 +334,7 @@ export function InventoryItemDialog({
                         key={`${item?.id ?? "new"}-${open}`}
                         value={field.value}
                         onChange={field.onChange}
+                        disabled={isSubmitting}
                         selectTestId="input-item-unit"
                         customInputTestId="input-item-custom-unit"
                         invalid={fieldState.invalid}
@@ -353,6 +356,7 @@ export function InventoryItemDialog({
                         type="number"
                         step="0.1"
                         {...field}
+                        disabled={isSubmitting}
                         data-testid="input-item-quantity"
                       />
                     </FormControl>
@@ -372,6 +376,7 @@ export function InventoryItemDialog({
                         type="number"
                         step="0.1"
                         {...field}
+                        disabled={isSubmitting}
                         data-testid="input-item-threshold"
                       />
                     </FormControl>
@@ -390,6 +395,7 @@ export function InventoryItemDialog({
                       <Input
                         type="date"
                         {...field}
+                        disabled={isSubmitting}
                         data-testid="input-item-expires"
                       />
                     </FormControl>
@@ -407,6 +413,7 @@ export function InventoryItemDialog({
                     <FormControl>
                       <Textarea
                         {...field}
+                        disabled={isSubmitting}
                         placeholder="Additional notes..."
                         data-testid="input-item-notes"
                       />
