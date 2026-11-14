@@ -128,6 +128,18 @@ export function InventoryItemDialog({
     setFocusNameAfterSave(false);
   }, [focusNameAfterSave, form, open]);
 
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      submitIntent.current = "close";
+      setFocusNameAfterSave(false);
+    }
+    onOpenChange(nextOpen);
+  };
+
+  const handleInvalidSubmit = () => {
+    submitIntent.current = "close";
+  };
+
   const onSubmit = async (values: FormValues) => {
     if (isSubmitting) return;
 
@@ -223,14 +235,17 @@ export function InventoryItemDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-lg" data-testid="dialog-inventory-item">
         <DialogHeader>
           <DialogTitle>{item ? "Edit Item" : "Add New Item"}</DialogTitle>
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form
+            onSubmit={form.handleSubmit(onSubmit, handleInvalidSubmit)}
+            className="space-y-4"
+          >
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
@@ -368,7 +383,7 @@ export function InventoryItemDialog({
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => onOpenChange(false)}
+                onClick={() => handleOpenChange(false)}
                 data-testid="button-cancel"
               >
                 Cancel
