@@ -134,7 +134,12 @@ class GroceryApiMock {
   items: InventoryItem[] = [];
   inventoryCreateBodies: Record<string, unknown>[] = [];
   inventoryCreateMode: "normal" | "pending" | "error" = "normal";
+  private pendingCreates: Array<{
+    resolve: () => void;
+    reject: () => void;
+  }> = [];
   resolvePendingCreate: (() => void) | null = null;
+  rejectPendingCreate: (() => void) | null = null;
   inventoryUpdateBodies: Record<string, unknown>[] = [];
   inventoryGetMode: "normal" | "pending" | "error" = "normal";
   shoppingList: ShoppingListWithItems = {
@@ -221,10 +226,21 @@ class GroceryApiMock {
         return this.json(item, 201);
       };
       if (this.inventoryCreateMode === "pending") {
-        return new Promise<Response>((resolve) => {
+        return new Promise<Response>((resolve, reject) => {
+          const pending = {
+            resolve: () => resolve(createItem()),
+            reject: () => reject(new Error("Inventory request rejected")),
+          };
+          this.pendingCreates.push(pending);
           this.resolvePendingCreate = () => {
-            this.resolvePendingCreate = null;
-            resolve(createItem());
+            this.pendingCreates.shift()?.resolve();
+            this.resolvePendingCreate = this.pendingCreates[0]?.resolve ?? null;
+            this.rejectPendingCreate = this.pendingCreates[0]?.reject ?? null;
+          };
+          this.rejectPendingCreate = () => {
+            this.pendingCreates.shift()?.reject();
+            this.resolvePendingCreate = this.pendingCreates[0]?.resolve ?? null;
+            this.rejectPendingCreate = this.pendingCreates[0]?.reject ?? null;
           };
         });
       }
@@ -567,7 +583,7 @@ describe("inventory save and continue", () => {
     assert.equal(api.items.length, 0);
 
     changeInput("input-item-name", "Rice");
-    fireEvent.click(screen.getByTestId("button-save-item"));
+    screen.getByTestId("dialog-inventory-item").querySelector("form")!.requestSubmit();
     await waitFor(() => assert.equal(api.items.length, 1));
     assert.equal(screen.queryByTestId("dialog-inventory-item"), null);
   });
@@ -599,6 +615,88 @@ describe("inventory save and continue", () => {
 
     changeInput("input-item-quantity", "2.5");
     screen.getByTestId("dialog-inventory-item").querySelector("form")!.requestSubmit();
+    await waitFor(() => assert.equal(api.items.length, 1));
+    assert.equal(screen.queryByTestId("dialog-inventory-item"), null);
+  });
+
+  it("preserves the next draft when a dismissed continue save refreshes in the background", async () => {
+    const api = new GroceryApiMock();
+    api.inventoryCreateMode = "pending";
+    globalThis.fetch = api.fetch;
+    renderApp();
+
+    await screen.findByText("Your pantry is in good shape.");
+    await openInventory();
+    fireEvent.click(screen.getByTestId("button-add-item"));
+    await screen.findByTestId("input-item-name");
+    changeInput("input-item-name", "Old draft");
+    changeInput("input-item-category", "Pantry");
+    changeInput("input-item-custom-unit", "bags");
+    changeInput("input-item-quantity", "2");
+    changeInput("input-item-threshold", "1");
+    fireEvent.click(screen.getByTestId("button-save-and-add-another"));
+    await waitFor(() => assert.equal(api.inventoryCreateBodies.length, 1));
+
+    fireEvent.click(screen.getByTestId("button-cancel"));
+    await waitFor(() => assert.equal(screen.queryByTestId("dialog-inventory-item"), null));
+    fireEvent.click(screen.getByTestId("button-add-item"));
+    await screen.findByTestId("input-item-name");
+    changeInput("input-item-name", "New draft");
+    changeInput("input-item-category", "Dairy");
+    changeInput("input-item-custom-unit", "bottles");
+    changeInput("input-item-quantity", "3");
+    changeInput("input-item-threshold", "1");
+    const focusedInput = screen.getByTestId("input-item-category");
+    focusedInput.focus();
+
+    api.resolvePendingCreate?.();
+    await waitFor(() => assert.equal(api.items.length, 1));
+    assert.ok(screen.getByTestId("dialog-inventory-item"));
+    assert.equal((screen.getByTestId("input-item-name") as HTMLInputElement).value, "New draft");
+    assert.equal((screen.getByTestId("input-item-category") as HTMLInputElement).value, "Dairy");
+    assert.equal((screen.getByTestId("input-item-custom-unit") as HTMLInputElement).value, "bottles");
+    assert.equal(document.activeElement, focusedInput);
+  });
+
+  it("ignores a dismissed save error while a reopened draft is submitting", async () => {
+    const api = new GroceryApiMock();
+    api.inventoryCreateMode = "pending";
+    globalThis.fetch = api.fetch;
+    renderApp();
+
+    await screen.findByText("Your pantry is in good shape.");
+    await openInventory();
+    fireEvent.click(screen.getByTestId("button-add-item"));
+    await screen.findByTestId("input-item-name");
+    changeInput("input-item-name", "Old draft");
+    changeInput("input-item-category", "Pantry");
+    changeInput("input-item-custom-unit", "bags");
+    changeInput("input-item-quantity", "2");
+    changeInput("input-item-threshold", "1");
+    fireEvent.click(screen.getByTestId("button-save-item"));
+    await waitFor(() => assert.equal(api.inventoryCreateBodies.length, 1));
+
+    fireEvent.click(screen.getByTestId("button-cancel"));
+    await waitFor(() => assert.equal(screen.queryByTestId("dialog-inventory-item"), null));
+    fireEvent.click(screen.getByTestId("button-add-item"));
+    await screen.findByTestId("input-item-name");
+    changeInput("input-item-name", "New draft");
+    changeInput("input-item-category", "Dairy");
+    changeInput("input-item-custom-unit", "bottles");
+    changeInput("input-item-quantity", "3");
+    changeInput("input-item-threshold", "1");
+    fireEvent.click(screen.getByTestId("button-save-item"));
+    await waitFor(() => assert.equal(api.inventoryCreateBodies.length, 2));
+    const focusedInput = screen.getByTestId("input-item-category");
+    focusedInput.focus();
+
+    api.rejectPendingCreate?.();
+    await waitFor(() => assert.equal((screen.getByTestId("button-save-item") as HTMLButtonElement).disabled, true));
+    assert.ok(screen.getByTestId("dialog-inventory-item"));
+    assert.equal((screen.getByTestId("input-item-name") as HTMLInputElement).value, "New draft");
+    assert.equal(document.activeElement, focusedInput);
+
+    api.resolvePendingCreate?.();
     await waitFor(() => assert.equal(api.items.length, 1));
     assert.equal(screen.queryByTestId("dialog-inventory-item"), null);
   });
