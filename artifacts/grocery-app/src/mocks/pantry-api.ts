@@ -37,6 +37,25 @@ type State = {
   nextId: number;
 };
 
+function storedRevision(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+    ? value
+    : undefined;
+}
+
+function normalizeState(state: State): State {
+  const revisions = { ...(state.revisions ?? {}) };
+  const inventory = state.inventory.map((item) => {
+    const revision = Math.max(
+      storedRevision(item.revision) ?? 0,
+      storedRevision(revisions[item.id]) ?? 0,
+    );
+    revisions[item.id] = revision;
+    return { ...item, revision };
+  });
+  return { ...state, inventory, revisions };
+}
+
 export function seedState(): State {
   const now = new Date().toISOString();
   const date = (days: number) =>
@@ -112,9 +131,12 @@ export function seedState(): State {
 /** Browser-only demo adapter, using the same REST response shapes as Spring. */
 export class MockPantryApi {
   constructor(
-    public state: State = seedState(),
+    state: State = seedState(),
     private persist: (state: State) => void = () => {},
-  ) {}
+  ) {
+    this.state = normalizeState(state);
+  }
+  public state: State;
   private json(data: unknown, status = 200) {
     return new Response(status === 204 ? null : JSON.stringify(data), {
       status,
@@ -447,7 +469,7 @@ export class MockPantryApi {
           if (row.purchased && item && !this.state.applied.includes(row.id)) {
             item.quantity += row.quantity;
             item.updatedAt = now;
-            revise(item.id);
+            item.revision = revise(item.id);
             this.state.applied.push(row.id);
             count++;
           }

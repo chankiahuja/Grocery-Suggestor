@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { MockPantryApi, seedState } from "./pantry-api";
+import type { InventoryItem } from "@workspace/api-client-react";
 
 test("demo shopping-list creation and rename share Unicode name validation", async () => {
   const api = new MockPantryApi();
@@ -176,13 +177,14 @@ test("consume and restock adjust quantities, preserve item fields, and persist",
   const item = await consumed.json();
   assert.equal(item.quantity, 2.5);
   assert.notEqual(item.updatedAt, "2000-01-01T00:00:00.000Z");
-  assert.deepEqual(item, { ...original, quantity: 2.5, updatedAt: item.updatedAt });
+  assert.deepEqual(item, { ...original, quantity: 2.5, revision: 1, updatedAt: item.updatedAt });
   const restocked = await adjust(api, { operation: "restock", amount: 0.5 }, "restock");
   assert.equal(restocked.status, 200);
-  assert.equal((await restocked.json()).quantity, 3);
+  const restockedItem = await restocked.json();
+  assert.deepEqual(restockedItem, { ...original, quantity: 3, revision: 2, updatedAt: restockedItem.updatedAt });
   const emptied = await adjust(api, { operation: "consume", amount: 3 }, "empty");
   assert.equal(emptied.status, 200);
-  assert.equal((await emptied.json()).quantity, 0);
+  assert.equal((await emptied.json()).revision, 3);
   assert.equal(saves, 3);
 });
 
@@ -269,20 +271,55 @@ test("replay returns current inventory without a mutation and rejects conflictin
 
 test("old demo state accepts adjustments and persisted keys survive a storage round trip", async () => {
   const oldState = seedState();
+  delete oldState.revisions;
+  delete (oldState.inventory[1] as Partial<InventoryItem>).revision;
   assert.equal(oldState.adjustments, undefined);
   let stored = JSON.stringify(oldState);
   const api = new MockPantryApi(JSON.parse(stored), (state) => {
     stored = JSON.stringify(state);
   });
   const body = { operation: "restock", amount: 2 };
+  const legacyItem = api.state.inventory[1]!;
+  assert.equal((await api.fetch("/api/inventory/2", {
+    method: "PATCH",
+    body: JSON.stringify({ notes: "Legacy edit", revision: legacyItem.revision }),
+  })).status, 200);
   assert.equal((await adjust(api, body)).status, 200);
   let replaySaves = 0;
   const reloaded = new MockPantryApi(JSON.parse(stored), () => replaySaves++);
   const replay = await adjust(reloaded, body);
   assert.equal(replay.status, 200);
   assert.equal((await replay.json()).quantity, 6);
+  assert.equal(reloaded.state.inventory[1]!.notes, "Legacy edit");
   assert.equal(replaySaves, 0);
   assert.equal((await adjust(reloaded, { ...body, amount: 3 })).status, 400);
+});
+
+test("legacy state normalizes revisions and rejects stale edits after purchase", async () => {
+  let stored = "";
+  const oldState = seedState();
+  delete oldState.revisions;
+  delete (oldState.inventory[0] as Partial<InventoryItem>).revision;
+  const api = new MockPantryApi(oldState, (state) => { stored = JSON.stringify(state); });
+  const beforePurchaseRevision = api.state.inventory[0]!.revision;
+  await api.fetch("/api/shopping-lists/20/items/21", {
+    method: "PATCH", body: JSON.stringify({ purchased: true }),
+  });
+  const purchase = await api.fetch("/api/shopping-lists/20/purchase", { method: "POST" });
+  assert.equal(purchase.status, 200);
+  assert.equal(api.state.inventory[0]!.revision, beforePurchaseRevision + 1);
+  assert.equal(api.state.inventory[0]!.quantity, 2);
+
+  const stale = await api.fetch("/api/inventory/1", {
+    method: "PATCH",
+    body: JSON.stringify({ quantity: 99, revision: beforePurchaseRevision }),
+  });
+  assert.equal(stale.status, 409);
+  assert.equal(api.state.inventory[0]!.quantity, 2);
+
+  const reloaded = new MockPantryApi(JSON.parse(stored));
+  assert.equal(reloaded.state.inventory[0]!.revision, beforePurchaseRevision + 1);
+  assert.equal(reloaded.state.revisions?.[1], beforePurchaseRevision + 1);
 });
 
 test("demo reviewed list preserves quantities and exclusions through reload and purchase", async () => {
@@ -407,7 +444,7 @@ test("demo shortage to shopping to restock is repeat-safe and persists changes",
     minThreshold: 1,
     unit: "boxes",
   });
-  await call(`inventory/${item.id}`, "PATCH", { quantity: 0 });
+  await call(`inventory/${item.id}`, "PATCH", { quantity: 0, revision: item.revision });
   assert.ok(
     !(await call("inventory?category=Beverages&lowStock=true")).some(
       (i: { id: number }) => i.id === item.id,

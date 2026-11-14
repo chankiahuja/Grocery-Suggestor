@@ -278,7 +278,12 @@ class AdjustmentWorkflowTest {
             assertThat(service.list(owner)).isEqualTo(before);
             assertThat(service.purchase(other).get("updatedInventoryItems")).isEqualTo(0);
             assertThat(row(id).get("quantity")).isEqualTo(5.0);
+            long loadedRevision = ((Number) service.inventory(id).get("revision")).longValue();
             assertThat(service.purchase(owner).get("updatedInventoryItems")).isEqualTo(1);
+            assertThat(row(id).get("quantity")).isEqualTo(8.0);
+            assertThatThrownBy(() -> service.saveInventory(null, id, Map.of("quantity", 99), loadedRevision))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .hasMessageContaining("Inventory item was modified");
             assertThat(row(id).get("quantity")).isEqualTo(8.0);
         } finally { service.deleteList(owner); service.deleteList(other); service.deleteInventory(id); }
     }

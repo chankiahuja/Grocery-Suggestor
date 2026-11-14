@@ -285,8 +285,11 @@ class GroceryApiMock {
       const item = this.items.find((candidate) => candidate.id === id);
       if (!item) return this.json({ error: "Item not found" }, 404);
       const update = this.readBody(init);
+      if (typeof update.revision !== "number" || update.revision !== item.revision)
+        return this.json({ error: "Inventory item was modified; reload and try again" }, 409);
       this.inventoryUpdateBodies.push(update);
-      Object.assign(item, update, { updatedAt: timestamp });
+      const { revision: _revision, ...fields } = update;
+      Object.assign(item, fields, { updatedAt: timestamp });
       item.revision += 1;
       return this.json(item);
     }
@@ -446,6 +449,7 @@ class GroceryApiMock {
         );
         if (!inventoryItem) continue;
         inventoryItem.quantity += shoppingItem.quantity;
+        inventoryItem.revision += 1;
         updatedInventoryItems += 1;
       }
       return this.json({
@@ -529,6 +533,26 @@ describe("inventory save and continue", () => {
     assert.equal(api.items.length, 2);
     assert.equal(api.resolvePendingCreate, null);
     assert.equal(api.rejectPendingCreate, null);
+  });
+
+  it("rejects stale inventory updates without moving the mock revision backwards", async () => {
+    const api = new GroceryApiMock();
+    api.items = [dashboardItem(1, "Rice", "Pantry", 4, 1)];
+    const staleRevision = api.items[0]!.revision;
+    const current = await api.fetch("/api/inventory/1", {
+      method: "PATCH",
+      body: JSON.stringify({ quantity: 6, revision: staleRevision }),
+    });
+    assert.equal(current.status, 200);
+    assert.equal(api.items[0]!.revision, staleRevision + 1);
+
+    const stale = await api.fetch("/api/inventory/1", {
+      method: "PATCH",
+      body: JSON.stringify({ quantity: 99, revision: staleRevision }),
+    });
+    assert.equal(stale.status, 409);
+    assert.equal(api.items[0]!.quantity, 6);
+    assert.equal(api.items[0]!.revision, staleRevision + 1);
   });
 
   it("keeps create mode open, preserves category and custom unit, resets the draft, and focuses Name", async () => {
@@ -761,6 +785,15 @@ describe("inventory save and continue", () => {
     fireEvent.click(screen.getByTestId("button-save-and-add-another"));
     await waitFor(() => assert.equal(api.inventoryCreateBodies.length, 1));
     assert.equal((screen.getByTestId("button-save-and-add-another") as HTMLButtonElement).disabled, true);
+    for (const testId of [
+      "input-item-name",
+      "input-item-category",
+      "input-item-custom-unit",
+      "input-item-quantity",
+      "input-item-threshold",
+    ]) {
+      assert.equal((screen.getByTestId(testId) as HTMLInputElement).disabled, true);
+    }
     fireEvent.submit(screen.getByTestId("dialog-inventory-item").querySelector("form")!);
     assert.equal(api.inventoryCreateBodies.length, 1);
 
