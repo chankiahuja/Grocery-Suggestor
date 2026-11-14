@@ -572,6 +572,33 @@ describe("inventory save and continue", () => {
     assert.equal(screen.queryByTestId("dialog-inventory-item"), null);
   });
 
+  it("clears the continue intent when native quantity validation blocks submission", async () => {
+    const api = new GroceryApiMock();
+    globalThis.fetch = api.fetch;
+    renderApp();
+
+    await screen.findByText("Your pantry is in good shape.");
+    await openInventory();
+    fireEvent.click(screen.getByTestId("button-add-item"));
+    await screen.findByTestId("input-item-name");
+    changeInput("input-item-name", "Rice");
+    changeInput("input-item-category", "Pantry");
+    changeInput("input-item-custom-unit", "bags");
+    changeInput("input-item-quantity", "2.55");
+    changeInput("input-item-threshold", "1");
+
+    const continueButton = screen.getByTestId("button-save-and-add-another");
+    continueButton.addEventListener("click", (event) => event.preventDefault(), { once: true });
+    fireEvent.click(continueButton);
+    assert.equal(api.items.length, 0);
+    assert.ok(screen.getByTestId("dialog-inventory-item"));
+
+    changeInput("input-item-quantity", "2.5");
+    fireEvent.click(screen.getByTestId("button-save-item"));
+    await waitFor(() => assert.equal(api.items.length, 1));
+    assert.equal(screen.queryByTestId("dialog-inventory-item"), null);
+  });
+
   it("prevents overlapping create submissions while pending", async () => {
     const api = new GroceryApiMock();
     api.inventoryCreateMode = "pending";

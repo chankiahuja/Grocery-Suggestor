@@ -220,7 +220,7 @@ export function InventoryItemDialog({
         });
         setFocusNameAfterSave(true);
       } else {
-        onOpenChange(false);
+        handleOpenChange(false);
         form.reset();
       }
     } catch (error) {
@@ -244,6 +244,7 @@ export function InventoryItemDialog({
         <Form {...form}>
           <form
             onSubmit={form.handleSubmit(onSubmit, handleInvalidSubmit)}
+            onInvalidCapture={handleInvalidSubmit}
             className="space-y-4"
           >
             <div className="grid grid-cols-2 gap-4">
@@ -392,6 +393,9 @@ export function InventoryItemDialog({
                 type="submit"
                 variant={item ? "default" : "outline"}
                 disabled={isSubmitting}
+                onClick={() => {
+                  submitIntent.current = "close";
+                }}
                 data-testid="button-save-item"
               >
                 {isSubmitting ? "Saving..." : item ? "Update" : "Save item"}
