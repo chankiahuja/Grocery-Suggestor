@@ -2019,6 +2019,19 @@ body:has(.pantry-adjustment-feedback) .pantry-main {
     width: auto;
     max-width: none;
     margin-top: 0;
+    max-height: calc(100dvh - 88px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .pantry-notification-panel-header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--pantry-surface);
+  }
+  .pantry-notification-panel-body {
+    max-height: none;
+    overflow-y: visible;
   }
 }
 @media (max-width: 480px) {

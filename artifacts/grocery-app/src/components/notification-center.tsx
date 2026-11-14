@@ -180,7 +180,7 @@ export function NotificationCenter() {
           data-testid="notification-panel"
         >
           {/* Header */}
-          <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-border">
+          <div className="pantry-notification-panel-header flex items-center justify-between gap-2 px-4 py-3 border-b border-border">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <Bell className="h-4 w-4 text-muted-foreground" />
               <span className="font-semibold text-sm text-foreground">
@@ -207,7 +207,10 @@ export function NotificationCenter() {
           </div>
 
           {/* Body */}
-          <div className="max-h-96 overflow-y-auto">
+          <div
+            className="pantry-notification-panel-body max-h-96 overflow-y-auto"
+            data-testid="notification-panel-body"
+          >
             {isLoading ? (
               <p className="p-4 text-sm text-muted-foreground" role="status">Loading alerts…</p>
             ) : isError ? (

@@ -77,6 +77,9 @@ describe("NotificationCenter", { concurrency: false }, () => {
     const { client } = await openNotifications(api);
 
     assert.ok(api.state.inventory.length > 0);
+    const panel = screen.getByTestId("notification-panel");
+    assert.ok(panel.classList.contains("pantry-notification-panel"));
+    assert.ok(screen.getByTestId("notification-panel-body").classList.contains("pantry-notification-panel-body"));
     assert.ok(screen.getByRole("heading", { name: "Email reminders — coming later" }));
     assert.ok(screen.getByText("Expiry reminders by email are planned for a future release. Check your alerts here for now."));
     assert.equal(
@@ -97,5 +100,15 @@ describe("NotificationCenter", { concurrency: false }, () => {
     assert.ok(screen.getByText("Expiry reminders by email are planned for a future release. Check your alerts here for now."));
     assert.equal(screen.queryByText(/\d+ alerts?/), null);
     assert.equal(screen.queryByRole("alert"), null);
+  });
+
+  it("keeps the close control available after opening the panel", async () => {
+    await openNotifications(new MockPantryApi());
+
+    const close = screen.getByRole("button", { name: "Close notifications" });
+    fireEvent.click(close);
+
+    assert.equal(screen.queryByTestId("notification-panel"), null);
+    assert.equal(document.activeElement, screen.getByRole("button", { name: "Notifications" }));
   });
 });
