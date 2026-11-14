@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -88,6 +88,12 @@ export function InventoryItemDialog({
   const { toast } = useToast();
   const { notifyOutOfStock } = useNotifications();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [focusNameAfterSave, setFocusNameAfterSave] = useState(false);
+  const submitIntent = useRef<"close" | "continue">("close");
+  const dialogSession = useRef(0);
+  const openState = useRef(open);
+  const activeSubmission = useRef<number | null>(null);
+  const nextSubmission = useRef(0);
 
   const createItem = useCreateInventoryItem();
   const updateItem = useUpdateInventoryItem();
@@ -106,6 +112,16 @@ export function InventoryItemDialog({
   });
 
   useEffect(() => {
+    if (openState.current !== open) {
+      openState.current = open;
+      dialogSession.current += 1;
+      if (!open) {
+        activeSubmission.current = null;
+        setIsSubmitting(false);
+        setFocusNameAfterSave(false);
+      }
+    }
+
     if (!open) return;
 
     form.reset({
@@ -119,7 +135,42 @@ export function InventoryItemDialog({
     });
   }, [form, item, open]);
 
+  useEffect(() => {
+    if (!open || !focusNameAfterSave) return;
+
+    form.setFocus("name");
+    setFocusNameAfterSave(false);
+  }, [focusNameAfterSave, form, open]);
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (openState.current !== nextOpen) {
+      openState.current = nextOpen;
+      dialogSession.current += 1;
+    }
+    if (!nextOpen) {
+      submitIntent.current = "close";
+      activeSubmission.current = null;
+      setIsSubmitting(false);
+      setFocusNameAfterSave(false);
+    }
+    onOpenChange(nextOpen);
+  };
+
+  const handleInvalidSubmit = () => {
+    submitIntent.current = "close";
+  };
+
   const onSubmit = async (values: FormValues) => {
+    if (isSubmitting || activeSubmission.current !== null) return;
+
+    const shouldContinue = !item && submitIntent.current === "continue";
+    submitIntent.current = "close";
+    const submissionSession = dialogSession.current;
+    const submissionId = ++nextSubmission.current;
+    activeSubmission.current = submissionId;
+    const isCurrentSubmission = () =>
+      dialogSession.current === submissionSession &&
+      activeSubmission.current === submissionId;
     setIsSubmitting(true);
     try {
       if (item) {
@@ -132,18 +183,20 @@ export function InventoryItemDialog({
           id: item.id,
           data: update,
         });
-        if (values.quantity === 0) {
-          notifyOutOfStock(values.name);
-          toast({
-            title: `${values.name} is out of stock`,
-            description: "Consider adding it to a shopping list.",
-            variant: "destructive",
-          });
-        } else {
-          toast({
-            title: "Item updated",
-            description: `${values.name} has been updated.`,
-          });
+        if (isCurrentSubmission()) {
+          if (values.quantity === 0) {
+            notifyOutOfStock(values.name);
+            toast({
+              title: `${values.name} is out of stock`,
+              description: "Consider adding it to a shopping list.",
+              variant: "destructive",
+            });
+          } else {
+            toast({
+              title: "Item updated",
+              description: `${values.name} has been updated.`,
+            });
+          }
         }
       } else {
         const input: InventoryItemInput = {
@@ -154,18 +207,24 @@ export function InventoryItemDialog({
         await createItem.mutateAsync({
           data: input,
         });
-        if (values.quantity === 0) {
-          notifyOutOfStock(values.name);
-          toast({
+        if (isCurrentSubmission()) {
+          if (values.quantity === 0) {
+            notifyOutOfStock(values.name);
+            toast({
             title: `${values.name} added — and already out of stock`,
-            description: "Consider adding it to a shopping list right away.",
+            description: shouldContinue
+              ? "Add your next item."
+              : "Consider adding it to a shopping list right away.",
             variant: "destructive",
-          });
-        } else {
-          toast({
-            title: "Item added",
-            description: `${values.name} has been added to inventory.`,
-          });
+            });
+          } else {
+            toast({
+              title: "Item added",
+              description: shouldContinue
+                ? `${values.name} added. Add your next item.`
+                : `${values.name} has been added to inventory.`,
+            });
+          }
         }
       }
 
@@ -179,28 +238,52 @@ export function InventoryItemDialog({
         queryKey: getGetGrocerySuggestionsQueryKey(),
       });
 
-      onOpenChange(false);
-      form.reset();
+      if (!isCurrentSubmission()) return;
+
+      if (shouldContinue) {
+        form.reset({
+          name: "",
+          category: values.category,
+          quantity: 0,
+          unit: values.unit,
+          minThreshold: 0,
+          expiresAt: "",
+          notes: "",
+        });
+        setFocusNameAfterSave(true);
+      } else {
+        handleOpenChange(false);
+        form.reset();
+      }
     } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to save item. Please try again.",
-        variant: "destructive",
-      });
+      if (isCurrentSubmission()) {
+        toast({
+          title: "Error",
+          description: "Failed to save item. Please try again.",
+          variant: "destructive",
+        });
+      }
     } finally {
-      setIsSubmitting(false);
+      if (isCurrentSubmission()) {
+        activeSubmission.current = null;
+        setIsSubmitting(false);
+      }
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-lg" data-testid="dialog-inventory-item">
         <DialogHeader>
           <DialogTitle>{item ? "Edit Item" : "Add New Item"}</DialogTitle>
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form
+            onSubmit={form.handleSubmit(onSubmit, handleInvalidSubmit)}
+            onInvalidCapture={handleInvalidSubmit}
+            className="space-y-4"
+          >
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
@@ -211,6 +294,7 @@ export function InventoryItemDialog({
                     <FormControl>
                       <Input
                         {...field}
+                        disabled={isSubmitting}
                         placeholder="e.g. Milk"
                         data-testid="input-item-name"
                       />
@@ -229,6 +313,7 @@ export function InventoryItemDialog({
                     <FormControl>
                       <Input
                         {...field}
+                        disabled={isSubmitting}
                         placeholder="e.g. Dairy"
                         data-testid="input-item-category"
                       />
@@ -249,6 +334,7 @@ export function InventoryItemDialog({
                         key={`${item?.id ?? "new"}-${open}`}
                         value={field.value}
                         onChange={field.onChange}
+                        disabled={isSubmitting}
                         selectTestId="input-item-unit"
                         customInputTestId="input-item-custom-unit"
                         invalid={fieldState.invalid}
@@ -270,6 +356,7 @@ export function InventoryItemDialog({
                         type="number"
                         step="0.1"
                         {...field}
+                        disabled={isSubmitting}
                         data-testid="input-item-quantity"
                       />
                     </FormControl>
@@ -289,6 +376,7 @@ export function InventoryItemDialog({
                         type="number"
                         step="0.1"
                         {...field}
+                        disabled={isSubmitting}
                         data-testid="input-item-threshold"
                       />
                     </FormControl>
@@ -307,6 +395,7 @@ export function InventoryItemDialog({
                       <Input
                         type="date"
                         {...field}
+                        disabled={isSubmitting}
                         data-testid="input-item-expires"
                       />
                     </FormControl>
@@ -324,6 +413,7 @@ export function InventoryItemDialog({
                     <FormControl>
                       <Textarea
                         {...field}
+                        disabled={isSubmitting}
                         placeholder="Additional notes..."
                         data-testid="input-item-notes"
                       />
@@ -338,18 +428,34 @@ export function InventoryItemDialog({
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => onOpenChange(false)}
+                onClick={() => handleOpenChange(false)}
                 data-testid="button-cancel"
               >
                 Cancel
               </Button>
               <Button
                 type="submit"
+                variant={item ? "default" : "outline"}
                 disabled={isSubmitting}
+                onClick={() => {
+                  submitIntent.current = "close";
+                }}
                 data-testid="button-save-item"
               >
-                {isSubmitting ? "Saving..." : item ? "Update" : "Add Item"}
+                {isSubmitting ? "Saving..." : item ? "Update" : "Save item"}
               </Button>
+              {!item && (
+                <Button
+                  type="submit"
+                  disabled={isSubmitting}
+                  onClick={() => {
+                    submitIntent.current = "continue";
+                  }}
+                  data-testid="button-save-and-add-another"
+                >
+                  {isSubmitting ? "Saving..." : "Save & add another"}
+                </Button>
+              )}
             </DialogFooter>
           </form>
         </Form>

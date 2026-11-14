@@ -132,6 +132,14 @@ function dashboardItem(
 
 class GroceryApiMock {
   items: InventoryItem[] = [];
+  inventoryCreateBodies: Record<string, unknown>[] = [];
+  inventoryCreateMode: "normal" | "pending" | "error" = "normal";
+  private pendingCreates: Array<{
+    resolve: () => void;
+    reject: () => void;
+  }> = [];
+  resolvePendingCreate: (() => void) | null = null;
+  rejectPendingCreate: (() => void) | null = null;
   inventoryUpdateBodies: Record<string, unknown>[] = [];
   inventoryGetMode: "normal" | "pending" | "error" = "normal";
   shoppingList: ShoppingListWithItems = {
@@ -155,6 +163,23 @@ class GroceryApiMock {
   };
   generatedShoppingList: ShoppingListWithItems | null = null;
   private nextInventoryId = 1;
+
+  private refreshPendingCreateControls() {
+    if (this.pendingCreates.length === 0) {
+      this.resolvePendingCreate = null;
+      this.rejectPendingCreate = null;
+      return;
+    }
+
+    this.resolvePendingCreate = () => {
+      this.pendingCreates.shift()?.resolve();
+      this.refreshPendingCreateControls();
+    };
+    this.rejectPendingCreate = () => {
+      this.pendingCreates.shift()?.reject();
+      this.refreshPendingCreateControls();
+    };
+  }
 
   readonly fetch = async (
     input: RequestInfo | URL,
@@ -197,20 +222,37 @@ class GroceryApiMock {
 
     if (url.pathname === "/api/inventory" && method === "POST") {
       const input = this.readBody(init);
-      const item: InventoryItem = {
-        id: this.nextInventoryId++,
-        name: String(input.name),
-        category: String(input.category),
-        quantity: Number(input.quantity),
-        unit: String(input.unit),
-        minThreshold: Number(input.minThreshold),
-        expiresAt: input.expiresAt ? String(input.expiresAt) : null,
-        notes: input.notes ? String(input.notes) : null,
-        createdAt: timestamp,
-        updatedAt: timestamp,
+      this.inventoryCreateBodies.push(input);
+      const createItem = () => {
+        if (this.inventoryCreateMode === "error") {
+          return this.json({ error: "Inventory unavailable" }, 500);
+        }
+        const item: InventoryItem = {
+          id: this.nextInventoryId++,
+          name: String(input.name),
+          category: String(input.category),
+          quantity: Number(input.quantity),
+          unit: String(input.unit),
+          minThreshold: Number(input.minThreshold),
+          expiresAt: input.expiresAt ? String(input.expiresAt) : null,
+          notes: input.notes ? String(input.notes) : null,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+        this.items.push(item);
+        return this.json(item, 201);
       };
-      this.items.push(item);
-      return this.json(item, 201);
+      if (this.inventoryCreateMode === "pending") {
+        return new Promise<Response>((resolve, reject) => {
+          const pending = {
+            resolve: () => resolve(createItem()),
+            reject: () => reject(new Error("Inventory request rejected")),
+          };
+          this.pendingCreates.push(pending);
+          this.refreshPendingCreateControls();
+        });
+      }
+      return createItem();
     }
 
     if (url.pathname === "/api/inventory/stats" && method === "GET") {
@@ -454,6 +496,294 @@ function renderApp(path = "/dashboard") {
     ),
   };
 }
+
+describe("inventory save and continue", () => {
+  it("advances both pending create controls through every queued settlement", async () => {
+    const api = new GroceryApiMock();
+    api.inventoryCreateMode = "pending";
+    const requests = [1, 2, 3].map((id) =>
+      api.fetch("/api/inventory", {
+        method: "POST",
+        body: JSON.stringify({
+          name: `Item ${id}`,
+          category: "Pantry",
+          quantity: 1,
+          unit: "each",
+          minThreshold: 0,
+        }),
+      }),
+    );
+
+    assert.equal(api.inventoryCreateBodies.length, 3);
+    api.resolvePendingCreate?.();
+    api.rejectPendingCreate?.();
+    api.resolvePendingCreate?.();
+
+    const results = await Promise.allSettled(requests);
+    assert.equal(results[0]?.status, "fulfilled");
+    assert.equal(results[1]?.status, "rejected");
+    assert.equal(results[2]?.status, "fulfilled");
+    assert.equal(api.items.length, 2);
+    assert.equal(api.resolvePendingCreate, null);
+    assert.equal(api.rejectPendingCreate, null);
+  });
+
+  it("keeps create mode open, preserves category and custom unit, resets the draft, and focuses Name", async () => {
+    const api = new GroceryApiMock();
+    globalThis.fetch = api.fetch;
+    renderApp();
+
+    await screen.findByText("Your pantry is in good shape.");
+    await openInventory();
+    fireEvent.click(screen.getByTestId("button-add-item"));
+    await screen.findByTestId("input-item-name");
+    changeInput("input-item-name", "Milk");
+    changeInput("input-item-category", "Dairy");
+    changeInput("input-item-quantity", "1.5");
+    changeInput("input-item-custom-unit", "bottles");
+    changeInput("input-item-threshold", "6");
+    changeInput("input-item-expires", "2026-12-01");
+    changeInput("input-item-notes", "Keep cold");
+
+    fireEvent.click(screen.getByTestId("button-save-and-add-another"));
+    await waitFor(() => assert.equal(api.items.length, 1));
+
+    assert.ok(screen.getByTestId("dialog-inventory-item"));
+    assert.equal((screen.getByTestId("input-item-name") as HTMLInputElement).value, "");
+    assert.equal((screen.getByTestId("input-item-category") as HTMLInputElement).value, "Dairy");
+    assert.equal((screen.getByTestId("input-item-custom-unit") as HTMLInputElement).value, "bottles");
+    assert.equal((screen.getByTestId("input-item-quantity") as HTMLInputElement).value, "0");
+    assert.equal((screen.getByTestId("input-item-threshold") as HTMLInputElement).value, "0");
+    assert.equal((screen.getByTestId("input-item-expires") as HTMLInputElement).value, "");
+    assert.equal((screen.getByTestId("input-item-notes") as HTMLTextAreaElement).value, "");
+    assert.equal(document.activeElement, screen.getByTestId("input-item-name"));
+
+    changeInput("input-item-name", "Yogurt");
+    fireEvent.change(screen.getByTestId("input-item-unit"), { target: { value: "pack" } });
+    fireEvent.click(screen.getByTestId("button-save-item"));
+    await waitFor(() => assert.equal(api.items.length, 2));
+    assert.equal(screen.queryByTestId("dialog-inventory-item"), null);
+    assert.equal(api.items[1]?.name, "Yogurt");
+    assert.equal(api.items[1]?.category, "Dairy");
+    assert.equal(api.items[1]?.unit, "pack");
+
+    await openInventory();
+    fireEvent.click(screen.getByTestId("button-edit-1"));
+    await screen.findByTestId("dialog-inventory-item");
+    assert.equal(screen.queryByTestId("button-save-and-add-another"), null);
+  });
+
+  it("preserves the draft after a failed save and allows retry", async () => {
+    const api = new GroceryApiMock();
+    api.inventoryCreateMode = "error";
+    globalThis.fetch = api.fetch;
+    renderApp();
+
+    await screen.findByText("Your pantry is in good shape.");
+    await openInventory();
+    fireEvent.click(screen.getByTestId("button-add-item"));
+    await screen.findByTestId("input-item-name");
+    changeInput("input-item-name", "Rice");
+    changeInput("input-item-category", "Pantry");
+    changeInput("input-item-custom-unit", "bags");
+    changeInput("input-item-quantity", "2");
+    changeInput("input-item-threshold", "1");
+
+    fireEvent.click(screen.getByTestId("button-save-and-add-another"));
+    await waitFor(() => assert.equal(api.inventoryCreateBodies.length, 1));
+    await waitFor(() => assert.equal((screen.getByTestId("button-save-and-add-another") as HTMLButtonElement).disabled, false));
+    assert.equal(api.items.length, 0);
+    assert.equal((screen.getByTestId("input-item-name") as HTMLInputElement).value, "Rice");
+    assert.equal((screen.getByTestId("input-item-category") as HTMLInputElement).value, "Pantry");
+
+    api.inventoryCreateMode = "normal";
+    fireEvent.click(screen.getByTestId("button-save-and-add-another"));
+    await waitFor(() => assert.equal(api.items.length, 1));
+    assert.equal((screen.getByTestId("input-item-name") as HTMLInputElement).value, "");
+  });
+
+  it("clears the continue intent when validation fails before switching to Save item", async () => {
+    const api = new GroceryApiMock();
+    globalThis.fetch = api.fetch;
+    renderApp();
+
+    await screen.findByText("Your pantry is in good shape.");
+    await openInventory();
+    fireEvent.click(screen.getByTestId("button-add-item"));
+    await screen.findByTestId("input-item-name");
+    changeInput("input-item-category", "Pantry");
+    changeInput("input-item-custom-unit", "bags");
+    changeInput("input-item-quantity", "2");
+    changeInput("input-item-threshold", "1");
+
+    fireEvent.click(screen.getByTestId("button-save-and-add-another"));
+    await screen.findByText("Name is required");
+    assert.equal(api.items.length, 0);
+
+    changeInput("input-item-name", "Rice");
+    screen.getByTestId("dialog-inventory-item").querySelector("form")!.requestSubmit();
+    await waitFor(() => assert.equal(api.items.length, 1));
+    assert.equal(screen.queryByTestId("dialog-inventory-item"), null);
+  });
+
+  it("clears the continue intent when quantity validation reports invalid", async () => {
+    const api = new GroceryApiMock();
+    globalThis.fetch = api.fetch;
+    renderApp();
+
+    await screen.findByText("Your pantry is in good shape.");
+    await openInventory();
+    fireEvent.click(screen.getByTestId("button-add-item"));
+    await screen.findByTestId("input-item-name");
+    changeInput("input-item-name", "Rice");
+    changeInput("input-item-category", "Pantry");
+    changeInput("input-item-custom-unit", "bags");
+    changeInput("input-item-quantity", "2.56");
+    changeInput("input-item-threshold", "1");
+
+    // JSDOM does not implement number-input stepMismatch validation. Exercise
+    // the same invalid event that a browser dispatches for step="0.1".
+    const quantityInput = screen.getByTestId("input-item-quantity");
+    let invalidEvents = 0;
+    quantityInput.addEventListener("invalid", () => {
+      invalidEvents += 1;
+    }, { once: true });
+    fireEvent.invalid(quantityInput);
+    assert.equal(invalidEvents, 1);
+    assert.equal(api.items.length, 0);
+    assert.ok(screen.getByTestId("dialog-inventory-item"));
+
+    changeInput("input-item-quantity", "2.5");
+    screen.getByTestId("dialog-inventory-item").querySelector("form")!.requestSubmit();
+    await waitFor(() => assert.equal(api.items.length, 1));
+    assert.equal(screen.queryByTestId("dialog-inventory-item"), null);
+  });
+
+  it("preserves the next draft when a dismissed continue save refreshes in the background", async () => {
+    const api = new GroceryApiMock();
+    api.inventoryCreateMode = "pending";
+    globalThis.fetch = api.fetch;
+    renderApp();
+
+    await screen.findByText("Your pantry is in good shape.");
+    await openInventory();
+    fireEvent.click(screen.getByTestId("button-add-item"));
+    await screen.findByTestId("input-item-name");
+    changeInput("input-item-name", "Old draft");
+    changeInput("input-item-category", "Pantry");
+    changeInput("input-item-custom-unit", "bags");
+    changeInput("input-item-quantity", "2");
+    changeInput("input-item-threshold", "1");
+    fireEvent.click(screen.getByTestId("button-save-and-add-another"));
+    await waitFor(() => assert.equal(api.inventoryCreateBodies.length, 1));
+
+    fireEvent.click(screen.getByTestId("button-cancel"));
+    await waitFor(() => assert.equal(screen.queryByTestId("dialog-inventory-item"), null));
+    fireEvent.click(screen.getByTestId("button-add-item"));
+    await screen.findByTestId("input-item-name");
+    changeInput("input-item-name", "New draft");
+    changeInput("input-item-category", "Dairy");
+    changeInput("input-item-custom-unit", "bottles");
+    changeInput("input-item-quantity", "3");
+    changeInput("input-item-threshold", "1");
+    const focusedInput = screen.getByTestId("input-item-category");
+    focusedInput.focus();
+
+    api.resolvePendingCreate?.();
+    await waitFor(() => assert.equal(api.items.length, 1));
+    assert.ok(screen.getByTestId("dialog-inventory-item"));
+    assert.equal((screen.getByTestId("input-item-name") as HTMLInputElement).value, "New draft");
+    assert.equal((screen.getByTestId("input-item-category") as HTMLInputElement).value, "Dairy");
+    assert.equal((screen.getByTestId("input-item-custom-unit") as HTMLInputElement).value, "bottles");
+    assert.equal(document.activeElement, focusedInput);
+  });
+
+  it("ignores a dismissed save error while a reopened draft is submitting", async () => {
+    const api = new GroceryApiMock();
+    api.inventoryCreateMode = "pending";
+    globalThis.fetch = api.fetch;
+    renderApp();
+
+    await screen.findByText("Your pantry is in good shape.");
+    await openInventory();
+    fireEvent.click(screen.getByTestId("button-add-item"));
+    await screen.findByTestId("input-item-name");
+    changeInput("input-item-name", "Old draft");
+    changeInput("input-item-category", "Pantry");
+    changeInput("input-item-custom-unit", "bags");
+    changeInput("input-item-quantity", "2");
+    changeInput("input-item-threshold", "1");
+    fireEvent.click(screen.getByTestId("button-save-item"));
+    await waitFor(() => assert.equal(api.inventoryCreateBodies.length, 1));
+
+    fireEvent.click(screen.getByTestId("button-cancel"));
+    await waitFor(() => assert.equal(screen.queryByTestId("dialog-inventory-item"), null));
+    fireEvent.click(screen.getByTestId("button-add-item"));
+    await screen.findByTestId("input-item-name");
+    changeInput("input-item-name", "New draft");
+    changeInput("input-item-category", "Dairy");
+    changeInput("input-item-custom-unit", "bottles");
+    changeInput("input-item-quantity", "3");
+    changeInput("input-item-threshold", "1");
+    fireEvent.click(screen.getByTestId("button-save-item"));
+    await waitFor(() => assert.equal(api.inventoryCreateBodies.length, 2));
+    const cancelButton = screen.getByTestId("button-cancel");
+    cancelButton.focus();
+    assert.equal(document.activeElement, cancelButton);
+
+    await act(async () => {
+      api.rejectPendingCreate?.();
+      await Promise.resolve();
+    });
+    assert.ok(screen.getByTestId("dialog-inventory-item"));
+    assert.equal((screen.getByTestId("input-item-name") as HTMLInputElement).value, "New draft");
+    assert.equal((screen.getByTestId("input-item-category") as HTMLInputElement).value, "Dairy");
+    assert.equal((screen.getByTestId("input-item-custom-unit") as HTMLInputElement).value, "bottles");
+    assert.equal((screen.getByTestId("button-save-item") as HTMLButtonElement).disabled, true);
+    assert.equal(api.resolvePendingCreate !== null, true);
+    assert.equal(document.activeElement, cancelButton);
+
+    api.resolvePendingCreate?.();
+    await waitFor(() => assert.equal(api.items.length, 1));
+    assert.equal(screen.queryByTestId("dialog-inventory-item"), null);
+  });
+
+  it("prevents overlapping create submissions while pending", async () => {
+    const api = new GroceryApiMock();
+    api.inventoryCreateMode = "pending";
+    globalThis.fetch = api.fetch;
+    renderApp();
+
+    await screen.findByText("Your pantry is in good shape.");
+    await openInventory();
+    fireEvent.click(screen.getByTestId("button-add-item"));
+    await screen.findByTestId("input-item-name");
+    changeInput("input-item-name", "Beans");
+    changeInput("input-item-category", "Pantry");
+    changeInput("input-item-custom-unit", "cans");
+    changeInput("input-item-quantity", "3");
+    changeInput("input-item-threshold", "1");
+
+    fireEvent.click(screen.getByTestId("button-save-and-add-another"));
+    await waitFor(() => assert.equal(api.inventoryCreateBodies.length, 1));
+    assert.equal((screen.getByTestId("button-save-and-add-another") as HTMLButtonElement).disabled, true);
+    for (const testId of [
+      "input-item-name",
+      "input-item-category",
+      "input-item-custom-unit",
+      "input-item-quantity",
+      "input-item-threshold",
+    ]) {
+      assert.equal((screen.getByTestId(testId) as HTMLInputElement).disabled, true);
+    }
+    fireEvent.submit(screen.getByTestId("dialog-inventory-item").querySelector("form")!);
+    assert.equal(api.inventoryCreateBodies.length, 1);
+
+    api.resolvePendingCreate?.();
+    await waitFor(() => assert.equal(api.items.length, 1));
+    assert.ok(screen.getByTestId("dialog-inventory-item"));
+  });
+});
 
 describe("expired inventory attention", () => {
   it("refreshes dashboard attention at UTC midnight without editing inventory", async (context) => {
