@@ -19,6 +19,8 @@ import {
 import type { GrocerySuggestion } from "@workspace/api-client-react";
 
 const STORAGE_KEY = "pantrypal-seen-notifications";
+const EMAIL_REMINDER_NOTE =
+  "Expiry reminders by email are planned for a future release. For now, you can check your alerts here.";
 
 function notifKey(s: GrocerySuggestion) {
   return `${s.inventoryItemId}::${s.urgency}::${s.reason}`;
@@ -268,6 +270,14 @@ export function NotificationCenter() {
               })
             )}
           </div>
+
+          {/* Informational footer; this is not an alert and must not affect counts or unread state. */}
+          <p
+            className="border-t border-border bg-muted/20 px-4 py-3 text-xs leading-relaxed text-muted-foreground"
+            data-testid="notification-email-reminder-note"
+          >
+            {EMAIL_REMINDER_NOTE}
+          </p>
         </div>
       )}
     </div>
