@@ -2034,6 +2034,11 @@ body:has(.pantry-adjustment-feedback) .pantry-main {
     overflow-y: visible;
   }
 }
+@media (max-width: 640px) and (max-height: 200px) {
+  .pantry-notification-panel-header {
+    position: static;
+  }
+}
 @media (max-width: 480px) {
   .dashboard-page .pantry-stat > div > div > div:last-child { display: none; }
 }

@@ -209,7 +209,6 @@ export function NotificationCenter() {
           {/* Body */}
           <div
             className="pantry-notification-panel-body max-h-96 overflow-y-auto"
-            data-testid="notification-panel-body"
           >
             {isLoading ? (
               <p className="p-4 text-sm text-muted-foreground" role="status">Loading alerts…</p>
